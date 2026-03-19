@@ -40,6 +40,7 @@ import org.dflib.exp.map.MapCondition2;
 import org.dflib.exp.map.MapExp1;
 import org.dflib.exp.map.MapExp2;
 import org.dflib.exp.num.BigintColumn;
+import org.dflib.exp.num.CastAsNumExp;
 import org.dflib.exp.num.BigintScalarExp;
 import org.dflib.exp.num.DecimalColumn;
 import org.dflib.exp.num.DecimalScalarExp;
@@ -1079,5 +1080,16 @@ public interface Exp<T> {
 
     default DecimalExp castAsDecimal() {
         return castAsStr().castAsDecimal();
+    }
+
+    /**
+     * Casts this expression to a numeric type determined at eval time by scanning actual data.
+     * Picks the widest numeric type present in the data (e.g., all ints → Integer, mixed → BigDecimal).
+     * Throws {@link IllegalArgumentException} if any non-null value is not a {@link Number}.
+     *
+     * @since 2.0.0
+     */
+    default NumExp<?> castAsNumber() {
+        return new CastAsNumExp(this);
     }
 }

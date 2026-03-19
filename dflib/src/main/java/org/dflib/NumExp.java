@@ -132,6 +132,11 @@ public interface NumExp<N extends Number> extends Exp<N> {
     }
 
     @Override
+    default NumExp<N> castAsNumber() {
+        return this;
+    }
+
+    @Override
     default DecimalExp castAsDecimal() {
         return NumericExpFactory.factory(this).castAsDecimal(this);
     }

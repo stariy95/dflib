@@ -26,6 +26,7 @@ public abstract class NumericExpFactory {
 
         typeConversionRank = new HashMap<>();
 
+        typeConversionRank.put(Number.class, 0);
         typeConversionRank.put(BigDecimal.class, 0);
 
         typeConversionRank.put(Double.class, 1);
@@ -48,6 +49,7 @@ public abstract class NumericExpFactory {
 
         factories = new HashMap<>();
 
+        factories.put(Number.class, decimalFactory);
         factories.put(BigDecimal.class, decimalFactory);
         factories.put(BigInteger.class, new BigintExpFactory());
 
