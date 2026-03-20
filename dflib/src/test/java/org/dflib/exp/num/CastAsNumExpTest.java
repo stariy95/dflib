@@ -1,6 +1,9 @@
 package org.dflib.exp.num;
 
 import org.dflib.DataFrame;
+import org.dflib.DoubleSeries;
+import org.dflib.IntSeries;
+import org.dflib.LongSeries;
 import org.dflib.NumExp;
 import org.dflib.Series;
 import org.dflib.unit.SeriesAsserts;
@@ -29,6 +32,96 @@ public class CastAsNumExpTest {
         Series<Object> s = Series.of(new BigDecimal("5.01"), null, 12L, 1);
         new SeriesAsserts(exp.eval(s))
                 .expectData(new BigDecimal("10.02"), null, new BigDecimal("24"), new BigDecimal("2"));
+    }
+
+    @Test
+    public void castAsNumber_add_homogeneousInt_keepsIntArithmetic() {
+        NumExp<?> exp = $col(0).castAsNumber().add(5);
+        Series<Object> s = Series.of(1, 2, 3);
+        Series<? extends Number> result = exp.eval(s);
+
+        assertInstanceOf(IntSeries.class, result);
+        new SeriesAsserts(result).expectData(6, 7, 8);
+    }
+
+    @Test
+    public void castAsNumber_add_homogeneousLong_keepsLongArithmetic() {
+        NumExp<?> exp = $col(0).castAsNumber().add(5);
+        Series<Object> s = Series.of(1L, 2L, 3L);
+        Series<? extends Number> result = exp.eval(s);
+
+        assertInstanceOf(LongSeries.class, result);
+        new SeriesAsserts(result).expectData(6L, 7L, 8L);
+    }
+
+    @Test
+    public void castAsNumber_add_mixedIntLong_widensToLong() {
+        NumExp<?> exp = $col(0).castAsNumber().add(5);
+        Series<Object> s = Series.of(1, 2L, 3);
+        Series<? extends Number> result = exp.eval(s);
+
+        assertInstanceOf(LongSeries.class, result);
+        new SeriesAsserts(result).expectData(6L, 7L, 8L);
+    }
+
+    @Test
+    public void castAsNumber_chain_preservesRuntimeTyping() {
+        NumExp<?> exp = $col(0).castAsNumber().add(1).mul(2);
+        Series<Object> s = Series.of(1, 2, 3);
+        Series<? extends Number> result = exp.eval(s);
+
+        assertInstanceOf(IntSeries.class, result);
+        new SeriesAsserts(result).expectData(4, 6, 8);
+    }
+
+    @Test
+    public void castAsNumber_sum_homogeneousInt_usesIntFactorySemantics() {
+        NumExp<?> exp = $col(0).castAsNumber().sum();
+        Series<Object> s = Series.of(1, 2, 3);
+
+        assertEquals(6L, exp.reduce(s));
+        assertInstanceOf(LongSeries.class, exp.eval(s));
+    }
+
+    @Test
+    public void castAsNumber_avg_homogeneousLong_usesLongFactorySemantics() {
+        NumExp<?> exp = $col(0).castAsNumber().avg();
+        Series<Object> s = Series.of(1L, 2L, 3L);
+        Series<? extends Number> result = exp.eval(s);
+
+        assertEquals(2.0, exp.reduce(s));
+        assertInstanceOf(DoubleSeries.class, result);
+        new SeriesAsserts(result).expectData(2.0, 2.0, 2.0);
+    }
+
+    @Test
+    public void castAsNumber_add_bigInteger_preservesPrecision() {
+        NumExp<?> exp = $col(0).castAsNumber().add(BigInteger.ONE);
+        Series<Object> s = Series.of(new BigInteger("9223372036854775808"));
+        Series<? extends Number> result = exp.eval(s);
+
+        new SeriesAsserts(result).expectData(new BigInteger("9223372036854775809"));
+    }
+
+    @Test
+    public void castAsNumber_filteredSum_usesFilteredSeriesType() {
+        NumExp<?> exp = $col("a").castAsNumber().sum($col("b").castAsBool());
+        DataFrame df = DataFrame.foldByRow("a", "b").of(
+                1, true,
+                2, false,
+                3, true);
+
+        assertEquals(4L, exp.reduce(df));
+        assertInstanceOf(LongSeries.class, exp.eval(df));
+    }
+
+    @Test
+    public void castAsNumber_shift_thenAdd_staysLazy() {
+        NumExp<?> exp = $col(0).castAsNumber().shift(1).add(1);
+        Series<Object> s = Series.of(1, 2, 3);
+        Series<? extends Number> result = exp.eval(s);
+
+        new SeriesAsserts(result).expectData(null, 2, 3);
     }
 
     @Test
@@ -316,6 +409,6 @@ public class CastAsNumExpTest {
     @Test
     public void toQL() {
         String ql = $col("a").castAsNumber().toQL();
-        assertEquals("castAsNum(a)", ql);
+        assertEquals("castAsNumber(a)", ql);
     }
 }

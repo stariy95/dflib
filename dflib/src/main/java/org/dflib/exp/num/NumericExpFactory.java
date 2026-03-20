@@ -19,14 +19,15 @@ public abstract class NumericExpFactory {
     protected static final Map<Class<? extends Number>, Integer> typeConversionRank;
     protected static final Map<Class<? extends Number>, NumericExpFactory> factories;
     protected static final DecimalExpFactory decimalFactory;
+    protected static final NumericExpFactory dynamicFactory;
 
     static {
 
         decimalFactory = new DecimalExpFactory();
+        dynamicFactory = new DynamicNumericExpFactory();
 
         typeConversionRank = new HashMap<>();
 
-        typeConversionRank.put(Number.class, 0);
         typeConversionRank.put(BigDecimal.class, 0);
 
         typeConversionRank.put(Double.class, 1);
@@ -49,7 +50,6 @@ public abstract class NumericExpFactory {
 
         factories = new HashMap<>();
 
-        factories.put(Number.class, decimalFactory);
         factories.put(BigDecimal.class, decimalFactory);
         factories.put(BigInteger.class, new BigintExpFactory());
 
@@ -78,6 +78,10 @@ public abstract class NumericExpFactory {
     }
 
     public static NumericExpFactory factory(Exp<? extends Number> exp) {
+        if (exp.getType() == Number.class) {
+            return dynamicFactory;
+        }
+
         return factory(exp.getType());
     }
 
@@ -92,7 +96,19 @@ public abstract class NumericExpFactory {
     }
 
     public static NumericExpFactory factory(Exp<? extends Number> left, Exp<? extends Number> right) {
+        if (left.getType() == Number.class || right.getType() == Number.class) {
+            return dynamicFactory;
+        }
+
         return factory(left.getType(), right.getType());
+    }
+
+    public static NumericExpFactory factory(Exp<? extends Number> one, Exp<? extends Number> two, Exp<? extends Number> three) {
+        if (one.getType() == Number.class || two.getType() == Number.class || three.getType() == Number.class) {
+            return dynamicFactory;
+        }
+
+        return factory(one.getType(), two.getType(), three.getType());
     }
 
     public static NumericExpFactory factory(Class<? extends Number> left, Class<? extends Number> right) {

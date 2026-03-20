@@ -215,7 +215,7 @@ public interface NumExp<N extends Number> extends Exp<N> {
 
 
     default Condition between(Exp<? extends Number> from, Exp<? extends Number> to) {
-        return NumericExpFactory.factory(this.getType(), from.getType(), to.getType()).between(this, from, to);
+        return NumericExpFactory.factory(this, from, to).between(this, from, to);
     }
 
 
@@ -227,7 +227,7 @@ public interface NumExp<N extends Number> extends Exp<N> {
      * @since 2.0.0
      */
     default Condition notBetween(Exp<? extends Number> from, Exp<? extends Number> to) {
-        return NumericExpFactory.factory(this.getType(), from.getType(), to.getType()).notBetween(this, from, to);
+        return NumericExpFactory.factory(this, from, to).notBetween(this, from, to);
     }
 
     /**
@@ -282,7 +282,7 @@ public interface NumExp<N extends Number> extends Exp<N> {
     }
 
     default NumExp<?> median(Condition filter) {
-        return NumericExpFactory.factory(this).median(this, null);
+        return NumericExpFactory.factory(this).median(this, filter);
     }
 
     /**
@@ -296,7 +296,7 @@ public interface NumExp<N extends Number> extends Exp<N> {
      * @since 2.0.0
      */
     default NumExp<?> quantile(double q, Condition filter) {
-        return NumericExpFactory.factory(this).quantile(this, q, null);
+        return NumericExpFactory.factory(this).quantile(this, q, filter);
     }
 
     /**
