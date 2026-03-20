@@ -44,18 +44,18 @@ class DynamicNumReduceExp1 extends Exp1<Number, Number> implements NumExp<Number
     private Exp<? extends Number> resolve(DataFrame df) {
         DataFrame filtered = filter != null ? df.rows(filter).select() : df;
         Series<?> series = exp.eval(filtered);
-        TypeScanResult scan = DynamicNumericTypeResolver.commonType(series);
+        DynamicNumTypeResolver.TypeScanResult scan = DynamicNumTypeResolver.commonType(series);
         return op.apply(
-                NumericExpFactory.factory(scan.type()),
-                DynamicNumericTypeResolver.resolvedExp(series, scan.type(), scan.hasNulls()));
+                NumericExpFactory.factory(scan.rank()),
+                DynamicNumTypeResolver.typeResolvedExp(series, scan.rank(), scan.hasNulls()));
     }
 
     private Exp<? extends Number> resolve(Series<?> s) {
         Series<?> filtered = filter != null ? s.select(filter) : s;
         Series<?> series = exp.eval(filtered);
-        TypeScanResult scan = DynamicNumericTypeResolver.commonType(series);
+        DynamicNumTypeResolver.TypeScanResult scan = DynamicNumTypeResolver.commonType(series);
         return op.apply(
-                NumericExpFactory.factory(scan.type()),
-                DynamicNumericTypeResolver.resolvedExp(series, scan.type(), scan.hasNulls()));
+                NumericExpFactory.factory(scan.rank()),
+                DynamicNumTypeResolver.typeResolvedExp(series, scan.rank(), scan.hasNulls()));
     }
 }

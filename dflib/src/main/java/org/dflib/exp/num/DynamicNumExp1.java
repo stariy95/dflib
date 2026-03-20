@@ -30,27 +30,27 @@ class DynamicNumExp1 extends Exp1<Number, Number> implements NumExp<Number> {
 
     @Override
     public Number reduce(DataFrame df) {
-        return resolve(DynamicNumericTypeResolver.castAsNumber(exp.reduce(df))).reduce(df);
+        return resolve(DynamicNumTypeResolver.convert(exp.reduce(df))).reduce(df);
     }
 
     @Override
     public Number reduce(Series<?> s) {
-        return resolve(DynamicNumericTypeResolver.castAsNumber(exp.reduce(s))).reduce(s);
+        return resolve(DynamicNumTypeResolver.convert(exp.reduce(s))).reduce(s);
     }
 
     private Exp<? extends Number> resolve(Series<?> series) {
-        TypeScanResult scan = DynamicNumericTypeResolver.commonType(series);
+        DynamicNumTypeResolver.TypeScanResult scan = DynamicNumTypeResolver.commonType(series);
         return op.apply(
-                NumericExpFactory.factory(scan.type()),
-                DynamicNumericTypeResolver.resolvedExp(series, scan.type(), scan.hasNulls())
+                NumericExpFactory.factory(scan.rank()),
+                DynamicNumTypeResolver.typeResolvedExp(series, scan.rank(), scan.hasNulls())
         );
     }
 
     private Exp<? extends Number> resolve(Number value) {
-        Class<? extends Number> type = DynamicNumericTypeResolver.commonType(value);
+        int rank = DynamicNumTypeResolver.commonTypeRank(value);
         return op.apply(
-                NumericExpFactory.factory(type),
-                DynamicNumericTypeResolver.resolvedExp(Series.ofVal(value, 1), type, false)
+                NumericExpFactory.factory(rank),
+                DynamicNumTypeResolver.typeResolvedExp(Series.ofVal(value, 1), rank, false)
         );
     }
 }

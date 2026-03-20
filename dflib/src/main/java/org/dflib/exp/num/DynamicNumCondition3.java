@@ -36,39 +36,39 @@ class DynamicNumCondition3 extends Exp3<Number, Number, Number, Boolean> impleme
     @Override
     public Boolean reduce(DataFrame df) {
         return resolve(
-                DynamicNumericTypeResolver.castAsNumber(one.reduce(df)),
-                DynamicNumericTypeResolver.castAsNumber(two.reduce(df)),
-                DynamicNumericTypeResolver.castAsNumber(three.reduce(df))).reduce(df);
+                DynamicNumTypeResolver.convert(one.reduce(df)),
+                DynamicNumTypeResolver.convert(two.reduce(df)),
+                DynamicNumTypeResolver.convert(three.reduce(df))).reduce(df);
     }
 
     @Override
     public Boolean reduce(Series<?> s) {
         return resolve(
-                DynamicNumericTypeResolver.castAsNumber(one.reduce(s)),
-                DynamicNumericTypeResolver.castAsNumber(two.reduce(s)),
-                DynamicNumericTypeResolver.castAsNumber(three.reduce(s))).reduce(s);
+                DynamicNumTypeResolver.convert(one.reduce(s)),
+                DynamicNumTypeResolver.convert(two.reduce(s)),
+                DynamicNumTypeResolver.convert(three.reduce(s))).reduce(s);
     }
 
     private Condition resolve(Series<?> oneSeries, Series<?> twoSeries, Series<?> threeSeries) {
-        TypeScanResult scan1 = DynamicNumericTypeResolver.commonType(oneSeries);
-        TypeScanResult scan2 = DynamicNumericTypeResolver.commonType(twoSeries);
-        TypeScanResult scan3 = DynamicNumericTypeResolver.commonType(threeSeries);
-        Class<? extends Number> type = DynamicNumericTypeResolver.commonType(scan1, scan2, scan3);
+        DynamicNumTypeResolver.TypeScanResult scan1 = DynamicNumTypeResolver.commonType(oneSeries);
+        DynamicNumTypeResolver.TypeScanResult scan2 = DynamicNumTypeResolver.commonType(twoSeries);
+        DynamicNumTypeResolver.TypeScanResult scan3 = DynamicNumTypeResolver.commonType(threeSeries);
+        int rank = DynamicNumTypeResolver.commonTypeRank(scan1, scan2, scan3);
         return op.apply(
-                NumericExpFactory.factory(type),
-                DynamicNumericTypeResolver.resolvedExp(oneSeries, type, scan1.hasNulls()),
-                DynamicNumericTypeResolver.resolvedExp(twoSeries, type, scan2.hasNulls()),
-                DynamicNumericTypeResolver.resolvedExp(threeSeries, type, scan3.hasNulls())
+                NumericExpFactory.factory(rank),
+                DynamicNumTypeResolver.typeResolvedExp(oneSeries, rank, scan1.hasNulls()),
+                DynamicNumTypeResolver.typeResolvedExp(twoSeries, rank, scan2.hasNulls()),
+                DynamicNumTypeResolver.typeResolvedExp(threeSeries, rank, scan3.hasNulls())
         );
     }
 
     private Condition resolve(Number oneValue, Number twoValue, Number threeValue) {
-        Class<? extends Number> type = DynamicNumericTypeResolver.commonType(oneValue, twoValue, threeValue);
+        int rank = DynamicNumTypeResolver.commonTypeRank(oneValue, twoValue, threeValue);
         return op.apply(
-                NumericExpFactory.factory(type),
-                DynamicNumericTypeResolver.resolvedExp(Series.ofVal(oneValue, 1), type, false),
-                DynamicNumericTypeResolver.resolvedExp(Series.ofVal(twoValue, 1), type, false),
-                DynamicNumericTypeResolver.resolvedExp(Series.ofVal(threeValue, 1), type, false)
+                NumericExpFactory.factory(rank),
+                DynamicNumTypeResolver.typeResolvedExp(Series.ofVal(oneValue, 1), rank, false),
+                DynamicNumTypeResolver.typeResolvedExp(Series.ofVal(twoValue, 1), rank, false),
+                DynamicNumTypeResolver.typeResolvedExp(Series.ofVal(threeValue, 1), rank, false)
         );
     }
 }

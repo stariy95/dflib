@@ -5,10 +5,9 @@ import org.dflib.DecimalExp;
 import org.dflib.Exp;
 import org.dflib.NumExp;
 
-import java.math.BigDecimal;
 import java.math.BigInteger;
 
-class DynamicNumericExpFactory extends NumericExpFactory {
+class DynamicNumExpFactory extends NumericExpFactory {
 
     @Override
     public NumExp<?> add(Exp<? extends Number> left, Exp<? extends Number> right) {
@@ -52,32 +51,32 @@ class DynamicNumericExpFactory extends NumericExpFactory {
 
     @Override
     public NumExp<Integer> castAsInt(NumExp<?> exp) {
-        return IntExp1.map("castAsInt", cast(exp), s -> DynamicNumericTypeResolver.convert(s, Integer.class));
+        return IntExp1.map("castAsInt", cast(exp), s -> DynamicNumTypeResolver.convert(s, RANK_INT));
     }
 
     @Override
     public NumExp<Long> castAsLong(NumExp<?> exp) {
-        return LongExp1.map("castAsLong", cast(exp), s -> DynamicNumericTypeResolver.convert(s, Long.class));
+        return LongExp1.map("castAsLong", cast(exp), s -> DynamicNumTypeResolver.convert(s, RANK_LONG));
     }
 
     @Override
     public NumExp<Double> castAsDouble(NumExp<?> exp) {
-        return DoubleExp1.map("castAsDouble", cast(exp), s -> DynamicNumericTypeResolver.convert(s, Double.class));
+        return DoubleExp1.map("castAsDouble", cast(exp), s -> DynamicNumTypeResolver.convert(s, RANK_DOUBLE));
     }
 
     @Override
     public NumExp<Float> castAsFloat(NumExp<?> exp) {
-        return FloatExp1.map("castAsFloat", cast(exp), s -> DynamicNumericTypeResolver.convert(s, Float.class));
+        return FloatExp1.map("castAsFloat", cast(exp), s -> DynamicNumTypeResolver.convert(s, RANK_FLOAT));
     }
 
     @Override
     public NumExp<BigInteger> castAsBigint(NumExp<?> exp) {
-        return BigintExp1.map("castAsBigint", cast(exp), s -> DynamicNumericTypeResolver.convert(s, BigInteger.class));
+        return BigintExp1.map("castAsBigint", cast(exp), s -> DynamicNumTypeResolver.convert(s, RANK_BIG_INTEGER));
     }
 
     @Override
     public DecimalExp castAsDecimal(NumExp<?> exp) {
-        return DecimalExp1.map("castAsDecimal", cast(exp), s -> DynamicNumericTypeResolver.convert(s, BigDecimal.class));
+        return DecimalExp1.map("castAsDecimal", cast(exp), s -> DynamicNumTypeResolver.convert(s, RANK_BIG_INTEGER));
     }
 
     @Override

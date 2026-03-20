@@ -34,17 +34,16 @@ public class CastAsNumExp extends Exp1<Object, Number> implements NumExp<Number>
 
     @Override
     public Number reduce(DataFrame df) {
-        return DynamicNumericTypeResolver.castAsNumber(exp.reduce(df));
+        return DynamicNumTypeResolver.convert(exp.reduce(df));
     }
 
     @Override
     public Number reduce(Series<?> s) {
-        return DynamicNumericTypeResolver.castAsNumber(exp.reduce(s));
+        return DynamicNumTypeResolver.convert(exp.reduce(s));
     }
 
-    @SuppressWarnings("unchecked")
     private Series<Number> convert(Series<?> s) {
-        TypeScanResult scan = DynamicNumericTypeResolver.commonType(s);
-        return (Series<Number>) DynamicNumericTypeResolver.convert(s, scan.type(), scan.hasNulls());
+        DynamicNumTypeResolver.TypeScanResult scan = DynamicNumTypeResolver.commonType(s);
+        return DynamicNumTypeResolver.convert(s, scan.rank(), scan.hasNulls());
     }
 }

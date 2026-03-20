@@ -31,36 +31,36 @@ class DynamicNumExp2 extends Exp2<Number, Number, Number> implements NumExp<Numb
     @Override
     public Number reduce(DataFrame df) {
         return resolve(
-                DynamicNumericTypeResolver.castAsNumber(left.reduce(df)),
-                DynamicNumericTypeResolver.castAsNumber(right.reduce(df))
+                DynamicNumTypeResolver.convert(left.reduce(df)),
+                DynamicNumTypeResolver.convert(right.reduce(df))
         ).reduce(df);
     }
 
     @Override
     public Number reduce(Series<?> s) {
         return resolve(
-                DynamicNumericTypeResolver.castAsNumber(left.reduce(s)),
-                DynamicNumericTypeResolver.castAsNumber(right.reduce(s))
+                DynamicNumTypeResolver.convert(left.reduce(s)),
+                DynamicNumTypeResolver.convert(right.reduce(s))
         ).reduce(s);
     }
 
     private Exp<? extends Number> resolve(Series<?> leftSeries, Series<?> rightSeries) {
-        TypeScanResult scanL = DynamicNumericTypeResolver.commonType(leftSeries);
-        TypeScanResult scanR = DynamicNumericTypeResolver.commonType(rightSeries);
-        Class<? extends Number> type = DynamicNumericTypeResolver.commonType(scanL, scanR);
+        DynamicNumTypeResolver.TypeScanResult scanL = DynamicNumTypeResolver.commonType(leftSeries);
+        DynamicNumTypeResolver.TypeScanResult scanR = DynamicNumTypeResolver.commonType(rightSeries);
+        int rank = DynamicNumTypeResolver.commonTypeRank(scanL, scanR);
         return op.apply(
-                NumericExpFactory.factory(type),
-                DynamicNumericTypeResolver.resolvedExp(leftSeries, type, scanL.hasNulls()),
-                DynamicNumericTypeResolver.resolvedExp(rightSeries, type, scanR.hasNulls())
+                NumericExpFactory.factory(rank),
+                DynamicNumTypeResolver.typeResolvedExp(leftSeries, rank, scanL.hasNulls()),
+                DynamicNumTypeResolver.typeResolvedExp(rightSeries, rank, scanR.hasNulls())
         );
     }
 
     private Exp<? extends Number> resolve(Number leftValue, Number rightValue) {
-        Class<? extends Number> type = DynamicNumericTypeResolver.commonType(leftValue, rightValue);
+        int rank = DynamicNumTypeResolver.commonTypeRank(leftValue, rightValue);
         return op.apply(
-                NumericExpFactory.factory(type),
-                DynamicNumericTypeResolver.resolvedExp(Series.ofVal(leftValue, 1), type, false),
-                DynamicNumericTypeResolver.resolvedExp(Series.ofVal(rightValue, 1), type, false)
+                NumericExpFactory.factory(rank),
+                DynamicNumTypeResolver.typeResolvedExp(Series.ofVal(leftValue, 1), rank, false),
+                DynamicNumTypeResolver.typeResolvedExp(Series.ofVal(rightValue, 1), rank, false)
         );
     }
 }
