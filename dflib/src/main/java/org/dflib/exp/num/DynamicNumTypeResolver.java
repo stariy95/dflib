@@ -16,7 +16,22 @@ final class DynamicNumTypeResolver {
     }
 
     static TypeScanResult commonType(Series<?> series) {
-        return seriesScan(series);
+        int rank = NO_RANK;
+        boolean hasNulls = false;
+
+        for (int i = 0; i < series.size(); i++) {
+            Object value = series.get(i);
+            if (value == null) {
+                hasNulls = true;
+            } else {
+                int vr = valueRank(value);
+                if (vr < rank) {
+                    rank = vr;
+                }
+            }
+        }
+
+        return new TypeScanResult(rank == NO_RANK ? RANK_BIG_DECIMAL : rank, hasNulls);
     }
 
     static int commonTypeRank(TypeScanResult one, TypeScanResult two) {
@@ -86,25 +101,6 @@ final class DynamicNumTypeResolver {
             case RANK_INT -> (N) Integer.valueOf(number.intValue());
             default -> (N) toBigDecimal(number);
         };
-    }
-
-    private static TypeScanResult seriesScan(Series<?> series) {
-        int rank = NO_RANK;
-        boolean hasNulls = false;
-
-        for (int i = 0; i < series.size(); i++) {
-            Object value = series.get(i);
-            if (value == null) {
-                hasNulls = true;
-            } else {
-                int vr = valueRank(value);
-                if (vr < rank) {
-                    rank = vr;
-                }
-            }
-        }
-
-        return new TypeScanResult(rank, hasNulls);
     }
 
     private static int valueRank(Object value) {
