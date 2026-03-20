@@ -9,11 +9,15 @@ import org.dflib.exp.Exp1;
 
 class DynamicNumReduceExp1 extends Exp1<Number, Number> implements NumExp<Number> {
 
-    private final DynamicNumOps.Unary op;
+    private final DynamicNumOps.Unary<Exp<? extends Number>> op;
     private final Condition filter;
 
     @SuppressWarnings("unchecked")
-    DynamicNumReduceExp1(String opName, Exp<? extends Number> exp, DynamicNumOps.Unary op, Condition filter) {
+    DynamicNumReduceExp1(
+            String opName,
+            Exp<? extends Number> exp,
+            DynamicNumOps.Unary<Exp<? extends Number>> op,
+            Condition filter) {
         super(opName, Number.class, (Exp<Number>) exp);
         this.op = op;
         this.filter = filter;
@@ -43,19 +47,11 @@ class DynamicNumReduceExp1 extends Exp1<Number, Number> implements NumExp<Number
 
     private Exp<? extends Number> resolve(DataFrame df) {
         DataFrame filtered = filter != null ? df.rows(filter).select() : df;
-        Series<?> series = exp.eval(filtered);
-        DynamicNumTypeResolver.TypeScanResult scan = DynamicNumTypeResolver.commonType(series);
-        return op.apply(
-                NumericExpFactory.factory(scan.rank()),
-                DynamicNumTypeResolver.typeResolvedExp(series, scan.rank(), scan.hasNulls()));
+        return DynamicNumTypeResolver.resolve(exp.eval(filtered), op);
     }
 
     private Exp<? extends Number> resolve(Series<?> s) {
         Series<?> filtered = filter != null ? s.select(filter) : s;
-        Series<?> series = exp.eval(filtered);
-        DynamicNumTypeResolver.TypeScanResult scan = DynamicNumTypeResolver.commonType(series);
-        return op.apply(
-                NumericExpFactory.factory(scan.rank()),
-                DynamicNumTypeResolver.typeResolvedExp(series, scan.rank(), scan.hasNulls()));
+        return DynamicNumTypeResolver.resolve(exp.eval(filtered), op);
     }
 }

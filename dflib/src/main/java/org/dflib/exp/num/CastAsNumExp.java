@@ -1,10 +1,7 @@
 package org.dflib.exp.num;
 
-import org.dflib.DataFrame;
 import org.dflib.Exp;
 import org.dflib.NumExp;
-import org.dflib.Series;
-import org.dflib.exp.Exp1;
 
 /**
  * Casts this expression to a numeric type determined at eval time by scanning actual data.
@@ -13,37 +10,11 @@ import org.dflib.exp.Exp1;
  *
  * @since 2.0.0
  */
-public class CastAsNumExp extends Exp1<Object, Number> implements NumExp<Number> {
+public class CastAsNumExp extends DynamicNumExp1 implements NumExp<Number> {
 
     @SuppressWarnings("unchecked")
     public CastAsNumExp(Exp<?> exp) {
-        super("castAsNumber", Number.class, (Exp<Object>) exp);
+        super("castAsNumber", (Exp<Number>) exp, DynamicNumOps.identity());
     }
 
-    @Override
-    public Series<Number> eval(DataFrame df) {
-        Series<?> series = exp.eval(df);
-        return convert(series);
-    }
-
-    @Override
-    public Series<Number> eval(Series<?> s) {
-        Series<?> series = exp.eval(s);
-        return convert(series);
-    }
-
-    @Override
-    public Number reduce(DataFrame df) {
-        return DynamicNumTypeResolver.convert(exp.reduce(df));
-    }
-
-    @Override
-    public Number reduce(Series<?> s) {
-        return DynamicNumTypeResolver.convert(exp.reduce(s));
-    }
-
-    private Series<Number> convert(Series<?> s) {
-        DynamicNumTypeResolver.TypeScanResult scan = DynamicNumTypeResolver.commonType(s);
-        return DynamicNumTypeResolver.convert(s, scan.rank(), scan.hasNulls());
-    }
 }

@@ -15,7 +15,7 @@ final class DynamicNumTypeResolver {
     private DynamicNumTypeResolver() {
     }
 
-    static TypeScanResult commonType(Series<?> series) {
+    private static ScanResult commonType(Series<?> series) {
         int rank = NO_RANK;
         boolean hasNulls = false;
 
@@ -31,31 +31,49 @@ final class DynamicNumTypeResolver {
             }
         }
 
-        return new TypeScanResult(rank == NO_RANK ? RANK_BIG_DECIMAL : rank, hasNulls);
+        return new ScanResult(rank == NO_RANK ? RANK_BIG_DECIMAL : rank, hasNulls);
     }
 
-    static int commonTypeRank(TypeScanResult one, TypeScanResult two) {
-        return Math.min(one.rank(), two.rank());
+    static <T> T resolve(Series<?> series, DynamicNumOps.Unary<T> op) {
+        ScanResult result = commonType(series);
+        int rank = result.rank();
+        return op.apply(NumericExpFactory.factory(rank), typeResolvedExp(series, rank, result.hasNulls()));
     }
 
-    static int commonTypeRank(TypeScanResult one, TypeScanResult two, TypeScanResult three) {
-        return Math.min(one.rank(), Math.min(two.rank(), three.rank()));
+    static <T> T resolve(Series<?> one, Series<?> two, DynamicNumOps.Binary<T> op) {
+        ScanResult result1 = commonType(one);
+        ScanResult result2 = commonType(two);
+        int rank = Math.min(result1.rank(), result2.rank());
+        return op.apply(
+                NumericExpFactory.factory(rank),
+                typeResolvedExp(one, rank, result1.hasNulls()),
+                typeResolvedExp(two, rank, result2.hasNulls())
+        );
     }
 
-    static int commonTypeRank(Number value) {
-        return valueRank(value);
+    static <T> T resolve(Series<?> one, Series<?> two, Series<?> three, DynamicNumOps.Ternary<T> op) {
+        ScanResult result1 = commonType(one);
+        ScanResult result2 = commonType(two);
+        ScanResult result3 = commonType(three);
+        int rank = Math.min(result1.rank(), Math.min(result2.rank(), result3.rank()));
+        return op.apply(
+                NumericExpFactory.factory(rank),
+                typeResolvedExp(one, rank, result1.hasNulls()),
+                typeResolvedExp(two, rank, result2.hasNulls()),
+                typeResolvedExp(three, rank, result3.hasNulls())
+        );
     }
 
-    static int commonTypeRank(Number one, Number two) {
-        return Math.min(valueRank(one), valueRank(two));
+    static <T> T resolve(Number value, DynamicNumOps.Unary<T> op) {
+        return resolve(Series.ofVal(value, 1), op);
     }
 
-    static int commonTypeRank(Number one, Number two, Number three) {
-        return Math.min(valueRank(one), Math.min(valueRank(two), valueRank(three)));
+    static <T> T resolve(Number one, Number two, DynamicNumOps.Binary<T> op) {
+        return resolve(Series.ofVal(one, 1), Series.ofVal(two, 1), op);
     }
 
-    static ResolvedNumExp<?> typeResolvedExp(Series<?> series, int rank, boolean hasNulls) {
-        return new ResolvedNumExp<>(typeForRank(rank), convert(series, rank, hasNulls));
+    static <T> T resolve(Number one, Number two, Number three, DynamicNumOps.Ternary<T> op) {
+        return resolve(Series.ofVal(one, 1), Series.ofVal(two, 1), Series.ofVal(three, 1), op);
     }
 
     static <N extends Number> Series<N> convert(Series<?> series, int rank) {
@@ -75,6 +93,7 @@ final class DynamicNumTypeResolver {
         };
     }
 
+    // TODO: trace and eliminate this, use value -> series -> resolve as with eval() calls
     static Number convert(Object value) {
         if (value == null) {
             return null;
@@ -84,7 +103,9 @@ final class DynamicNumTypeResolver {
             throw new IllegalArgumentException("Can't cast '" + value.getClass().getName() + "' to a number");
         }
 
-        return convert(number, commonTypeRank(number));
+        // TODO: this does the same null and instanceof check
+        int rank = valueRank(number);
+        return convert(number, rank);
     }
 
     @SuppressWarnings("unchecked")
@@ -200,7 +221,10 @@ final class DynamicNumTypeResolver {
         return BigDecimal.valueOf(number.doubleValue()).stripTrailingZeros();
     }
 
-    record TypeScanResult(int rank, boolean hasNulls) {
+    private static ResolvedNumExp<?> typeResolvedExp(Series<?> series, int rank, boolean hasNulls) {
+        return new ResolvedNumExp<>(typeForRank(rank), convert(series, rank, hasNulls));
+    }
+
+    record ScanResult(int rank, boolean hasNulls) {
     }
 }
-
