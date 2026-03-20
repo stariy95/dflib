@@ -14,27 +14,6 @@ final class DynamicNumTypeResolver {
     private DynamicNumTypeResolver() {
     }
 
-    private static ScanResult seriesInferredType(Series<?> series) {
-        int rank = NO_RANK;
-        boolean hasNulls = false;
-
-        for (int i = 0; i < series.size(); i++) {
-            Object value = series.get(i);
-            if (value == null) {
-                hasNulls = true;
-            } else if (value instanceof Number n) {
-                int vr = valueRank(n);
-                if (vr < rank) {
-                    rank = vr;
-                }
-            } else {
-                throw new IllegalArgumentException("Can't cast '" + value.getClass().getName() + "' to a number");
-            }
-        }
-
-        return new ScanResult(rank == NO_RANK ? RANK_BIG_DECIMAL : rank, hasNulls);
-    }
-
     static <T> T resolve(Series<?> series, DynamicNumOps.Unary<T> op) {
         ScanResult result = seriesInferredType(series);
         int rank = result.rank();
@@ -215,6 +194,27 @@ final class DynamicNumTypeResolver {
         }
 
         return BigDecimal.valueOf(number.doubleValue()).stripTrailingZeros();
+    }
+
+    private static ScanResult seriesInferredType(Series<?> series) {
+        int rank = NO_RANK;
+        boolean hasNulls = false;
+
+        for (int i = 0; i < series.size(); i++) {
+            Object value = series.get(i);
+            if (value == null) {
+                hasNulls = true;
+            } else if (value instanceof Number n) {
+                int vr = valueRank(n);
+                if (vr < rank) {
+                    rank = vr;
+                }
+            } else {
+                throw new IllegalArgumentException("Can't cast '" + value.getClass().getName() + "' to a number");
+            }
+        }
+
+        return new ScanResult(rank == NO_RANK ? RANK_BIG_DECIMAL : rank, hasNulls);
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
