@@ -1,7 +1,6 @@
 package org.dflib.exp.num;
 
 import org.dflib.Series;
-import org.dflib.builder.ObjectAccum;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -15,7 +14,7 @@ final class DynamicNumTypeResolver {
     private DynamicNumTypeResolver() {
     }
 
-    private static ScanResult commonType(Series<?> series) {
+    private static ScanResult seriesInferredType(Series<?> series) {
         int rank = NO_RANK;
         boolean hasNulls = false;
 
@@ -23,11 +22,13 @@ final class DynamicNumTypeResolver {
             Object value = series.get(i);
             if (value == null) {
                 hasNulls = true;
-            } else {
-                int vr = valueRank(value);
+            } else if (value instanceof Number n) {
+                int vr = valueRank(n);
                 if (vr < rank) {
                     rank = vr;
                 }
+            } else {
+                throw new IllegalArgumentException("Can't cast '" + value.getClass().getName() + "' to a number");
             }
         }
 
@@ -35,14 +36,14 @@ final class DynamicNumTypeResolver {
     }
 
     static <T> T resolve(Series<?> series, DynamicNumOps.Unary<T> op) {
-        ScanResult result = commonType(series);
+        ScanResult result = seriesInferredType(series);
         int rank = result.rank();
         return op.apply(NumericExpFactory.factory(rank), typeResolvedExp(series, rank, result.hasNulls()));
     }
 
     static <T> T resolve(Series<?> one, Series<?> two, DynamicNumOps.Binary<T> op) {
-        ScanResult result1 = commonType(one);
-        ScanResult result2 = commonType(two);
+        ScanResult result1 = seriesInferredType(one);
+        ScanResult result2 = seriesInferredType(two);
         int rank = Math.min(result1.rank(), result2.rank());
         return op.apply(
                 NumericExpFactory.factory(rank),
@@ -52,9 +53,9 @@ final class DynamicNumTypeResolver {
     }
 
     static <T> T resolve(Series<?> one, Series<?> two, Series<?> three, DynamicNumOps.Ternary<T> op) {
-        ScanResult result1 = commonType(one);
-        ScanResult result2 = commonType(two);
-        ScanResult result3 = commonType(three);
+        ScanResult result1 = seriesInferredType(one);
+        ScanResult result2 = seriesInferredType(two);
+        ScanResult result3 = seriesInferredType(three);
         int rank = Math.min(result1.rank(), Math.min(result2.rank(), result3.rank()));
         return op.apply(
                 NumericExpFactory.factory(rank),
@@ -64,52 +65,79 @@ final class DynamicNumTypeResolver {
         );
     }
 
-    static <T> T resolve(Number value, DynamicNumOps.Unary<T> op) {
-        return resolve(Series.ofVal(value, 1), op);
+    static <T> T resolve(Object rawValue, DynamicNumOps.Unary<T> op) {
+        Number value = castToNumber(rawValue);
+        if (value == null) {
+            return op.apply(NumericExpFactory.factory(RANK_BIG_DECIMAL),
+                    new ResolvedNumExp<>(BigDecimal.class, Series.ofVal(null, 1)));
+        }
+        int rank = valueRank(value);
+        return op.apply(NumericExpFactory.factory(rank), scalarExp(value, rank));
     }
 
-    static <T> T resolve(Number one, Number two, DynamicNumOps.Binary<T> op) {
-        return resolve(Series.ofVal(one, 1), Series.ofVal(two, 1), op);
+    static <T> T resolve(Object rawOne, Object rawTwo, DynamicNumOps.Binary<T> op) {
+        Number one = castToNumber(rawOne);
+        Number two = castToNumber(rawTwo);
+        int r1 = one == null ? NO_RANK : valueRank(one);
+        int r2 = two == null ? NO_RANK : valueRank(two);
+        int rank = Math.min(r1, r2);
+        if (rank == NO_RANK) {
+            rank = RANK_BIG_DECIMAL;
+        }
+        return op.apply(
+                NumericExpFactory.factory(rank),
+                scalarExp(one, rank),
+                scalarExp(two, rank)
+        );
     }
 
-    static <T> T resolve(Number one, Number two, Number three, DynamicNumOps.Ternary<T> op) {
-        return resolve(Series.ofVal(one, 1), Series.ofVal(two, 1), Series.ofVal(three, 1), op);
+    static <T> T resolve(Object rawOne, Object rawTwo, Object rawThree, DynamicNumOps.Ternary<T> op) {
+        Number one = castToNumber(rawOne);
+        Number two = castToNumber(rawTwo);
+        Number three = castToNumber(rawThree);
+        int r1 = one == null ? NO_RANK : valueRank(one);
+        int r2 = two == null ? NO_RANK : valueRank(two);
+        int r3 = three == null ? NO_RANK : valueRank(three);
+        int rank = Math.min(r1, Math.min(r2, r3));
+        if (rank == NO_RANK) {
+            rank = RANK_BIG_DECIMAL;
+        }
+        return op.apply(
+                NumericExpFactory.factory(rank),
+                scalarExp(one, rank),
+                scalarExp(two, rank),
+                scalarExp(three, rank)
+        );
     }
 
-    static <N extends Number> Series<N> convert(Series<?> series, int rank) {
-        return convert(series, rank, hasNulls(series));
-    }
-
-    @SuppressWarnings("unchecked")
-    static <N extends Number> Series<N> convert(Series<?> series, int rank, boolean hasNulls) {
-        Series<Number> numSeries = (Series<Number>) series;
-        return switch (rank) {
-            case RANK_DOUBLE -> (Series<N>) toDoubleSeries(numSeries, hasNulls);
-            case RANK_FLOAT -> (Series<N>) toFloatSeries(numSeries, hasNulls);
-            case RANK_BIG_INTEGER -> (Series<N>) toObjectSeries(numSeries, RANK_BIG_INTEGER);
-            case RANK_LONG -> (Series<N>) toLongSeries(numSeries, hasNulls);
-            case RANK_INT -> (Series<N>) toIntSeries(numSeries, hasNulls);
-            default -> (Series<N>) toObjectSeries(numSeries, RANK_BIG_DECIMAL);
-        };
-    }
-
-    // TODO: trace and eliminate this, use value -> series -> resolve as with eval() calls
-    static Number convert(Object value) {
+    private static Number castToNumber(Object value) {
         if (value == null) {
             return null;
         }
-
-        if (!(value instanceof Number number)) {
+        if (!(value instanceof Number n)) {
             throw new IllegalArgumentException("Can't cast '" + value.getClass().getName() + "' to a number");
         }
+        return n;
+    }
 
-        // TODO: this does the same null and instanceof check
-        int rank = valueRank(number);
-        return convert(number, rank);
+    private static ResolvedNumExp<?> scalarExp(Number value, int rank) {
+        Class<? extends Number> type = typeForRank(rank);
+        return new ResolvedNumExp<>(type, Series.ofVal(value == null ? null : convert(value, rank), 1));
+    }
+
+    private static Class<? extends Number> typeForRank(int rank) {
+        return switch (rank) {
+            case RANK_DOUBLE -> Double.class;
+            case RANK_FLOAT -> Float.class;
+            case RANK_BIG_INTEGER -> BigInteger.class;
+            case RANK_LONG -> Long.class;
+            case RANK_INT -> Integer.class;
+            default -> BigDecimal.class;
+        };
     }
 
     @SuppressWarnings("unchecked")
-    static <N extends Number> N convert(Number number, int rank) {
+    private static <N extends Number> N convert(Number number, int rank) {
         if (number == null) {
             return null;
         }
@@ -124,64 +152,24 @@ final class DynamicNumTypeResolver {
         };
     }
 
-    private static int valueRank(Object value) {
-        if (value == null) {
-            return NO_RANK;
-        }
-
-        if (!(value instanceof Number)) {
-            throw new IllegalArgumentException("Can't cast '" + value.getClass().getName() + "' to a number");
-        }
-
-        Integer rank = NumericExpFactory.typeConversionRank.get(value.getClass());
-        return rank != null ? rank : 0;
+    @SuppressWarnings("unchecked")
+    static <N extends Number> Series<N> convert(Series<?> series, int rank) {
+        return (Series<N>) convert(series, rank, hasNulls(series));
     }
 
-    static Class<? extends Number> typeForRank(int rank) {
+    @SuppressWarnings("unchecked")
+    private static Series<? extends Number> convert(Series<?> series, int rank, boolean hasNulls) {
+        Series<Number> numSeries = (Series<Number>) series;
+        if(hasNulls) {
+            return toObjectSeries(numSeries, rank);
+        }
         return switch (rank) {
-            case RANK_DOUBLE -> Double.class;
-            case RANK_FLOAT -> Float.class;
-            case RANK_BIG_INTEGER -> BigInteger.class;
-            case RANK_LONG -> Long.class;
-            case RANK_INT -> Integer.class;
-            default -> BigDecimal.class;
+            case RANK_DOUBLE -> numSeries.compactDouble(Number::doubleValue);
+            case RANK_FLOAT -> numSeries.compactFloat(Number::floatValue);
+            case RANK_LONG -> numSeries.compactLong(Number::longValue);
+            case RANK_INT -> numSeries.compactInt(Number::intValue);
+            default -> toObjectSeries(numSeries, rank);
         };
-    }
-
-    private static Series<Integer> toIntSeries(Series<Number> series, boolean hasNulls) {
-        if (!hasNulls) {
-            return series.compactInt(Number::intValue);
-        }
-        return toObjectSeries(series, RANK_INT);
-    }
-
-    private static Series<Long> toLongSeries(Series<Number> series, boolean hasNulls) {
-        if (!hasNulls) {
-            return series.compactLong(Number::longValue);
-        }
-        return toObjectSeries(series, RANK_LONG);
-    }
-
-    private static Series<Float> toFloatSeries(Series<Number> series, boolean hasNulls) {
-        if (!hasNulls) {
-            return series.compactFloat(Number::floatValue);
-        }
-        return toObjectSeries(series, RANK_FLOAT);
-    }
-
-    private static Series<Double> toDoubleSeries(Series<Number> series, boolean hasNulls) {
-        if (!hasNulls) {
-            return series.compactDouble(Number::doubleValue);
-        }
-        return toObjectSeries(series, RANK_DOUBLE);
-    }
-
-    private static <N extends Number> Series<N> toObjectSeries(Series<Number> series, int rank) {
-        ObjectAccum<N> values = new ObjectAccum<>(series.size());
-        for (int i = 0; i < series.size(); i++) {
-            values.push(convert(series.get(i), rank));
-        }
-        return values.toSeries();
     }
 
     private static boolean hasNulls(Series<?> series) {
@@ -191,6 +179,14 @@ final class DynamicNumTypeResolver {
             }
         }
         return false;
+    }
+
+    private static int valueRank(Number value) {
+        return NumericExpFactory.typeConversionRank.getOrDefault(value.getClass(), RANK_BIG_DECIMAL);
+    }
+
+    private static <N extends Number> Series<N> toObjectSeries(Series<Number> series, int rank) {
+        return series.map(v -> convert(v, rank));
     }
 
     private static BigInteger toBigInteger(Number number) {
@@ -221,8 +217,9 @@ final class DynamicNumTypeResolver {
         return BigDecimal.valueOf(number.doubleValue()).stripTrailingZeros();
     }
 
-    private static ResolvedNumExp<?> typeResolvedExp(Series<?> series, int rank, boolean hasNulls) {
-        return new ResolvedNumExp<>(typeForRank(rank), convert(series, rank, hasNulls));
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static ResolvedNumExp<? extends Number> typeResolvedExp(Series<?> series, int rank, boolean hasNulls) {
+        return new ResolvedNumExp(typeForRank(rank), convert(series, rank, hasNulls));
     }
 
     record ScanResult(int rank, boolean hasNulls) {

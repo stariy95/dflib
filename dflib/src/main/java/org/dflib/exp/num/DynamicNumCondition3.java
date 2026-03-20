@@ -37,11 +37,11 @@ class DynamicNumCondition3 extends Exp3<Number, Number, Number, Boolean> impleme
 
     @Override
     public Boolean reduce(DataFrame df) {
-        return resolve(convert(one.reduce(df)), convert(two.reduce(df)), convert(three.reduce(df)), op).reduce(df);
+        return resolve(one.reduce(df), two.reduce(df), three.reduce(df), op).reduce(df);
     }
 
     @Override
     public Boolean reduce(Series<?> s) {
-        return resolve(convert(one.reduce(s)), convert(two.reduce(s)), convert(three.reduce(s)), op).reduce(s);
+        return resolve(one.reduce(s), two.reduce(s), three.reduce(s), op).reduce(s);
     }
 }

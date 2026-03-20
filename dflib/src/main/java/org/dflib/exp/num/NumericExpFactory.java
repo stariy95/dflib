@@ -104,13 +104,12 @@ public abstract class NumericExpFactory {
 
     static NumericExpFactory factory(int rank) {
         return switch (rank) {
-            case RANK_BIG_DECIMAL -> decimalFactory;
             case RANK_DOUBLE -> factories.get(Double.class);
             case RANK_FLOAT -> factories.get(Float.class);
             case RANK_BIG_INTEGER -> factories.get(BigInteger.class);
             case RANK_LONG -> factories.get(Long.class);
             case RANK_INT -> factories.get(Integer.class);
-            default -> null;
+            default -> decimalFactory;
         };
     }
 

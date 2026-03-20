@@ -32,11 +32,11 @@ class DynamicNumExp1 extends Exp1<Number, Number> implements NumExp<Number> {
 
     @Override
     public Number reduce(DataFrame df) {
-        return resolve(convert(exp.reduce(df)), op).reduce(df);
+        return resolve(exp.reduce(df), op).reduce(df);
     }
 
     @Override
     public Number reduce(Series<?> s) {
-        return resolve(convert(exp.reduce(s)), op).reduce(s);
+        return resolve(exp.reduce(s), op).reduce(s);
     }
 }
