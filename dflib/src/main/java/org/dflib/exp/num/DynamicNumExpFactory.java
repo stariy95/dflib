@@ -76,7 +76,7 @@ class DynamicNumExpFactory extends NumericExpFactory {
 
     @Override
     public DecimalExp castAsDecimal(NumExp<?> exp) {
-        return DecimalExp1.map("castAsDecimal", cast(exp), s -> DynamicNumTypeResolver.convert(s, RANK_BIG_INTEGER));
+        return DecimalExp1.map("castAsDecimal", cast(exp), s -> DynamicNumTypeResolver.convert(s, RANK_BIG_DECIMAL));
     }
 
     @Override

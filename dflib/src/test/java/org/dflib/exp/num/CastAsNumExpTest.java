@@ -125,6 +125,44 @@ public class CastAsNumExpTest {
     }
 
     @Test
+    public void castAsNumber_castAsDecimal_int() {
+        Series<BigDecimal> result = $col(0)
+                .castAsNumber()
+                .castAsDecimal()
+                .scale(2)
+                .eval(Series.of(1, 2, 3));
+
+        new SeriesAsserts(result).expectData(new BigDecimal("1.00"), new BigDecimal("2.00"), new BigDecimal("3.00"));
+    }
+
+    @Test
+    public void castAsNumber_castAsDecimal_bigDecimal() {
+        Series<BigDecimal> result = $col(0)
+                .castAsNumber()
+                .castAsDecimal()
+                .scale(2)
+                .eval(Series.of(new BigDecimal("1.234"), new BigDecimal("4.5")));
+
+        new SeriesAsserts(result).expectData(new BigDecimal("1.23"), new BigDecimal("4.50"));
+    }
+
+    @Test
+    public void castAsNumber_castAsDecimal_withNulls() {
+        Series<BigDecimal> result = $col(0)
+                .castAsNumber()
+                .castAsDecimal()
+                .scale(2)
+                .eval(Series.of(1, null, new BigDecimal("2.5"), null, 3.75d));
+
+        new SeriesAsserts(result).expectData(
+                new BigDecimal("1.00"),
+                null,
+                new BigDecimal("2.50"),
+                null,
+                new BigDecimal("3.75"));
+    }
+
+    @Test
     public void castAsNumber_homogeneous() {
         NumExp<?> exp = $col(0).castAsNumber();
         Series<Object> s = Series.of(1, null, 2, 3);
