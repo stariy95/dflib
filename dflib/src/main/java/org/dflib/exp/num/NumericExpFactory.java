@@ -121,6 +121,9 @@ public abstract class NumericExpFactory {
         return factory(left.getType(), right.getType());
     }
 
+    /**
+     * @since 2.0.0
+     */
     public static NumericExpFactory factory(Exp<? extends Number> one, Exp<? extends Number> two, Exp<? extends Number> three) {
         if (one.getType() == Number.class || two.getType() == Number.class || three.getType() == Number.class) {
             return dynamicFactory;
