@@ -15,14 +15,14 @@ final class DynamicNumTypeResolver {
     }
 
     static <T> T resolve(Series<?> series, DynamicNumOps.Unary<T> op) {
-        ScanResult result = seriesInferredType(series);
+        ScanResult result = scanSeries(series);
         int rank = result.rank();
         return op.apply(NumericExpFactory.factory(rank), typeResolvedExp(series, rank, result.hasNulls()));
     }
 
     static <T> T resolve(Series<?> one, Series<?> two, DynamicNumOps.Binary<T> op) {
-        ScanResult result1 = seriesInferredType(one);
-        ScanResult result2 = seriesInferredType(two);
+        ScanResult result1 = scanSeries(one);
+        ScanResult result2 = scanSeries(two);
         int rank = Math.min(result1.rank(), result2.rank());
         return op.apply(
                 NumericExpFactory.factory(rank),
@@ -32,9 +32,9 @@ final class DynamicNumTypeResolver {
     }
 
     static <T> T resolve(Series<?> one, Series<?> two, Series<?> three, DynamicNumOps.Ternary<T> op) {
-        ScanResult result1 = seriesInferredType(one);
-        ScanResult result2 = seriesInferredType(two);
-        ScanResult result3 = seriesInferredType(three);
+        ScanResult result1 = scanSeries(one);
+        ScanResult result2 = scanSeries(two);
+        ScanResult result3 = scanSeries(three);
         int rank = Math.min(result1.rank(), Math.min(result2.rank(), result3.rank()));
         return op.apply(
                 NumericExpFactory.factory(rank),
@@ -196,7 +196,7 @@ final class DynamicNumTypeResolver {
         return BigDecimal.valueOf(number.doubleValue()).stripTrailingZeros();
     }
 
-    private static ScanResult seriesInferredType(Series<?> series) {
+    private static ScanResult scanSeries(Series<?> series) {
         int rank = NO_RANK;
         boolean hasNulls = false;
 

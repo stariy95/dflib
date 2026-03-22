@@ -7,11 +7,6 @@ final class DynamicNumOps {
     private DynamicNumOps() {
     }
 
-    @SuppressWarnings("unchecked")
-    static <T> Unary<T> identity() {
-        return (f, e) -> (T)e;
-    }
-
     interface Unary<T> {
         T apply(
                 NumericExpFactory factory,
