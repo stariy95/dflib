@@ -12,8 +12,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
-import static org.dflib.Exp.$col;
-import static org.dflib.Exp.$int;
+import static org.dflib.Exp.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class CastAsNumExpTest {
@@ -75,6 +74,17 @@ public class CastAsNumExpTest {
     }
 
     @Test
+    public void castAsNumber_chain_mixedObjectNumerics_splitEval() {
+        Series<Object> s = Series.of(1, new BigDecimal("2.5"), 3L);
+
+        Series<? extends Number> intermediate = $col(0).castAsNumber().add(1).eval(s);
+        Series<? extends Number> result = $col(0).castAsNumber().mul(2).eval(intermediate);
+
+        new SeriesAsserts(intermediate).expectData(new BigDecimal("2"), new BigDecimal("3.5"), new BigDecimal("4"));
+        new SeriesAsserts(result).expectData(new BigDecimal("4"), new BigDecimal("7.0"), new BigDecimal("8"));
+    }
+
+    @Test
     public void castAsNumber_sum_homogeneousInt_usesIntFactorySemantics() {
         NumExp<?> exp = $col(0).castAsNumber().sum();
         Series<Object> s = Series.of(1, 2, 3);
@@ -105,7 +115,7 @@ public class CastAsNumExpTest {
 
     @Test
     public void castAsNumber_filteredSum_usesFilteredSeriesType() {
-        NumExp<?> exp = $col("a").castAsNumber().sum($col("b").castAsBool());
+        NumExp<?> exp = $col("a").castAsNumber().sum($bool("b"));
         DataFrame df = DataFrame.foldByRow("a", "b").of(
                 1, true,
                 2, false,

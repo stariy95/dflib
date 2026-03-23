@@ -1,6 +1,10 @@
 package org.dflib.exp.num;
 
 import org.dflib.Series;
+import org.dflib.DoubleSeries;
+import org.dflib.FloatSeries;
+import org.dflib.IntSeries;
+import org.dflib.LongSeries;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -15,14 +19,17 @@ final class DynamicNumTypeResolver {
     }
 
     static <T> T resolve(Series<?> series, DynamicNumOps.Unary<T> op) {
-        ScanResult result = scanSeries(series);
+        ScanResult result = scanSeriesIfNeeded(series);
         int rank = result.rank();
-        return op.apply(NumericExpFactory.factory(rank), typeResolvedExp(series, rank, result.hasNulls()));
+        return op.apply(
+                NumericExpFactory.factory(rank),
+                typeResolvedExp(series, rank, result.hasNulls())
+        );
     }
 
     static <T> T resolve(Series<?> one, Series<?> two, DynamicNumOps.Binary<T> op) {
-        ScanResult result1 = scanSeries(one);
-        ScanResult result2 = scanSeries(two);
+        ScanResult result1 = scanSeriesIfNeeded(one);
+        ScanResult result2 = scanSeriesIfNeeded(two);
         int rank = Math.min(result1.rank(), result2.rank());
         return op.apply(
                 NumericExpFactory.factory(rank),
@@ -32,9 +39,9 @@ final class DynamicNumTypeResolver {
     }
 
     static <T> T resolve(Series<?> one, Series<?> two, Series<?> three, DynamicNumOps.Ternary<T> op) {
-        ScanResult result1 = scanSeries(one);
-        ScanResult result2 = scanSeries(two);
-        ScanResult result3 = scanSeries(three);
+        ScanResult result1 = scanSeriesIfNeeded(one);
+        ScanResult result2 = scanSeriesIfNeeded(two);
+        ScanResult result3 = scanSeriesIfNeeded(three);
         int rank = Math.min(result1.rank(), Math.min(result2.rank(), result3.rank()));
         return op.apply(
                 NumericExpFactory.factory(rank),
@@ -139,6 +146,9 @@ final class DynamicNumTypeResolver {
     @SuppressWarnings("unchecked")
     private static Series<? extends Number> convert(Series<?> series, int rank, boolean hasNulls) {
         Series<Number> numSeries = (Series<Number>) series;
+        if (rank == knownSeriesRank(series)) {
+            return numSeries;
+        }
         if(hasNulls) {
             return toObjectSeries(numSeries, rank);
         }
@@ -165,7 +175,17 @@ final class DynamicNumTypeResolver {
     }
 
     private static <N extends Number> Series<N> toObjectSeries(Series<Number> series, int rank) {
-        return series.map(v -> convert(v, rank));
+        return wrapResolvedType(series.map(v -> convert(v, rank)), rank);
+    }
+
+    private static <N extends Number> Series<N> wrapResolvedType(Series<N> series, int rank) {
+        return switch (rank) {
+            case RANK_BIG_DECIMAL, RANK_BIG_INTEGER -> new ResolvedNominalSeries<>(typeForRank(rank), series, hasNulls(series));
+            case RANK_DOUBLE, RANK_FLOAT, RANK_LONG, RANK_INT -> series.getNominalType() == typeForRank(rank)
+                    ? series
+                    : new ResolvedNominalSeries<>(typeForRank(rank), series, hasNulls(series));
+            default -> series;
+        };
     }
 
     private static BigInteger toBigInteger(Number number) {
@@ -194,6 +214,29 @@ final class DynamicNumTypeResolver {
         }
 
         return BigDecimal.valueOf(number.doubleValue()).stripTrailingZeros();
+    }
+
+    private static ScanResult scanSeriesIfNeeded(Series<?> series) {
+        int knownRank = knownSeriesRank(series);
+        return knownRank != NO_RANK
+                ? new ScanResult(knownRank, series instanceof ResolvedNominalSeries<?> resolved && resolved.hasNulls())
+                : scanSeries(series);
+    }
+
+    private static int knownSeriesRank(Series<?> series) {
+        if (series instanceof IntSeries) {
+            return RANK_INT;
+        } else if (series instanceof LongSeries) {
+            return RANK_LONG;
+        } else if (series instanceof FloatSeries) {
+            return RANK_FLOAT;
+        } else if (series instanceof DoubleSeries) {
+            return RANK_DOUBLE;
+        } else if (series instanceof ResolvedNominalSeries) {
+            return NumericExpFactory.typeConversionRank.getOrDefault(series.getNominalType(), RANK_BIG_DECIMAL);
+        } else {
+            return NO_RANK;
+        }
     }
 
     private static ScanResult scanSeries(Series<?> series) {
