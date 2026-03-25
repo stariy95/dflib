@@ -1085,7 +1085,7 @@ public interface Exp<T> {
     /**
      * Casts this expression to a numeric type determined at eval time by scanning actual data.
      * Picks the widest numeric type present in the data (e.g., all ints → Integer, mixed → BigDecimal).
-     * Throws {@link IllegalArgumentException} if any non-null value is not a {@link Number}.
+     * Non-numeric values are converted via {@code toString()} and parsed as {@link BigDecimal}.
      *
      * @since 2.0.0
      */

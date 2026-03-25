@@ -181,10 +181,33 @@ public class CastAsNumExpTest {
     }
 
     @Test
-    public void castAsNumber_nonNumeric() {
+    public void castAsNumber_parseableString() {
+        NumExp<?> exp = $col(0).castAsNumber();
+        Series<Object> s = Series.of("1.25", 1, 2L);
+
+        new SeriesAsserts(exp.eval(s))
+                .expectData(new BigDecimal("1.25"), new BigDecimal("1"), new BigDecimal("2"));
+    }
+
+    @Test
+    public void castAsNumber_parseableObjectViaToString() {
+        NumExp<?> exp = $col(0).castAsNumber();
+        Object value = new Object() {
+            @Override
+            public String toString() {
+                return "3.75";
+            }
+        };
+
+        new SeriesAsserts(exp.eval(Series.of(value, 1)))
+                .expectData(new BigDecimal("3.75"), new BigDecimal("1"));
+    }
+
+    @Test
+    public void castAsNumber_unparseableString() {
         NumExp<?> exp = $col(0).castAsNumber();
         Series<Object> s = Series.of("abc", 1, 2);
-        assertThrows(IllegalArgumentException.class, () -> exp.eval(s));
+        assertThrows(NumberFormatException.class, () -> exp.eval(s));
     }
 
     // --- Homogeneous type inference ---
@@ -376,10 +399,17 @@ public class CastAsNumExpTest {
     }
 
     @Test
-    public void reduce_Series_nonNumeric() {
+    public void reduce_Series_parseableString() {
+        NumExp<?> exp = $col(0).castAsNumber();
+        Series<Object> s = Series.of("42.5", 1, 2);
+        assertEquals(new BigDecimal("42.5"), exp.reduce(s));
+    }
+
+    @Test
+    public void reduce_Series_unparseableString() {
         NumExp<?> exp = $col(0).castAsNumber();
         Series<Object> s = Series.of("abc", 1, 2);
-        assertThrows(IllegalArgumentException.class, () -> exp.reduce(s));
+        assertThrows(NumberFormatException.class, () -> exp.reduce(s));
     }
 
     @Test

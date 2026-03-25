@@ -99,11 +99,12 @@ final class DynamicNumTypeResolver {
     private static Number castToNumber(Object value) {
         if (value == null) {
             return null;
+        } else if (value instanceof Number n) {
+            return n;
+        } else {
+            // note, here's a hidden validation that will throw for anything that is not-a-number
+            return new BigDecimal(value.toString());
         }
-        if (!(value instanceof Number n)) {
-            throw new IllegalArgumentException("Can't cast '" + value.getClass().getName() + "' to a number");
-        }
-        return n;
     }
 
     private static ResolvedNumExp<?> scalarExp(Number value, int rank) {
@@ -145,10 +146,16 @@ final class DynamicNumTypeResolver {
 
     @SuppressWarnings("unchecked")
     private static Series<? extends Number> convert(Series<?> series, int rank, boolean hasNulls) {
-        Series<Number> numSeries = (Series<Number>) series;
-        if (rank == knownSeriesRank(series)) {
-            return numSeries;
+        int knownSeriesRank = knownSeriesRank(series);
+        if (rank == knownSeriesRank) {
+            return (Series<? extends Number>) series;
         }
+
+        if (rank == RANK_BIG_DECIMAL && knownSeriesRank == NO_RANK) {
+            return wrapResolvedType(series.map(v -> v == null ? null : toBigDecimal(castToNumber(v))), rank);
+        }
+
+        Series<Number> numSeries = (Series<Number>) series;
         if(hasNulls) {
             return toObjectSeries(numSeries, rank);
         }
@@ -247,13 +254,20 @@ final class DynamicNumTypeResolver {
             Object value = series.get(i);
             if (value == null) {
                 hasNulls = true;
+                if (rank == RANK_BIG_DECIMAL) {
+                    break;
+                }
             } else if (value instanceof Number n) {
                 int vr = valueRank(n);
                 if (vr < rank) {
                     rank = vr;
                 }
             } else {
-                throw new IllegalArgumentException("Can't cast '" + value.getClass().getName() + "' to a number");
+                // Convert non-number to BigDecimal
+                rank = RANK_BIG_DECIMAL;
+                if (hasNulls) {
+                    break;
+                }
             }
         }
 

@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class DynamicNumTypeResolverTest {
 
@@ -39,6 +40,52 @@ public class DynamicNumTypeResolverTest {
                 (factory, exp) -> exp.eval(Series.ofVal(null, 2)));
 
         assertSame(BigDecimal.class, resolved.getNominalType());
+    }
+
+    @Test
+    public void resolve_scalar_parseableObjectViaToString() {
+        Object value = new Object() {
+            @Override
+            public String toString() {
+                return "12.5";
+            }
+        };
+
+        Number resolved = DynamicNumTypeResolver.resolve(value, (factory, exp) -> exp.reduce(Series.ofVal(null, 1)));
+
+        assertEquals(new BigDecimal("12.5"), resolved);
+    }
+
+    @Test
+    public void resolve_series_parseableObjectsViaToString() {
+        Object value = new Object() {
+            @Override
+            public String toString() {
+                return "7.25";
+            }
+        };
+
+        Series<?> resolved = DynamicNumTypeResolver.resolve(
+                Series.of(value, 1),
+                (factory, exp) -> exp.eval(Series.ofVal(null, 2)));
+
+        assertSame(BigDecimal.class, resolved.getNominalType());
+        assertEquals(new BigDecimal("7.25"), resolved.get(0));
+        assertEquals(new BigDecimal("1"), resolved.get(1));
+    }
+
+    @Test
+    public void resolve_series_unparseableObjectViaToString() {
+        Object value = new Object() {
+            @Override
+            public String toString() {
+                return "abc";
+            }
+        };
+
+        assertThrows(NumberFormatException.class, () -> DynamicNumTypeResolver.resolve(
+                Series.of(value, 1),
+                (factory, exp) -> exp.eval(Series.ofVal(null, 2))));
     }
 
     static class CountingSeries extends ObjectSeries<Number> {
