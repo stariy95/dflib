@@ -31,8 +31,8 @@ import java.util.function.Predicate;
 
 public abstract class ObjectSeries<T> implements Series<T> {
 
-    protected Class<?> nominalType;
-    protected Class<?> inferredType;
+    protected final Class<?> nominalType;
+    protected volatile Class<?> inferredType;
 
     protected ObjectSeries(Class<?> nominalType) {
         this.nominalType = Objects.requireNonNull(nominalType);
