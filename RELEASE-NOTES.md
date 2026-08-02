@@ -21,6 +21,7 @@
 * #628 Require Java 21
 * #629 Upgrade to Jackson 2.21.1
 * #630 Exp: explicit "hideNulls" flavors of "mapVal" and "mapBoolVal" with BiFunction
+* #633 Negative colsTail() picks incorrect columns
 * #635 FloatSeries.min() returns an incorrect value or throws
 
 ## Release 2.0.0-M6

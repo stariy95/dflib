@@ -42,15 +42,38 @@ public class ColumnSet_Select_ColsHeadTest {
     }
 
     @Test
-    public void negative() {
-        DataFrame df = DataFrame.foldByRow("a", "b").of(
-                        1, "x",
-                        2, "y")
+    public void negative1() {
+        DataFrame df = DataFrame.foldByRow("a", "c", "b").of(
+                        1, "e", "x",
+                        2, "k", "y")
                 .colsHead(-1).select();
+
+        new DataFrameAsserts(df, "c", "b")
+                .expectHeight(2)
+                .expectRow(0, "e", "x")
+                .expectRow(1, "k", "y");
+    }
+
+    @Test
+    public void negative2() {
+        DataFrame df = DataFrame.foldByRow("a", "c", "b").of(
+                        1, "e", "x",
+                        2, "k", "y")
+                .colsHead(-2).select();
 
         new DataFrameAsserts(df, "b")
                 .expectHeight(2)
                 .expectRow(0, "x")
                 .expectRow(1, "y");
+    }
+
+    @Test
+    public void negativeOutOfBounds() {
+        DataFrame df = DataFrame.foldByRow("a", "c", "b").of(
+                        1, "e", "x",
+                        2, "k", "y")
+                .colsHead(-4).select();
+
+        new DataFrameAsserts(df).expectHeight(0);
     }
 }

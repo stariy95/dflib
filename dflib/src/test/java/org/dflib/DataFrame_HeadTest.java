@@ -58,4 +58,20 @@ public class DataFrame_HeadTest {
                 .expectHeight(1)
                 .expectRow(0, 3, "z");
     }
+
+    @Test
+    public void negativeOutOfBounds() {
+        DataFrame df = DataFrame.foldByRow("a", "b").of(
+                        1, "x",
+                        2, "y",
+                        3, "z")
+                .head(-4);
+
+        // TODO: should this actually truncate the DataFrame to zero?
+        new DataFrameAsserts(df, "a", "b")
+                .expectHeight(3)
+                .expectRow(0, 1, "x")
+                .expectRow(1, 2, "y")
+                .expectRow(2, 3, "z");
+    }
 }

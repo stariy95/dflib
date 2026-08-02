@@ -695,7 +695,7 @@ public interface DataFrame extends Iterable<RowProxy> {
      */
     default ColumnSet colsTail(int len) {
         return len < 0
-                ? colsRange(0, Math.min(-len, width()))
+                ? colsRange(0, width() - Math.min(-len, width()))
                 : colsRange(width() - Math.min(len, width()), width());
     }
 

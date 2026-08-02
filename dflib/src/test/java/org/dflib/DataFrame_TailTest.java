@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 public class DataFrame_TailTest {
 
     @Test
-    public void tail() {
+    public void inBounds() {
         DataFrame df = DataFrame.foldByRow("a", "b").of(
                         1, "x",
                         2, "y",
@@ -20,7 +20,7 @@ public class DataFrame_TailTest {
     }
 
     @Test
-    public void tail_Zero() {
+    public void zero() {
         DataFrame df = DataFrame.foldByRow("a", "b").of(
                         1, "x",
                         2, "y",
@@ -32,7 +32,7 @@ public class DataFrame_TailTest {
     }
 
     @Test
-    public void tail_OutOfBounds() {
+    public void outOfBounds() {
         DataFrame df = DataFrame.foldByRow("a", "b").of(
                         1, "x",
                         2, "y",
@@ -57,5 +57,21 @@ public class DataFrame_TailTest {
         new DataFrameAsserts(df, "a", "b")
                 .expectHeight(1)
                 .expectRow(0, 1, "x");
+    }
+
+    @Test
+    public void negativeOutOfBounds() {
+        DataFrame df = DataFrame.foldByRow("a", "b").of(
+                        1, "x",
+                        2, "y",
+                        3, "z")
+                .tail(-4);
+
+        // TODO: should this actually truncate the DataFrame to zero?
+        new DataFrameAsserts(df, "a", "b")
+                .expectHeight(3)
+                .expectRow(0, 1, "x")
+                .expectRow(1, 2, "y")
+                .expectRow(2, 3, "z");
     }
 }

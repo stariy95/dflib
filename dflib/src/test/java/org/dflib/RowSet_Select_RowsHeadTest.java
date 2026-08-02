@@ -47,7 +47,21 @@ public class RowSet_Select_RowsHeadTest {
     }
 
     @Test
-    public void negative() {
+    public void negative1() {
+        DataFrame df = DataFrame.foldByRow("a", "b").of(
+                        1, "x",
+                        2, "y",
+                        3, "z")
+                .rowsHead(-1).select();
+
+        new DataFrameAsserts(df, "a", "b")
+                .expectHeight(2)
+                .expectRow(0, 2, "y")
+                .expectRow(1, 3, "z");
+    }
+
+    @Test
+    public void negative2() {
         DataFrame df = DataFrame.foldByRow("a", "b").of(
                         1, "x",
                         2, "y",
@@ -57,5 +71,16 @@ public class RowSet_Select_RowsHeadTest {
         new DataFrameAsserts(df, "a", "b")
                 .expectHeight(1)
                 .expectRow(0, 3, "z");
+    }
+
+    @Test
+    public void negativeOutOfBounds() {
+        DataFrame df = DataFrame.foldByRow("a", "b").of(
+                        1, "x",
+                        2, "y",
+                        3, "z")
+                .rowsHead(-4).select();
+
+        new DataFrameAsserts(df, "a", "b").expectHeight(0);
     }
 }
