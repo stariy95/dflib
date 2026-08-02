@@ -33,6 +33,11 @@ public interface IntSeries extends Series<Integer> {
     }
 
     @Override
+    default SeriesInfo describe() {
+        return new SeriesInfo(Integer.TYPE, Boolean.FALSE, null, (double) min(), avg(), (double) max());
+    }
+
+    @Override
     default IntSeries castAsInt() {
         return this;
     }

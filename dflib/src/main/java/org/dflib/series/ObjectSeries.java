@@ -7,9 +7,13 @@ import org.dflib.Index;
 import org.dflib.IntSeries;
 import org.dflib.Series;
 import org.dflib.SeriesGroupBy;
+import org.dflib.SeriesInfo;
 import org.dflib.Sorter;
 import org.dflib.ValueMapper;
 import org.dflib.ValueToRowMapper;
+import org.dflib.agg.Average;
+import org.dflib.agg.Max;
+import org.dflib.agg.Min;
 import org.dflib.builder.BoolBuilder;
 import org.dflib.builder.IntAccum;
 import org.dflib.builder.ObjectAccum;
@@ -20,6 +24,11 @@ import org.dflib.set.Diff;
 import org.dflib.set.Intersect;
 import org.dflib.sort.IntComparator;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -33,6 +42,7 @@ public abstract class ObjectSeries<T> implements Series<T> {
 
     protected final Class<?> nominalType;
     protected volatile Class<?> inferredType;
+    protected volatile SeriesInfo info;
 
     protected ObjectSeries(Class<?> nominalType) {
         this.nominalType = Objects.requireNonNull(nominalType);
@@ -98,6 +108,51 @@ public abstract class ObjectSeries<T> implements Series<T> {
         }
 
         return -1;
+    }
+
+    @Override
+    public SeriesInfo describe() {
+        return info != null ? info : (info = buildInfo());
+    }
+
+    protected SeriesInfo buildInfo() {
+
+        int nullCount = 0;
+        int len = size();
+
+        for (int i = 0; i < len; i++) {
+            if (get(i) == null) {
+                nullCount++;
+            }
+        }
+
+        Class<?> type = getInferredType();
+        Series raw = this;
+
+        return switch (type) {
+            case Class<?> k when k == Integer.class ->
+                    new SeriesInfo(type, Boolean.TRUE, nullCount, Min.ofInts(raw), Average.ofDoubles(raw), Max.ofInts(raw));
+            case Class<?> k when k == Long.class ->
+                    new SeriesInfo(type, Boolean.TRUE, nullCount, Min.ofLongs(raw), Average.ofDoubles(raw), Max.ofLongs(raw));
+            case Class<?> k when k == Double.class ->
+                    new SeriesInfo(type, Boolean.TRUE, nullCount, Min.ofDoubles(raw), Average.ofDoubles(raw), Max.ofDoubles(raw));
+            case Class<?> k when k == Float.class ->
+                    new SeriesInfo(type, Boolean.TRUE, nullCount, Min.ofFloats(raw), Average.ofDoubles(raw), Max.ofFloats(raw));
+            case Class<?> k when BigDecimal.class.isAssignableFrom(k) ->
+                    new SeriesInfo(type, Boolean.TRUE, nullCount, Min.ofComparables(raw), Average.ofDecimals(raw), Max.ofComparables(raw));
+            case Class<?> k when BigInteger.class.isAssignableFrom(k) ->
+                    new SeriesInfo(type, Boolean.TRUE, nullCount, Min.ofComparables(raw), Average.ofBigints(raw), Max.ofComparables(raw));
+            // a catch-all for the remaining Number types
+            case Class<?> k when Number.class.isAssignableFrom(k) ->
+                    new SeriesInfo(type, Boolean.TRUE, nullCount, Min.ofDecimals(raw), Average.ofNumbers(raw), Max.ofDecimals(raw));
+            case Class<?> k when k == LocalDate.class ->
+                    new SeriesInfo(type, Boolean.TRUE, nullCount, Min.ofComparables(raw), Average.ofDates(raw), Max.ofComparables(raw));
+            case Class<?> k when k == LocalDateTime.class ->
+                    new SeriesInfo(type, Boolean.TRUE, nullCount, Min.ofComparables(raw), Average.ofDateTimes(raw), Max.ofComparables(raw));
+            case Class<?> k when k == LocalTime.class ->
+                    new SeriesInfo(type, Boolean.TRUE, nullCount, Min.ofComparables(raw), Average.ofTimes(raw), Max.ofComparables(raw));
+            default -> new SeriesInfo(type, Boolean.TRUE, nullCount, null, null, null);
+        };
     }
 
     @Override

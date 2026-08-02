@@ -198,6 +198,11 @@ public interface DataFrame extends Iterable<RowProxy> {
     DataFrame as(String name);
 
     /**
+     * @since 2.0.0
+     */
+    DataFrameInfo describe();
+
+    /**
      * Returns DataFrame column index.
      *
      * @return DataFrame column index

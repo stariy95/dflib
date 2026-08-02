@@ -24,6 +24,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 
 public class ColumnDataFrame implements DataFrame {
 
@@ -66,6 +68,44 @@ public class ColumnDataFrame implements DataFrame {
     @Override
     public DataFrame as(String name) {
         return Objects.equals(name, this.name) ? this : new ColumnDataFrame(name, columnsIndex, dataColumns);
+    }
+
+    @Override
+    public DataFrameInfo describe() {
+
+        int w = columnsIndex.size();
+        ColumnInfo[] columns = new ColumnInfo[w];
+
+        // describing a column takes multiple passes through its values, so parallelize it, using the same
+        // heuristics as the expression evaluator
+        if (w > 1 || height() >= Environment.commonEnv().parallelExecThreshold()) {
+
+            ExecutorService pool = Environment.commonEnv().threadPool();
+            Future<ColumnInfo>[] tasks = new Future[w];
+
+            for (int i = 0; i < w; i++) {
+                int pos = i;
+                tasks[i] = pool.submit(() -> describeColumn(pos));
+            }
+
+            for (int i = 0; i < w; i++) {
+                try {
+                    columns[i] = tasks[i].get();
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        } else {
+            for (int i = 0; i < w; i++) {
+                columns[i] = describeColumn(i);
+            }
+        }
+
+        return new DataFrameInfo(columns);
+    }
+
+    private ColumnInfo describeColumn(int pos) {
+        return ColumnInfo.of(pos, columnsIndex.get(pos), dataColumns[pos].describe());
     }
 
     @Override

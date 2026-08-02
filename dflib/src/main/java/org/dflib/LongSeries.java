@@ -32,6 +32,11 @@ public interface LongSeries extends Series<Long> {
     }
 
     @Override
+    default SeriesInfo describe() {
+        return new SeriesInfo(Long.TYPE, Boolean.FALSE, null, (double) min(), avg(), (double) max());
+    }
+
+    @Override
     default LongSeries castAsLong() {
         return this;
     }

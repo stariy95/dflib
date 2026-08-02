@@ -3,6 +3,8 @@ package org.dflib.print;
 import org.dflib.Series;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class TabularPrinter_SeriesTest {
@@ -39,6 +41,18 @@ public class TabularPrinter_SeriesTest {
                 " true" + System.lineSeparator() +
                 "false" + System.lineSeparator() +
                 "2 elements", p.print(Series.ofBool(true, false)));
+    }
+
+    @Test
+    public void print_Class() {
+        TabularPrinter p = new TabularPrinter(5, 100, 100);
+
+        assertEquals(System.lineSeparator() +
+                "int             " + System.lineSeparator() +
+                "java.lang.String" + System.lineSeparator() +
+                "java.util.List  " + System.lineSeparator() +
+                "long[]          " + System.lineSeparator() +
+                "4 elements", p.print(Series.of(Integer.TYPE, String.class, List.class, long[].class)));
     }
 
     @Test

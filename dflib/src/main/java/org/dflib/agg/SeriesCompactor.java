@@ -8,6 +8,9 @@ import org.dflib.IntSeries;
 import org.dflib.LongSeries;
 import org.dflib.Series;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+
 class SeriesCompactor {
 
     private static final Condition notNullExp = Exp.$col(0).isNotNull();
@@ -34,6 +37,32 @@ class SeriesCompactor {
         return (s instanceof DoubleSeries)
                 ? (DoubleSeries) s
                 : s.select(notNullExp).compactDouble(Number::doubleValue);
+    }
+
+    /**
+     * Converts a Series of arbitrary Numbers to a Series of BigDecimals, skipping nulls.
+     */
+    public static Series<BigDecimal> toDecimalSeries(Series<? extends Number> s) {
+        return noNullsSeries(s).map(SeriesCompactor::toDecimal);
+    }
+
+    private static BigDecimal toDecimal(Number n) {
+        return switch (n) {
+            case BigDecimal bd -> bd;
+            case BigInteger bi -> new BigDecimal(bi);
+            case Integer i -> BigDecimal.valueOf(i);
+            case Long l -> BigDecimal.valueOf(l);
+            case Short sh -> BigDecimal.valueOf(sh);
+            case Byte b -> BigDecimal.valueOf(b);
+
+            // going through "Float.toString(..)" instead of "doubleValue()", as the latter would turn 2.2f
+            // into 2.200000047683716
+            case Float f -> new BigDecimal(Float.toString(f));
+
+            // "BigDecimal.valueOf(double)" is slower than "new BigDecimal(double)", but is preferable, as it
+            // deals with double precision correctly
+            default -> BigDecimal.valueOf(n.doubleValue());
+        };
     }
 
     public static <T> Series<T> noNullsSeries(Series<T> s) {

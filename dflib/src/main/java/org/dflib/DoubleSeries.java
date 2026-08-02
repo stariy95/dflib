@@ -32,6 +32,11 @@ public interface DoubleSeries extends Series<Double> {
     }
 
     @Override
+    default SeriesInfo describe() {
+        return new SeriesInfo(Double.TYPE, Boolean.FALSE, null, min(), avg(), max());
+    }
+
+    @Override
     default DoubleSeries castAsDouble() {
         return this;
     }

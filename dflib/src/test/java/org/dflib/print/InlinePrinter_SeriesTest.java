@@ -4,6 +4,8 @@ import org.dflib.Series;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class InlinePrinter_SeriesTest {
@@ -20,6 +22,13 @@ public class InlinePrinter_SeriesTest {
         InlinePrinter p = new InlinePrinter(5, 100, 10);
 
         assertEquals("one,two,three,four", p.print(s1));
+    }
+
+    @Test
+    public void print_Class() {
+        InlinePrinter p = new InlinePrinter(5, 100, 100);
+        assertEquals("int,java.lang.String,java.util.List,long[]",
+                p.print(Series.of(Integer.TYPE, String.class, List.class, long[].class)));
     }
 
     @Test

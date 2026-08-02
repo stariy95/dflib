@@ -63,6 +63,14 @@ public class Average {
         return ofDecimalsNoNullChecks(SeriesCompactor.noNullsSeries(s));
     }
 
+    /**
+     * Calculates the average of a Series of arbitrary Numbers, converting them to BigDecimals.
+     */
+    public static BigDecimal ofNumbers(Series<? extends Number> s) {
+        // "toDecimalSeries" already skips nulls
+        return ofDecimalsNoNullChecks(SeriesCompactor.toDecimalSeries(s));
+    }
+
     static BigDecimal ofDecimalsNoNullChecks(Series<BigDecimal> s) {
         return s.size() == 0 ? BigDecimal.ZERO : decimalAvg.reduce(s);
     }

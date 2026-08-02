@@ -91,7 +91,7 @@ class DataFrameInlineAppendable extends InlineAppendable {
 
                 printTruncate(colTruncator.head.get(j));
                 out.append(":");
-                printTruncate(String.valueOf(p.get(j)));
+                printTruncate(ValuePrinter.print(p.get(j)));
             }
 
             if (colTruncator.truncated) {
@@ -104,7 +104,7 @@ class DataFrameInlineAppendable extends InlineAppendable {
 
                 printTruncate(colTruncator.tail.get(j));
                 out.append(":");
-                printTruncate(String.valueOf(p.get(rightPositions[j])));
+                printTruncate(ValuePrinter.print(p.get(rightPositions[j])));
             }
 
             out.append("}");

@@ -1,16 +1,20 @@
 package org.dflib.jupyter;
 
 import org.dflib.DataFrame;
+import org.dflib.DataFrameInfo;
 import org.dflib.Series;
+import org.dflib.SeriesInfo;
 import org.dflib.echarts.EChartHtml;
 import org.dflib.jjava.jupyter.Extension;
 import org.dflib.jjava.jupyter.kernel.BaseKernel;
 import org.dflib.jjava.jupyter.kernel.display.RenderFunction;
 import org.dflib.jjava.jupyter.kernel.display.Renderer;
 import org.dflib.jjava.jupyter.kernel.display.mime.MIMEType;
+import org.dflib.jupyter.render.DataFrameInfoRenderer;
 import org.dflib.jupyter.render.DataFrameRenderer;
 import org.dflib.jupyter.render.EChartRenderer;
 import org.dflib.jupyter.render.MutableTabularPrinter;
+import org.dflib.jupyter.render.SeriesInfoRenderer;
 import org.dflib.jupyter.render.SeriesRenderer;
 
 import java.util.Objects;
@@ -101,7 +105,7 @@ public class DFLibJupyter implements Extension {
             throw new IllegalStateException("DFLibJupyter was already initialized within the notebook");
         }
 
-        installRenderers(kernel);
+        installRenderers(kernel.getRenderer());
         DFLibJupyter.instance = this;
         kernel.eval(STARTUP_SCRIPT);
     }
@@ -112,13 +116,13 @@ public class DFLibJupyter implements Extension {
         DFLibJupyter.instance = null;
     }
 
-    private void installRenderers(BaseKernel kernel) {
+    void installRenderers(Renderer renderer) {
 
         RenderFunction<EChartHtml> echartHtmlRenderer = new EChartRenderer();
         RenderFunction<DataFrame> dfRenderer = new DataFrameRenderer(printer);
         RenderFunction<Series> seriesRenderer = new SeriesRenderer(printer);
-
-        Renderer renderer = kernel.getRenderer();
+        RenderFunction<SeriesInfo> seriesInfoRenderer = new SeriesInfoRenderer(printer);
+        RenderFunction<DataFrameInfo> dfInfoRenderer = new DataFrameInfoRenderer(printer);
 
         renderer.createRegistration(DataFrame.class)
                 .preferring(MIMEType.TEXT_PLAIN)
@@ -129,6 +133,16 @@ public class DFLibJupyter implements Extension {
                 .preferring(MIMEType.TEXT_PLAIN)
                 .supporting(MIMEType.TEXT_PLAIN)
                 .register(seriesRenderer);
+
+        renderer.createRegistration(SeriesInfo.class)
+                .preferring(MIMEType.TEXT_PLAIN)
+                .supporting(MIMEType.TEXT_PLAIN)
+                .register(seriesInfoRenderer);
+
+        renderer.createRegistration(DataFrameInfo.class)
+                .preferring(MIMEType.TEXT_PLAIN)
+                .supporting(MIMEType.TEXT_PLAIN)
+                .register(dfInfoRenderer);
 
         renderer.createRegistration(EChartHtml.class)
                 .preferring(MIMEType.TEXT_HTML)

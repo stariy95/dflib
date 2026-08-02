@@ -211,6 +211,11 @@ public interface Series<T> extends Iterable<T> {
      */
     Class<?> getInferredType();
 
+    /**
+     * @since 2.0.0
+     */
+    SeriesInfo describe();
+
     int size();
 
     T get(int index);

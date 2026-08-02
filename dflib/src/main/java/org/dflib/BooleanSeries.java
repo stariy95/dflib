@@ -36,6 +36,11 @@ public interface BooleanSeries extends Series<Boolean> {
     }
 
     @Override
+    default SeriesInfo describe() {
+        return new SeriesInfo(Boolean.TYPE, Boolean.FALSE, null, null, null, null);
+    }
+
+    @Override
     default BooleanSeries castAsBool() {
         return this;
     }

@@ -34,6 +34,11 @@ public interface FloatSeries extends Series<Float> {
     }
 
     @Override
+    default SeriesInfo describe() {
+        return new SeriesInfo(Float.TYPE, Boolean.FALSE, null, (double) min(), (double) avg(), (double) max());
+    }
+
+    @Override
     default FloatSeries castAsFloat() {
         return this;
     }

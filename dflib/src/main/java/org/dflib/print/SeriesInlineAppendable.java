@@ -42,7 +42,7 @@ public class SeriesInlineAppendable extends InlineAppendable {
                 comma = true;
             }
 
-            printTruncate(String.valueOf(o));
+            printTruncate(ValuePrinter.print(o));
         }
     }
 }

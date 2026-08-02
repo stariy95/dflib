@@ -2,6 +2,8 @@ package org.dflib.agg;
 
 import org.dflib.Series;
 
+import java.math.BigDecimal;
+
 /**
  * @since 2.0.0
  */
@@ -204,6 +206,13 @@ public class Min {
         }
 
         return min;
+    }
+
+    /**
+     * Calculates the min of a Series of arbitrary Numbers, converting them to BigDecimals.
+     */
+    public static BigDecimal ofDecimals(Series<? extends Number> s) {
+        return ofComparables(SeriesCompactor.toDecimalSeries(s));
     }
 
     public static <T extends Comparable<T>> T ofComparables(Series<? extends T> s) {

@@ -65,7 +65,7 @@ class TabularColumnData {
         }
 
         Builder append(Object val) {
-            vals[pos++] = String.valueOf(val);
+            vals[pos++] = ValuePrinter.print(val);
             return this;
         }
 
