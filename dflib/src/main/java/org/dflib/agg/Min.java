@@ -49,9 +49,9 @@ public class Min {
             return 0f; // is this reasonable?
         }
 
-        float min = vals[1];
+        float min = vals[start];
 
-        for (int i = start; i < len; i++) {
+        for (int i = 1; i < len; i++) {
 
             float in = vals[start + i];
             if (in < min) {

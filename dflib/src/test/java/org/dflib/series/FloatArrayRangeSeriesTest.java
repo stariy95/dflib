@@ -20,4 +20,22 @@ public class FloatArrayRangeSeriesTest {
 
         assertThrows(ArrayIndexOutOfBoundsException.class, () -> s.getFloat(2));
     }
+
+    @Test
+    public void min_Offset() {
+        FloatArrayRangeSeries s = new FloatArrayRangeSeries(new float[]{1.f, 2.1f, 4f, 3.2f}, 2, 2);
+        assertEquals(3.2f, s.min(), 0.001f);
+    }
+
+    @Test
+    public void min_Offset_SingleValue() {
+        FloatArrayRangeSeries s = new FloatArrayRangeSeries(new float[]{1.f, 2.1f, 3.2f, 4f}, 2, 1);
+        assertEquals(3.2f, s.min(), 0.001f);
+    }
+
+    @Test
+    public void max_Offset() {
+        FloatArrayRangeSeries s = new FloatArrayRangeSeries(new float[]{1.f, 4f, 3.2f, 2.1f}, 2, 2);
+        assertEquals(3.2f, s.max(), 0.001f);
+    }
 }
