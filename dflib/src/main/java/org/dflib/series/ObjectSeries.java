@@ -112,11 +112,19 @@ public abstract class ObjectSeries<T> implements Series<T> {
 
     @Override
     public SeriesInfo describe() {
-        return info != null ? info : (info = buildInfo());
+        return info != null ? info : (info = doDescribe());
     }
 
-    protected SeriesInfo buildInfo() {
+    protected SeriesInfo doDescribe() {
 
+        int nullCount = countNulls();
+        Class<?> type = getInferredType();
+        Object[] stats = buildStats(type);
+
+        return new SeriesInfo(type, Boolean.TRUE, nullCount, stats[0], stats[1], stats[2]);
+    }
+
+    private int countNulls() {
         int nullCount = 0;
         int len = size();
 
@@ -126,32 +134,36 @@ public abstract class ObjectSeries<T> implements Series<T> {
             }
         }
 
-        Class<?> type = getInferredType();
+        return nullCount;
+
+    }
+    private Object[] buildStats(Class<?> type) {
+
         Series raw = this;
 
         return switch (type) {
             case Class<?> k when k == Integer.class ->
-                    new SeriesInfo(type, Boolean.TRUE, nullCount, Min.ofInts(raw), Average.ofDoubles(raw), Max.ofInts(raw));
+                    new Object[]{Min.ofInts(raw), Average.ofDoubles(raw), Max.ofInts(raw)};
             case Class<?> k when k == Long.class ->
-                    new SeriesInfo(type, Boolean.TRUE, nullCount, Min.ofLongs(raw), Average.ofDoubles(raw), Max.ofLongs(raw));
+                    new Object[]{Min.ofLongs(raw), Average.ofDoubles(raw), Max.ofLongs(raw)};
             case Class<?> k when k == Double.class ->
-                    new SeriesInfo(type, Boolean.TRUE, nullCount, Min.ofDoubles(raw), Average.ofDoubles(raw), Max.ofDoubles(raw));
+                    new Object[]{Min.ofDoubles(raw), Average.ofDoubles(raw), Max.ofDoubles(raw)};
             case Class<?> k when k == Float.class ->
-                    new SeriesInfo(type, Boolean.TRUE, nullCount, Min.ofFloats(raw), Average.ofDoubles(raw), Max.ofFloats(raw));
+                    new Object[]{Min.ofFloats(raw), Average.ofDoubles(raw), Max.ofFloats(raw)};
             case Class<?> k when BigDecimal.class.isAssignableFrom(k) ->
-                    new SeriesInfo(type, Boolean.TRUE, nullCount, Min.ofComparables(raw), Average.ofDecimals(raw), Max.ofComparables(raw));
+                    new Object[]{Min.ofComparables(raw), Average.ofDecimals(raw), Max.ofComparables(raw)};
             case Class<?> k when BigInteger.class.isAssignableFrom(k) ->
-                    new SeriesInfo(type, Boolean.TRUE, nullCount, Min.ofComparables(raw), Average.ofBigints(raw), Max.ofComparables(raw));
+                    new Object[]{Min.ofComparables(raw), Average.ofBigints(raw), Max.ofComparables(raw)};
             // a catch-all for the remaining Number types
             case Class<?> k when Number.class.isAssignableFrom(k) ->
-                    new SeriesInfo(type, Boolean.TRUE, nullCount, Min.ofDecimals(raw), Average.ofNumbers(raw), Max.ofDecimals(raw));
+                    new Object[]{Min.ofDecimals(raw), Average.ofNumbers(raw), Max.ofDecimals(raw)};
             case Class<?> k when k == LocalDate.class ->
-                    new SeriesInfo(type, Boolean.TRUE, nullCount, Min.ofComparables(raw), Average.ofDates(raw), Max.ofComparables(raw));
+                    new Object[]{Min.ofComparables(raw), Average.ofDates(raw), Max.ofComparables(raw)};
             case Class<?> k when k == LocalDateTime.class ->
-                    new SeriesInfo(type, Boolean.TRUE, nullCount, Min.ofComparables(raw), Average.ofDateTimes(raw), Max.ofComparables(raw));
+                    new Object[]{Min.ofComparables(raw), Average.ofDateTimes(raw), Max.ofComparables(raw)};
             case Class<?> k when k == LocalTime.class ->
-                    new SeriesInfo(type, Boolean.TRUE, nullCount, Min.ofComparables(raw), Average.ofTimes(raw), Max.ofComparables(raw));
-            default -> new SeriesInfo(type, Boolean.TRUE, nullCount, null, null, null);
+                    new Object[]{Min.ofComparables(raw), Average.ofTimes(raw), Max.ofComparables(raw)};
+            default -> new Object[3];
         };
     }
 
