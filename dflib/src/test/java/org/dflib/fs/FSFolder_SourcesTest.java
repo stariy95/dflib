@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.File;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
 import java.util.Map;
@@ -46,9 +47,9 @@ public class FSFolder_SourcesTest {
         assertEquals(5, content.size());
         assertEquals("test1 text", content.get("test1.txt"));
         assertEquals("# test2 header", content.get("test2.md"));
-        assertEquals("subtest1 text", content.get("subtest1/subtest1.txt"));
-        assertEquals("subsubtest2 text", content.get("subtest2/subsubtest2/subsubtest2.txt"));
-        assertEquals("# subsubtest2 header", content.get("subtest2/subsubtest2/subsubtest2.md"));
+        assertEquals("subtest1 text", content.get(buildPath("subtest1", "subtest1.txt")));
+        assertEquals("subsubtest2 text", content.get(buildPath("subtest2", "subsubtest2", "subsubtest2.txt")));
+        assertEquals("# subsubtest2 header", content.get(buildPath("subtest2", "subsubtest2", "subsubtest2.md")));
     }
 
     @ParameterizedTest
@@ -63,6 +64,10 @@ public class FSFolder_SourcesTest {
 
         assertEquals(2, content.size());
         assertEquals("# test2 header", content.get("test2.md"));
-        assertEquals("# subsubtest2 header", content.get("subtest2/subsubtest2/subsubtest2.md"));
+        assertEquals("# subsubtest2 header", content.get(buildPath("subtest2", "subsubtest2", "subsubtest2.md")));
+    }
+
+    public String buildPath(String... components) {
+        return String.join(File.separator, components);
     }
 }

@@ -49,10 +49,11 @@ public class ParquetSaverTest {
         String schema = getSchema(file);
         assertTrue(schema.contains("optional int32 a;"));
 
-        ParquetReader<GenericRecord> reader = getAvroReader(file);
-        assertEquals(1, reader.read().get("a"));
-        assertEquals(2, reader.read().get("a"));
-        assertEquals(3, reader.read().get("a"));
+        try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+            assertEquals(1, reader.read().get("a"));
+            assertEquals(2, reader.read().get("a"));
+            assertEquals(3, reader.read().get("a"));
+        }
     }
 
     @Test
@@ -65,11 +66,11 @@ public class ParquetSaverTest {
         String schema = getSchema(file);
         assertTrue(schema.contains("required int32 a;"));
 
-        ParquetReader<GenericRecord> reader = getAvroReader(file);
-        assertEquals(18, reader.read().get("a"));
-        assertEquals(49, reader.read().get("a"));
-        assertEquals(32, reader.read().get("a"));
-
+        try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+            assertEquals(18, reader.read().get("a"));
+            assertEquals(49, reader.read().get("a"));
+            assertEquals(32, reader.read().get("a"));
+        }
     }
 
     @Test
@@ -83,10 +84,11 @@ public class ParquetSaverTest {
         String schema = getSchema(file);
         assertTrue(schema.contains("optional double a;"));
 
-        ParquetReader<GenericRecord> reader = getAvroReader(file);
-        assertEquals(1.0, reader.read().get("a"));
-        assertEquals(2.0, reader.read().get("a"));
-        assertEquals(3.0, reader.read().get("a"));
+        try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+            assertEquals(1.0, reader.read().get("a"));
+            assertEquals(2.0, reader.read().get("a"));
+            assertEquals(3.0, reader.read().get("a"));
+        }
     }
 
     @Test
@@ -99,10 +101,11 @@ public class ParquetSaverTest {
         String schema = getSchema(file);
         assertTrue(schema.contains("required double a;"));
 
-        ParquetReader<GenericRecord> reader = getAvroReader(file);
-        assertEquals(18.0, reader.read().get("a"));
-        assertEquals(49.0, reader.read().get("a"));
-        assertEquals(32.0, reader.read().get("a"));
+        try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+            assertEquals(18.0, reader.read().get("a"));
+            assertEquals(49.0, reader.read().get("a"));
+            assertEquals(32.0, reader.read().get("a"));
+        }
     }
 
     @Test
@@ -116,10 +119,11 @@ public class ParquetSaverTest {
         String schema = getSchema(file);
         assertTrue(schema.contains("optional int64 a;"));
 
-        ParquetReader<GenericRecord> reader = getAvroReader(file);
-        assertEquals(1L, reader.read().get("a"));
-        assertEquals(2L, reader.read().get("a"));
-        assertEquals(3L, reader.read().get("a"));
+        try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+            assertEquals(1L, reader.read().get("a"));
+            assertEquals(2L, reader.read().get("a"));
+            assertEquals(3L, reader.read().get("a"));
+        }
     }
 
     @Test
@@ -132,10 +136,11 @@ public class ParquetSaverTest {
         String schema = getSchema(file);
         assertTrue(schema.contains("required int64 a;"));
 
-        ParquetReader<GenericRecord> reader = getAvroReader(file);
-        assertEquals(18L, reader.read().get("a"));
-        assertEquals(49L, reader.read().get("a"));
-        assertEquals(32L, reader.read().get("a"));
+        try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+            assertEquals(18L, reader.read().get("a"));
+            assertEquals(49L, reader.read().get("a"));
+            assertEquals(32L, reader.read().get("a"));
+        }
     }
 
     @Test
@@ -149,10 +154,11 @@ public class ParquetSaverTest {
         String schema = getSchema(file);
         assertTrue(schema.contains("optional boolean a;"));
 
-        ParquetReader<GenericRecord> reader = getAvroReader(file);
-        assertEquals(true, reader.read().get("a"));
-        assertEquals(false, reader.read().get("a"));
-        assertEquals(true, reader.read().get("a"));
+        try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+            assertEquals(true, reader.read().get("a"));
+            assertEquals(false, reader.read().get("a"));
+            assertEquals(true, reader.read().get("a"));
+        }
     }
 
     @Test
@@ -166,10 +172,11 @@ public class ParquetSaverTest {
         String schema = getSchema(file);
         assertTrue(schema.contains("optional int32 a (INTEGER(16,true));"));
 
-        ParquetReader<GenericRecord> reader = getAvroReader(file);
-        assertEquals(1, reader.read().get("a"));
-        assertEquals(2, reader.read().get("a"));
-        assertEquals(3, reader.read().get("a"));
+        try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+            assertEquals(1, reader.read().get("a"));
+            assertEquals(2, reader.read().get("a"));
+            assertEquals(3, reader.read().get("a"));
+        }
     }
 
     @Test
@@ -183,10 +190,11 @@ public class ParquetSaverTest {
         String schema = getSchema(file);
         assertTrue(schema.contains("optional int32 a (INTEGER(8,true));"));
 
-        ParquetReader<GenericRecord> reader = getAvroReader(file);
-        assertEquals(1, reader.read().get("a"));
-        assertEquals(2, reader.read().get("a"));
-        assertEquals(3, reader.read().get("a"));
+        try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+            assertEquals(1, reader.read().get("a"));
+            assertEquals(2, reader.read().get("a"));
+            assertEquals(3, reader.read().get("a"));
+        }
     }
 
     @Test
@@ -200,10 +208,11 @@ public class ParquetSaverTest {
         String schema = getSchema(file);
         assertTrue(schema.contains("optional float a;"));
 
-        ParquetReader<GenericRecord> reader = getAvroReader(file);
-        assertEquals(1.0f, reader.read().get("a"));
-        assertEquals(2.0f, reader.read().get("a"));
-        assertEquals(3.0f, reader.read().get("a"));
+        try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+            assertEquals(1.0f, reader.read().get("a"));
+            assertEquals(2.0f, reader.read().get("a"));
+            assertEquals(3.0f, reader.read().get("a"));
+        }
     }
 
     @Test
@@ -217,10 +226,11 @@ public class ParquetSaverTest {
         String schema = getSchema(file);
         assertTrue(schema.contains("optional binary a (STRING);"));
 
-        ParquetReader<GenericRecord> reader = getAvroReader(file);
-        assertEquals("one", reader.read().get("a").toString());
-        assertEquals("two", reader.read().get("a").toString());
-        assertEquals("three", reader.read().get("a").toString());
+        try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+            assertEquals("one", reader.read().get("a").toString());
+            assertEquals("two", reader.read().get("a").toString());
+            assertEquals("three", reader.read().get("a").toString());
+        }
     }
 
     @Test
@@ -237,10 +247,11 @@ public class ParquetSaverTest {
         String schema = getSchema(file);
         assertTrue(schema.contains("optional fixed_len_byte_array(16) a (UUID);"));
 
-        ParquetReader<GenericRecord> reader = getAvroReader(file);
-        assertEquals(uuid1.toString(), reader.read().get("a"));
-        assertEquals(uuid2.toString(), reader.read().get("a"));
-        assertEquals(uuid3.toString(), reader.read().get("a"));
+        try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+            assertEquals(uuid1.toString(), reader.read().get("a"));
+            assertEquals(uuid2.toString(), reader.read().get("a"));
+            assertEquals(uuid3.toString(), reader.read().get("a"));
+        }
     }
 
     public enum EnumValues {
@@ -258,10 +269,11 @@ public class ParquetSaverTest {
         String schema = getSchema(file);
         assertTrue(schema.contains("optional binary a (ENUM);"));
 
-        ParquetReader<GenericRecord> reader = getAvroReader(file);
-        assertEquals(EnumValues.one.toString(), reader.read().get("a").toString());
-        assertEquals(EnumValues.two.toString(), reader.read().get("a").toString());
-        assertEquals(EnumValues.three.toString(), reader.read().get("a").toString());
+        try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+            assertEquals(EnumValues.one.toString(), reader.read().get("a").toString());
+            assertEquals(EnumValues.two.toString(), reader.read().get("a").toString());
+            assertEquals(EnumValues.three.toString(), reader.read().get("a").toString());
+        }
     }
 
     @Nested
@@ -282,10 +294,11 @@ public class ParquetSaverTest {
             String schema = getSchema(file);
             assertTrue(schema.contains("optional binary a (DECIMAL(20,5));"));
 
-            ParquetReader<GenericRecord> reader = getAvroReader(file);
-            assertEquals(bigDec1, reader.read().get("a"));
-            assertEquals(bigDec2, reader.read().get("a"));
-            assertEquals(bigDec3, reader.read().get("a"));
+            try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+                assertEquals(bigDec1, reader.read().get("a"));
+                assertEquals(bigDec2, reader.read().get("a"));
+                assertEquals(bigDec3, reader.read().get("a"));
+            }
         }
 
         @Test
@@ -303,11 +316,12 @@ public class ParquetSaverTest {
             String schema = getSchema(file);
             assertTrue(schema.contains("optional int64 a (DECIMAL(18,3));"));
 
-            ParquetReader<GenericRecord> reader = getAvroReader(file);
-            // Avro reader doesn't support int64 encoding. Validate through Long value
-            assertEquals(1234567890123456L, reader.read().get("a"));
-            assertEquals(9876543210987654L, reader.read().get("a"));
-            assertEquals(1238913737252135L, reader.read().get("a"));
+            try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+                // Avro reader doesn't support int64 encoding. Validate through Long value
+                assertEquals(1234567890123456L, reader.read().get("a"));
+                assertEquals(9876543210987654L, reader.read().get("a"));
+                assertEquals(1238913737252135L, reader.read().get("a"));
+            }
         }
 
         @Test
@@ -325,11 +339,12 @@ public class ParquetSaverTest {
             String schema = getSchema(file);
             assertTrue(schema.contains("optional int32 a (DECIMAL(9,4));"));
 
-            ParquetReader<GenericRecord> reader = getAvroReader(file);
-            // Avro reader doesn't support int32 encoding. Validate through Int value
-            assertEquals(123456789, reader.read().get("a"));
-            assertEquals(987654321, reader.read().get("a"));
-            assertEquals(123891373, reader.read().get("a"));
+            try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+                // Avro reader doesn't support int32 encoding. Validate through Int value
+                assertEquals(123456789, reader.read().get("a"));
+                assertEquals(987654321, reader.read().get("a"));
+                assertEquals(123891373, reader.read().get("a"));
+            }
         }
     }
 
@@ -348,10 +363,11 @@ public class ParquetSaverTest {
         String schema = getSchema(file);
         assertTrue(schema.contains("optional int32 a (DATE);"));
 
-        ParquetReader<GenericRecord> reader = getAvroReader(file);
-        assertEquals(localDate1, reader.read().get("a"));
-        assertEquals(localDate2, reader.read().get("a"));
-        assertEquals(localDate3, reader.read().get("a"));
+        try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+            assertEquals(localDate1, reader.read().get("a"));
+            assertEquals(localDate2, reader.read().get("a"));
+            assertEquals(localDate3, reader.read().get("a"));
+        }
     }
 
     @Nested
@@ -373,10 +389,11 @@ public class ParquetSaverTest {
             String schema = getSchema(file);
             assertTrue(schema.contains("optional int64 a (TIME(MICROS,false));"));
 
-            ParquetReader<GenericRecord> reader = getAvroReader(file);
-            assertEquals(localTime1, reader.read().get("a"));
-            assertEquals(localTime2, reader.read().get("a"));
-            assertEquals(localTime3, reader.read().get("a"));
+            try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+                assertEquals(localTime1, reader.read().get("a"));
+                assertEquals(localTime2, reader.read().get("a"));
+                assertEquals(localTime3, reader.read().get("a"));
+            }
         }
 
         @Test
@@ -390,10 +407,11 @@ public class ParquetSaverTest {
             String schema = getSchema(file);
             assertTrue(schema.contains("optional int32 a (TIME(MILLIS,false));"));
 
-            ParquetReader<GenericRecord> reader = getAvroReaderMillis(file);
-            assertEquals(localTime1, reader.read().get("a"));
-            assertEquals(localTime2, reader.read().get("a"));
-            assertEquals(localTime3, reader.read().get("a"));
+            try (ParquetReader<GenericRecord> reader = getAvroReaderMillis(file)) {
+                assertEquals(localTime1, reader.read().get("a"));
+                assertEquals(localTime2, reader.read().get("a"));
+                assertEquals(localTime3, reader.read().get("a"));
+            }
         }
     }
 
@@ -416,10 +434,11 @@ public class ParquetSaverTest {
             String schema = getSchema(file);
             assertTrue(schema.contains("optional int64 a (TIMESTAMP(MICROS,false));"));
 
-            ParquetReader<GenericRecord> reader = getAvroReader(file);
-            assertEquals(localDateTime1, reader.read().get("a"));
-            assertEquals(localDateTime2, reader.read().get("a"));
-            assertEquals(localDateTime3, reader.read().get("a"));
+            try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+                assertEquals(localDateTime1, reader.read().get("a"));
+                assertEquals(localDateTime2, reader.read().get("a"));
+                assertEquals(localDateTime3, reader.read().get("a"));
+            }
         }
 
         @Test
@@ -434,10 +453,11 @@ public class ParquetSaverTest {
             String schema = getSchema(file);
             assertTrue(schema.contains("optional int64 a (TIMESTAMP(MILLIS,false));"));
 
-            ParquetReader<GenericRecord> reader = getAvroReaderMillis(file);
-            assertEquals(localDateTime1, reader.read().get("a"));
-            assertEquals(localDateTime2, reader.read().get("a"));
-            assertEquals(localDateTime3, reader.read().get("a"));
+            try (ParquetReader<GenericRecord> reader = getAvroReaderMillis(file)) {
+                assertEquals(localDateTime1, reader.read().get("a"));
+                assertEquals(localDateTime2, reader.read().get("a"));
+                assertEquals(localDateTime3, reader.read().get("a"));
+            }
         }
     }
 
@@ -463,10 +483,11 @@ public class ParquetSaverTest {
             String schema = getSchema(file);
             assertTrue(schema.contains("optional int64 a (TIMESTAMP(MICROS,true));"));
 
-            ParquetReader<GenericRecord> reader = getAvroReader(file);
-            assertEquals(ofEpochSecond(localDateTime1.toEpochSecond(ofHours(-1)), 987654000), reader.read().get("a"));
-            assertEquals(ofEpochSecond(localDateTime2.toEpochSecond(ofHours(-2)), 123456000), reader.read().get("a"));
-            assertEquals(ofEpochSecond(localDateTime3.toEpochSecond(ofHours(-3)), 456789000), reader.read().get("a"));
+            try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+                assertEquals(ofEpochSecond(localDateTime1.toEpochSecond(ofHours(-1)), 987654000), reader.read().get("a"));
+                assertEquals(ofEpochSecond(localDateTime2.toEpochSecond(ofHours(-2)), 123456000), reader.read().get("a"));
+                assertEquals(ofEpochSecond(localDateTime3.toEpochSecond(ofHours(-3)), 456789000), reader.read().get("a"));
+            }
         }
 
         @Test
@@ -480,10 +501,11 @@ public class ParquetSaverTest {
             String schema = getSchema(file);
             assertTrue(schema.contains("optional int64 a (TIMESTAMP(MILLIS,true));"));
 
-            ParquetReader<GenericRecord> reader = getAvroReaderMillis(file);
-            assertEquals(ofEpochSecond(localDateTime1.toEpochSecond(ofHours(-1)), 987000000), reader.read().get("a"));
-            assertEquals(ofEpochSecond(localDateTime2.toEpochSecond(ofHours(-2)), 123000000), reader.read().get("a"));
-            assertEquals(ofEpochSecond(localDateTime3.toEpochSecond(ofHours(-3)), 456000000), reader.read().get("a"));
+            try (ParquetReader<GenericRecord> reader = getAvroReaderMillis(file)) {
+                assertEquals(ofEpochSecond(localDateTime1.toEpochSecond(ofHours(-1)), 987000000), reader.read().get("a"));
+                assertEquals(ofEpochSecond(localDateTime2.toEpochSecond(ofHours(-2)), 123000000), reader.read().get("a"));
+                assertEquals(ofEpochSecond(localDateTime3.toEpochSecond(ofHours(-3)), 456000000), reader.read().get("a"));
+            }
         }
     }
 
@@ -507,22 +529,23 @@ public class ParquetSaverTest {
         assertTrue(schema.contains("optional boolean e;"));
         assertTrue(schema.contains("optional binary f (STRING);"));
 
-        ParquetReader<GenericRecord> reader = getAvroReader(file);
-        GenericRecord row1 = reader.read();
-        assertEquals(1, row1.get("a"));
-        assertEquals(2L, row1.get("b"));
-        assertEquals(3.0, row1.get("c"));
-        assertEquals(4.0f, row1.get("d"));
-        assertEquals(true, row1.get("e"));
-        assertEquals("foo", row1.get("f").toString());
+        try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+            GenericRecord row1 = reader.read();
+            assertEquals(1, row1.get("a"));
+            assertEquals(2L, row1.get("b"));
+            assertEquals(3.0, row1.get("c"));
+            assertEquals(4.0f, row1.get("d"));
+            assertEquals(true, row1.get("e"));
+            assertEquals("foo", row1.get("f").toString());
 
-        GenericRecord row2 = reader.read();
-        assertEquals(11, row2.get("a"));
-        assertEquals(12L, row2.get("b"));
-        assertEquals(13.0, row2.get("c"));
-        assertEquals(14.0f, row2.get("d"));
-        assertEquals(false, row2.get("e"));
-        assertEquals("bar", row2.get("f").toString());
+            GenericRecord row2 = reader.read();
+            assertEquals(11, row2.get("a"));
+            assertEquals(12L, row2.get("b"));
+            assertEquals(13.0, row2.get("c"));
+            assertEquals(14.0f, row2.get("d"));
+            assertEquals(false, row2.get("e"));
+            assertEquals("bar", row2.get("f").toString());
+        }
     }
 
     @Test
@@ -545,22 +568,23 @@ public class ParquetSaverTest {
         assertTrue(schema.contains("optional boolean e;"));
         assertTrue(schema.contains("optional binary f (STRING);"));
 
-        ParquetReader<GenericRecord> reader = getAvroReader(file);
-        GenericRecord row1 = reader.read();
-        assertEquals(1, row1.get("a"));
-        assertEquals(2L, row1.get("b"));
-        assertEquals(3.0, row1.get("c"));
-        assertEquals(4.0f, row1.get("d"));
-        assertEquals(true, row1.get("e"));
-        assertEquals("foo", row1.get("f").toString());
+        try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
+            GenericRecord row1 = reader.read();
+            assertEquals(1, row1.get("a"));
+            assertEquals(2L, row1.get("b"));
+            assertEquals(3.0, row1.get("c"));
+            assertEquals(4.0f, row1.get("d"));
+            assertEquals(true, row1.get("e"));
+            assertEquals("foo", row1.get("f").toString());
 
-        GenericRecord row2 = reader.read();
-        assertEquals(null, row2.get("a"));
-        assertEquals(null, row2.get("b"));
-        assertEquals(null, row2.get("c"));
-        assertEquals(null, row2.get("d"));
-        assertEquals(null, row2.get("e"));
-        assertEquals(null, row2.get("f"));
+            GenericRecord row2 = reader.read();
+            assertEquals(null, row2.get("a"));
+            assertEquals(null, row2.get("b"));
+            assertEquals(null, row2.get("c"));
+            assertEquals(null, row2.get("d"));
+            assertEquals(null, row2.get("e"));
+            assertEquals(null, row2.get("f"));
+        }
     }
 
     private ParquetReader<GenericRecord> getAvroReader(Path file) throws IOException {

@@ -156,12 +156,11 @@ public class FSFolder {
         // TODO: configurable symlink option
         // The defaults are to allow symlinks for files but not for directories
 
-        try {
-            return Files.walk(folderPath, includeSubfolders ? Integer.MAX_VALUE : 1)
+        try(Stream<Path> pathStream = Files.walk(folderPath, includeSubfolders ? Integer.MAX_VALUE : 1)) {
+            return pathStream
                     .filter(combinedFilter(includeFolders))
                     // ensure stable, predictable processing order
                     .sorted()
-
                     .collect(Collectors.toList());
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -171,7 +170,7 @@ public class FSFolder {
     private Predicate<Path> combinedFilter(boolean includeFolders) {
         Predicate<Path> pathTypeFilter = includeFolders ? p -> true : Files::isRegularFile;
         return Stream.of(filter, extFilter, notHiddenFilter)
-                .filter(f -> f != null)
+                .filter(Objects::nonNull)
                 .reduce(pathTypeFilter, Predicate::and);
     }
 

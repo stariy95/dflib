@@ -1,0 +1,3 @@
+# Resource files are byte-exact fixtures used in tests.
+**/src/test/resources/** -text
+**/src/main/resources/** -text
