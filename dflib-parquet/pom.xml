@@ -216,6 +216,26 @@
             		<groupId>org.bouncycastle</groupId>
             		<artifactId>bcprov-jdk18on</artifactId>
             	</exclusion>
+            	<exclusion>
+            		<groupId>com.google.code.gson</groupId>
+            		<artifactId>gson</artifactId>
+            	</exclusion>
+            	<exclusion>
+            		<groupId>org.codehaus.jettison</groupId>
+            		<artifactId>jettison</artifactId>
+            	</exclusion>
+            	<exclusion>
+            		<groupId>io.dropwizard.metrics</groupId>
+            		<artifactId>metrics-core</artifactId>
+            	</exclusion>
+            	<exclusion>
+            		<groupId>com.google.re2j</groupId>
+            		<artifactId>re2j</artifactId>
+            	</exclusion>
+            	<exclusion>
+            		<groupId>jakarta.activation</groupId>
+            		<artifactId>jakarta.activation-api</artifactId>
+            	</exclusion>
             </exclusions>
         </dependency>        
         <dependency>
