@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 public class FloatSeriesAsserts {
 
-    private float[] data;
+    private final float[] data;
 
     public FloatSeriesAsserts(FloatSeries series) {
         assertNotNull(series, "Series is null");

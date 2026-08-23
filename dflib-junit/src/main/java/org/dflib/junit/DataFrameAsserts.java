@@ -11,23 +11,19 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class DataFrameAsserts {
 
-    private String[] expectedColumns;
-    private DataFrame df;
+    private final String[] expectedColumns;
+    private final DataFrame df;
 
     public DataFrameAsserts(DataFrame df, Index expectedColumns) {
         this(df, expectedColumns.toArray());
     }
 
     public DataFrameAsserts(DataFrame df, List<String> expectedColumns) {
-        this(df, expectedColumns.toArray(new String[expectedColumns.size()]));
+        this(df, expectedColumns.toArray(new String[0]));
     }
 
     public DataFrameAsserts(DataFrame df, String... expectedColumns) {
@@ -46,60 +42,60 @@ public class DataFrameAsserts {
 
     public DataFrameAsserts expectIntColumns(int... positions) {
 
-        for (int i = 0; i < positions.length; i++) {
-            assertTrue(df.getColumn(positions[i]).unsafeCastAs(Integer.class) instanceof IntSeries);
+        for (int position : positions) {
+            assertInstanceOf(IntSeries.class, df.getColumn(position).unsafeCastAs(Integer.class));
         }
         return this;
     }
 
     public DataFrameAsserts expectIntColumns(String... labels) {
-        for (int i = 0; i < labels.length; i++) {
-            assertTrue(df.getColumn(labels[i]).unsafeCastAs(Integer.class) instanceof IntSeries);
+        for (String label : labels) {
+            assertInstanceOf(IntSeries.class, df.getColumn(label).unsafeCastAs(Integer.class));
         }
         return this;
     }
 
     public DataFrameAsserts expectLongColumns(int... positions) {
 
-        for (int i = 0; i < positions.length; i++) {
-            assertTrue(df.getColumn(positions[i]).unsafeCastAs(Long.class) instanceof LongSeries);
+        for (int position : positions) {
+            assertInstanceOf(LongSeries.class, df.getColumn(position).unsafeCastAs(Long.class));
         }
         return this;
     }
 
     public DataFrameAsserts expectLongColumns(String... labels) {
-        for (int i = 0; i < labels.length; i++) {
-            assertTrue(df.getColumn(labels[i]).unsafeCastAs(Long.class) instanceof LongSeries);
+        for (String label : labels) {
+            assertInstanceOf(LongSeries.class, df.getColumn(label).unsafeCastAs(Long.class));
         }
         return this;
     }
 
     public DataFrameAsserts expectDoubleColumns(int... positions) {
 
-        for (int i = 0; i < positions.length; i++) {
-            assertTrue(df.getColumn(positions[i]).unsafeCastAs(Double.class) instanceof DoubleSeries);
+        for (int position : positions) {
+            assertInstanceOf(DoubleSeries.class, df.getColumn(position).unsafeCastAs(Double.class));
         }
         return this;
     }
 
     public DataFrameAsserts expectDoubleColumns(String... labels) {
-        for (int i = 0; i < labels.length; i++) {
-            assertTrue(df.getColumn(labels[i]).unsafeCastAs(Double.class) instanceof DoubleSeries);
+        for (String label : labels) {
+            assertInstanceOf(DoubleSeries.class, df.getColumn(label).unsafeCastAs(Double.class));
         }
         return this;
     }
 
     public DataFrameAsserts expectBooleanColumns(int... positions) {
 
-        for (int i = 0; i < positions.length; i++) {
-            assertTrue(df.getColumn(positions[i]).unsafeCastAs(Boolean.class) instanceof BooleanSeries);
+        for (int position : positions) {
+            assertInstanceOf(BooleanSeries.class, df.getColumn(position).unsafeCastAs(Boolean.class));
         }
         return this;
     }
 
     public DataFrameAsserts expectBooleanColumns(String... labels) {
-        for (int i = 0; i < labels.length; i++) {
-            assertTrue(df.getColumn(labels[i]).unsafeCastAs(Boolean.class) instanceof BooleanSeries);
+        for (String label : labels) {
+            assertInstanceOf(BooleanSeries.class, df.getColumn(label).unsafeCastAs(Boolean.class));
         }
         return this;
     }
@@ -122,7 +118,7 @@ public class DataFrameAsserts {
         // element array with null... need to fix that
         Object[] expectedNormal = expectedValues != null ? expectedValues : new Object[]{null};
 
-        assertEquals(expectedNormal.length, expectedColumns.length, () -> "Width mismatch between the expected and actual rows");
+        assertEquals(expectedNormal.length, expectedColumns.length, "Width mismatch between the expected and actual rows");
 
         for (int i = 0; i < expectedColumns.length; i++) {
 
@@ -143,7 +139,6 @@ public class DataFrameAsserts {
         return this;
     }
 
-    @SafeVarargs
     public final DataFrameAsserts assertRow(int pos, Consumer<?>... valueAsserts) {
         Objects.requireNonNull(valueAsserts);
 

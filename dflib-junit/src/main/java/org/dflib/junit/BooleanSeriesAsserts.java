@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class BooleanSeriesAsserts {
 
-    private boolean[] data;
+    private final boolean[] data;
 
     public BooleanSeriesAsserts(BooleanSeries series) {
         assertNotNull(series, "Series is null");

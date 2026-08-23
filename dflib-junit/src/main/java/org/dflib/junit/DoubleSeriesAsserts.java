@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class DoubleSeriesAsserts {
 
-    private double[] data;
+    private final double[] data;
 
     public DoubleSeriesAsserts(DoubleSeries series) {
         assertNotNull(series, "Series is null");

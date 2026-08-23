@@ -13,7 +13,7 @@ public class IndexAsserts {
     }
 
     public static void expect(Index index, List<String> expectedLabels) {
-        expect(index, expectedLabels.toArray(new String[expectedLabels.size()]));
+        expect(index, expectedLabels.toArray(new String[0]));
     }
 
     public static void expect(Index index, String... expectedLabels) {
