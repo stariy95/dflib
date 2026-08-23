@@ -3,11 +3,11 @@ package org.dflib.parquet;
 import org.apache.parquet.io.api.Binary;
 import org.dflib.DataFrame;
 import org.dflib.junit.DataFrameAsserts;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -156,10 +156,11 @@ public class LoadLogicalTypesTest {
     }
 
     @Test
-    @Disabled("Why does it succeed with negative numbers?") // TODO
     public void intUnsigned() {
 
-        record R(byte ubt, short ush, int ui, long ul) {
+        // the record holds logical (unsigned) values. They are converted to the physical Parquet representation
+        // by the writer below
+        record R(short ubt, int ush, long ui, BigInteger ul) {
         }
 
         Path p = TestWriter.of(R.class, outBase)
@@ -182,24 +183,86 @@ public class LoadLogicalTypesTest {
                     c.endField("ush", 1);
 
                     c.startField("ui", 2);
-                    c.addInteger(r.ui());
+                    c.addInteger((int) r.ui());
                     c.endField("ui", 2);
 
                     c.startField("ul", 3);
-                    c.addLong(r.ul());
+                    c.addLong(r.ul().longValue());
                     c.endField("ul", 3);
 
                     c.endMessage();
                 })
-                .write(new R((byte) 101, (short) 300, 1000, 10_001L),
-                        new R((byte) -101, (short) -300, -1000, -10_001L));
+                // all values are above the max of the signed type of the same width
+                .write(
+                        new R((short) 200, 40_000, 3_000_000_000L, new BigInteger("10000000000000000000")),
+                        new R((short) 255, 65_535, 4_294_967_295L, new BigInteger("18446744073709551615")));
 
         DataFrame df = Parquet.load(p);
 
         new DataFrameAsserts(df, "ubt", "ush", "ui", "ul")
                 .expectHeight(2)
-                .expectRow(0, (byte) 101, (short) 300, 1000, 10_001L)
-                .expectRow(1, (byte) -101, (short) -300, -1000, -10_001L);
+                .expectRow(0, (short) 200, 40_000, 3_000_000_000L, new BigInteger("10000000000000000000"))
+                .expectRow(1, (short) 255, 65_535, 4_294_967_295L, new BigInteger("18446744073709551615"));
+    }
+
+    @Test
+    public void intUnsignedWithNulls() {
+
+        record R(Short ubt, Integer ush, Long ui, BigInteger ul) {
+        }
+
+        BigInteger ulMax = new BigInteger("18446744073709551615");
+
+        Path p = TestWriter.of(R.class, outBase)
+                .schema("""
+                        message test_schema {
+                           optional int32 ubt (INTEGER(8,false));
+                           optional int32 ush (INTEGER(16,false));
+                           optional int32 ui (INTEGER(32,false));
+                           optional int64 ul (INTEGER(64,false));
+                        }""")
+                .writer((c, r) -> {
+                    c.startMessage();
+
+                    if (r.ubt() != null) {
+                        c.startField("ubt", 0);
+                        c.addInteger(r.ubt());
+                        c.endField("ubt", 0);
+                    }
+
+                    if (r.ush() != null) {
+                        c.startField("ush", 1);
+                        c.addInteger(r.ush());
+                        c.endField("ush", 1);
+                    }
+
+                    if (r.ui() != null) {
+                        c.startField("ui", 2);
+                        c.addInteger((int) (long) r.ui());
+                        c.endField("ui", 2);
+                    }
+
+                    if (r.ul() != null) {
+                        c.startField("ul", 3);
+                        c.addLong(r.ul().longValue());
+                        c.endField("ul", 3);
+                    }
+
+                    c.endMessage();
+                })
+                // repeating values, so that the columns are dictionary-encoded
+                .write(
+                        new R((short) 255, 65_535, 4_294_967_295L, ulMax),
+                        new R(null, null, null, null),
+                        new R((short) 255, 65_535, 4_294_967_295L, ulMax));
+
+        DataFrame df = Parquet.load(p);
+
+        new DataFrameAsserts(df, "ubt", "ush", "ui", "ul")
+                .expectHeight(3)
+                .expectRow(0, (short) 255, 65_535, 4_294_967_295L, ulMax)
+                .expectRow(1, null, null, null, null)
+                .expectRow(2, (short) 255, 65_535, 4_294_967_295L, ulMax);
     }
 
     @Test

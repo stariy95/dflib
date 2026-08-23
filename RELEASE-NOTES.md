@@ -27,6 +27,7 @@
 * #636 Upgrade test stack to Junit 6
 * #637 Upgrade to Parquet 1.18.0
 * #638 Upgrade jackson to 2.22.1
+* #639 Parquet: unsigned int columns are read as signed, silently corrupting values
 
 ## Release 2.0.0-M6
 

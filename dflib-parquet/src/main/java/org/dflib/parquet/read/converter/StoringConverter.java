@@ -76,17 +76,9 @@ public interface StoringConverter {
             }
 
             if (lt instanceof LogicalTypeAnnotation.IntLogicalTypeAnnotation intType) {
-                return switch (intType.getBitWidth()) {
-                    // TODO: we don't have primitive byte and short Series.. The data is passed as ints anyways,
-                    //  so should we produce IntSeries for those? ByteSeries actually sounds like a good addition to DFLib
-                    case 8 -> ByteConverter.of(accum, accumCapacity, allowsNulls);
-                    case 16 -> ShortConverter.of(accum, accumCapacity, allowsNulls);
-
-                    case 32 -> IntConverter.of(accum, accumCapacity, dictionarySupport, allowsNulls);
-                    case 64 -> LongConverter.of(accum, accumCapacity, dictionarySupport, allowsNulls);
-
-                    default -> throw new IllegalArgumentException("Invalid bit width for an int type: " + colSchema);
-                };
+                return intType.isSigned()
+                        ? signedIntConverter(colSchema, intType, accum, accumCapacity, dictionarySupport, allowsNulls)
+                        : unsignedIntConverter(colSchema, intType, accum, accumCapacity, dictionarySupport, allowsNulls);
             }
 
             if (lt.equals(LogicalTypeAnnotation.uuidType())) {
@@ -147,6 +139,50 @@ public interface StoringConverter {
             case BOOLEAN -> BoolConverter.of(accum, accumCapacity, allowsNulls);
             case BINARY, FIXED_LEN_BYTE_ARRAY -> BytesConverter.of(accum, accumCapacity, allowsNulls);
             case INT96 -> throw new RuntimeException("INT96 deserialization is deprecated and is not supported");
+        };
+    }
+
+    private static StoringConverter signedIntConverter(
+            PrimitiveType colSchema,
+            LogicalTypeAnnotation.IntLogicalTypeAnnotation intType,
+            boolean accum,
+            int accumCapacity,
+            boolean dictionarySupport,
+            boolean allowsNulls) {
+
+        return switch (intType.getBitWidth()) {
+            // TODO: we don't have primitive byte and short Series.. The data is passed as ints anyways,
+            //  so should we produce IntSeries for those? ByteSeries actually sounds like a good addition to DFLib
+            case 8 -> ByteConverter.of(accum, accumCapacity, allowsNulls);
+            case 16 -> ShortConverter.of(accum, accumCapacity, allowsNulls);
+
+            case 32 -> IntConverter.of(accum, accumCapacity, dictionarySupport, allowsNulls);
+            case 64 -> LongConverter.of(accum, accumCapacity, dictionarySupport, allowsNulls);
+
+            default -> throw new IllegalArgumentException("Invalid bit width for an int type: " + colSchema);
+        };
+    }
+
+    /**
+     * Unsigned ints do not fit in the Java primitive of the same width, so each is read as the next larger type.
+     * 64-bit unsigned ints have no primitive counterpart at all, and are read as BigInteger.
+     */
+    private static StoringConverter unsignedIntConverter(
+            PrimitiveType colSchema,
+            LogicalTypeAnnotation.IntLogicalTypeAnnotation intType,
+            boolean accum,
+            int accumCapacity,
+            boolean dictionarySupport,
+            boolean allowsNulls) {
+
+        return switch (intType.getBitWidth()) {
+            case 8 -> UnsignedByteConverter.of(accum, accumCapacity, allowsNulls);
+            case 16 -> UnsignedShortConverter.of(accum, accumCapacity, allowsNulls);
+
+            case 32 -> UnsignedIntConverter.of(accum, accumCapacity, dictionarySupport, allowsNulls);
+            case 64 -> UnsignedLongConverter.of(accum, accumCapacity, dictionarySupport, allowsNulls);
+
+            default -> throw new IllegalArgumentException("Invalid bit width for an int type: " + colSchema);
         };
     }
 
