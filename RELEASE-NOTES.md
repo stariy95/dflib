@@ -25,6 +25,7 @@
 * #634 DataFrame.describe(), Series.describe()
 * #635 FloatSeries.min() returns an incorrect value or throws
 * #636 Upgrade test stack to Junit 6
+* #637 Upgrade to Parquet 1.18.0
 
 ## Release 2.0.0-M6
 

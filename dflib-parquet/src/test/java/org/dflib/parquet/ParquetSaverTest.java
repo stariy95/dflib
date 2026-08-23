@@ -317,10 +317,9 @@ public class ParquetSaverTest {
             assertTrue(schema.contains("optional int64 a (DECIMAL(18,3));"));
 
             try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
-                // Avro reader doesn't support int64 encoding. Validate through Long value
-                assertEquals(1234567890123456L, reader.read().get("a"));
-                assertEquals(9876543210987654L, reader.read().get("a"));
-                assertEquals(1238913737252135L, reader.read().get("a"));
+                assertEquals(bigDec1, reader.read().get("a"));
+                assertEquals(bigDec2, reader.read().get("a"));
+                assertEquals(bigDec3, reader.read().get("a"));
             }
         }
 
@@ -340,10 +339,9 @@ public class ParquetSaverTest {
             assertTrue(schema.contains("optional int32 a (DECIMAL(9,4));"));
 
             try (ParquetReader<GenericRecord> reader = getAvroReader(file)) {
-                // Avro reader doesn't support int32 encoding. Validate through Int value
-                assertEquals(123456789, reader.read().get("a"));
-                assertEquals(987654321, reader.read().get("a"));
-                assertEquals(123891373, reader.read().get("a"));
+                assertEquals(bigDec1, reader.read().get("a"));
+                assertEquals(bigDec2, reader.read().get("a"));
+                assertEquals(bigDec3, reader.read().get("a"));
             }
         }
     }

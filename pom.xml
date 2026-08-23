@@ -63,7 +63,7 @@
         <commons.compress.version>1.28.0</commons.compress.version>
         <commons.lang3.version>3.19.0</commons.lang3.version>
         <mustache.version>0.9.10</mustache.version>
-        <parquet.version>1.15.2</parquet.version>
+        <parquet.version>1.18.0</parquet.version>
         <hadoop.version>3.4.2</hadoop.version>
         <json.smart.version>2.6.0</json.smart.version>
 
