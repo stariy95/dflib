@@ -115,15 +115,13 @@ public class LoadLogicalTypesTest {
         record R(byte bt, short sh, int i, long l) {
         }
 
-        // TODO: per https://parquet.apache.org/docs/file-format/types/logicaltypes/ , this notation is deprecated.
-        //  INT_8 -> INT(8, true). The new notation is not supported as of Parquet 1.15.2
         Path p = TestWriter.of(R.class, outBase)
                 .schema("""
                         message test_schema {
-                           required int32 bt (INT_8);
-                           required int32 sh (INT_16);
-                           required int32 i (INT_32);
-                           required int64 l (INT_64);
+                           required int32 bt (INTEGER(8,true));
+                           required int32 sh (INTEGER(16,true));
+                           required int32 i (INTEGER(32,true));
+                           required int64 l (INTEGER(64,true));
                         }""")
                 .writer((c, r) -> {
                     c.startMessage();
@@ -164,15 +162,13 @@ public class LoadLogicalTypesTest {
         record R(byte ubt, short ush, int ui, long ul) {
         }
 
-        // TODO: per https://parquet.apache.org/docs/file-format/types/logicaltypes/ , this notation is deprecated.
-        //  UINT_8 -> INT(8, false). The new notation is not supported as of Parquet 1.15.2
         Path p = TestWriter.of(R.class, outBase)
                 .schema("""
                         message test_schema {
-                           required int32 ubt (UINT_8);
-                           required int32 ush (UINT_16);
-                           required int32 ui (UINT_32);
-                           required int64 ul (UINT_64);
+                           required int32 ubt (INTEGER(8,false));
+                           required int32 ush (INTEGER(16,false));
+                           required int32 ui (INTEGER(32,false));
+                           required int64 ul (INTEGER(64,false));
                         }""")
                 .writer((c, r) -> {
                     c.startMessage();
