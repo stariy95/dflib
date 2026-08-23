@@ -3,7 +3,7 @@ package org.dflib.avro;
 import org.dflib.DataFrame;
 import org.dflib.ByteSource;
 import org.dflib.ByteSources;
-import org.dflib.junit5.DataFrameAsserts;
+import org.dflib.junit.DataFrameAsserts;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;

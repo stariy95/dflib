@@ -19,7 +19,7 @@
         <module>dflib-jdbc</module>
         <module>dflib-json</module>
         <module>dflib-parquet</module>
-        <module>dflib-junit5</module>
+        <module>dflib-junit</module>
         <module>dflib-jupyter</module>
         <module>dflib-benchmark</module>
         <module>dflib-bom</module>
@@ -51,10 +51,9 @@
         <slf4j.version>2.0.16</slf4j.version>
         <log4j.version>2.23.1</log4j.version>
 
-        <!-- TODO: Switch to release version of Bootique once 4.0-M4 is out officially -->
-        <bootique.version>4.0-SNAPSHOT</bootique.version>
-        <testcontainers.version>2.0.3</testcontainers.version>
-        <junit5.version>5.11.3</junit5.version>
+        <bootique.version>4.0-M5</bootique.version>
+        <testcontainers.version>2.0.5</testcontainers.version>
+        <junit.version>6.0.3</junit.version>
         <jsonpath.version>2.9.0</jsonpath.version>
         <avro.version>1.12.1</avro.version>
         <jackson.version>2.21.1</jackson.version>
@@ -115,12 +114,12 @@
             <dependency>
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter-engine</artifactId>
-                <version>${junit5.version}</version>
+                <version>${junit.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter-params</artifactId>
-                <version>${junit5.version}</version>
+                <version>${junit.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.commons</groupId>

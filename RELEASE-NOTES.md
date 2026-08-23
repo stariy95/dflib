@@ -24,6 +24,7 @@
 * #633 Negative colsTail() picks incorrect columns
 * #634 DataFrame.describe(), Series.describe()
 * #635 FloatSeries.min() returns an incorrect value or throws
+* #636 Upgrade test stack to Junit 6
 
 ## Release 2.0.0-M6
 

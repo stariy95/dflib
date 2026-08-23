@@ -5,7 +5,7 @@ import org.dflib.csv.parser.format.CsvColumnMapping;
 import org.dflib.csv.parser.format.CsvColumnType;
 import org.dflib.csv.parser.format.CsvFormat;
 import org.dflib.csv.parser.format.CsvParserConfig;
-import org.dflib.junit5.DataFrameAsserts;
+import org.dflib.junit.DataFrameAsserts;
 import org.junit.jupiter.api.Test;
 
 import java.io.StringReader;

@@ -5,7 +5,7 @@ import org.dflib.Extractor;
 import org.dflib.jdbc.Jdbc;
 import org.dflib.jdbc.connector.loader.JdbcExtractorFactory;
 import org.dflib.jdbc.unit.BaseDbTest;
-import org.dflib.junit5.DataFrameAsserts;
+import org.dflib.junit.DataFrameAsserts;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

@@ -2,7 +2,7 @@ package org.dflib.json;
 
 import org.dflib.DataFrame;
 import org.dflib.ByteSource;
-import org.dflib.junit5.DataFrameAsserts;
+import org.dflib.junit.DataFrameAsserts;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;

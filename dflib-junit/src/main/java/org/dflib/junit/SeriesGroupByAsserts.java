@@ -1,4 +1,4 @@
-package org.dflib.junit5;
+package org.dflib.junit;
 
 import org.dflib.SeriesGroupBy;
 

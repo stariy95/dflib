@@ -95,3 +95,21 @@ When saving to `.avro`, we stopped using the following
 DFLib-specific logical types: `dflib-bytes`, `dflib-localdate`, `dflib-localtime`, `dflib-localdatetime`, `dflib-bigdecimal`,
 replacing them with proper types from the Avro specification. DFLib 2 will be able to read `.avro` files created in
 DFLib 1 (so it is backwards compatible), but DFLib 1 may not be always able to properly convert the types produced by v2.
+
+### [dflib #636](https://github.com/dflib/dflib/issues/636)
+The `dflib-junit5` module was renamed to `dflib-junit`, and its Java package changed from `org.dflib.junit5` to
+`org.dflib.junit`. The name no longer mentions a specific JUnit version, as the module now works with JUnit 6 (and
+remains compatible with JUnit 5). You will need to update your test dependency:
+
+```xml
+<dependency>
+    <groupId>org.dflib</groupId>
+    <artifactId>dflib-junit</artifactId>
+    <scope>test</scope>
+</dependency>
+```
+
+and change the imports of the assert classes from `org.dflib.junit5.*` to `org.dflib.junit.*`. As a temporary
+convenience, the two most commonly used classes - `DataFrameAsserts` and `SeriesAsserts` - are still available in the
+old `org.dflib.junit5` package as deprecated subclasses of their new counterparts, so your existing tests will keep
+compiling. They will be removed in a future release.

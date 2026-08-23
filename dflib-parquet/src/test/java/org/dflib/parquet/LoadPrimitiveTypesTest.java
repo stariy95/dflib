@@ -2,7 +2,7 @@ package org.dflib.parquet;
 
 import org.apache.parquet.io.api.Binary;
 import org.dflib.DataFrame;
-import org.dflib.junit5.DataFrameAsserts;
+import org.dflib.junit.DataFrameAsserts;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

@@ -5,7 +5,7 @@ import org.dflib.ByteSource;
 import org.dflib.ByteSources;
 import org.dflib.DataFrame;
 import org.dflib.ValueMapper;
-import org.dflib.junit5.DataFrameAsserts;
+import org.dflib.junit.DataFrameAsserts;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;

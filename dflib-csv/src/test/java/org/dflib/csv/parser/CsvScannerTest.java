@@ -9,7 +9,7 @@ import org.dflib.csv.parser.format.CsvParserConfig;
 import org.dflib.csv.parser.format.Escape;
 import org.dflib.csv.parser.format.LineBreak;
 import org.dflib.csv.parser.format.Quote;
-import org.dflib.junit5.DataFrameAsserts;
+import org.dflib.junit.DataFrameAsserts;
 import org.junit.jupiter.api.Test;
 
 import java.io.StringReader;

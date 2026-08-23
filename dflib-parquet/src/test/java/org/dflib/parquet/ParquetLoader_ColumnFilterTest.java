@@ -1,7 +1,7 @@
 package org.dflib.parquet;
 
 import org.dflib.DataFrame;
-import org.dflib.junit5.DataFrameAsserts;
+import org.dflib.junit.DataFrameAsserts;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 

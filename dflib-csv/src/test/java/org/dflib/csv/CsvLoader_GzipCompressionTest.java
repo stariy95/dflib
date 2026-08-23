@@ -2,7 +2,7 @@ package org.dflib.csv;
 
 import org.dflib.DataFrame;
 import org.dflib.codec.Codec;
-import org.dflib.junit5.DataFrameAsserts;
+import org.dflib.junit.DataFrameAsserts;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;

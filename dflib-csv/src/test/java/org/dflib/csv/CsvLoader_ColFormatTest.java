@@ -4,7 +4,7 @@ import org.dflib.DataFrame;
 import org.dflib.csv.parser.format.CsvFormat;
 import org.dflib.csv.parser.format.Quote;
 import org.dflib.csv.parser.format.Trim;
-import org.dflib.junit5.DataFrameAsserts;
+import org.dflib.junit.DataFrameAsserts;
 import org.junit.jupiter.api.Test;
 
 import java.io.StringReader;

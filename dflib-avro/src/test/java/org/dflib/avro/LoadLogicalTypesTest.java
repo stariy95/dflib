@@ -2,7 +2,7 @@ package org.dflib.avro;
 
 import org.apache.avro.util.TimePeriod;
 import org.dflib.DataFrame;
-import org.dflib.junit5.DataFrameAsserts;
+import org.dflib.junit.DataFrameAsserts;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

@@ -2,7 +2,7 @@ package org.dflib.jdbc.connector;
 
 import org.dflib.DataFrame;
 import org.dflib.jdbc.unit.BaseDbTest;
-import org.dflib.junit5.DataFrameAsserts;
+import org.dflib.junit.DataFrameAsserts;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;

@@ -3,7 +3,7 @@ package org.dflib.csv.parser.test;
 import org.dflib.csv.parser.CsvParser;
 import org.dflib.csv.parser.format.CsvFormat;
 import org.dflib.csv.parser.format.CsvParserConfig;
-import org.dflib.junit5.DataFrameAsserts;
+import org.dflib.junit.DataFrameAsserts;
 
 import java.io.Reader;
 import java.io.StringReader;
