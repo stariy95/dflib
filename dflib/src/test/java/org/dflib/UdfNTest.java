@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.dflib.Exp.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class UdfNTest {
 
@@ -79,5 +80,10 @@ public class UdfNTest {
                 .expectRow(0, "xxX")
                 .expectRow(1, null)
                 .expectRow(2, null);
+    }
+
+    @Test
+    void ofLambda() {
+        assertEquals("concat(a,b)", UdfN.of(exps -> concat(exps)).call("a", "b").toQL());
     }
 }

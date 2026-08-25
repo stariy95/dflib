@@ -11,6 +11,15 @@ import static org.dflib.Exp.$col;
 public interface Udf3<A1, A2, A3, R> {
 
     /**
+     * A convenience "cast" method that allows to inline lambdas as a {@link Udf3}.
+     *
+     * @since 2.0.0
+     */
+    static <A1, A2, A3, R> Udf3<A1, A2, A3, R> of(Udf3<A1, A2, A3, R> udf) {
+        return udf;
+    }
+
+    /**
      * Produces an expression based on the provided expressions. This should be the preferred (though also most verbose)
      * way to resolve a UDF if the type of any argument columns is of significance. I.e.
      * <code>call($int("a"), $col("b"), $col("c"))</code> will be faster than <code>call("a", "b", "c")</code>, if the

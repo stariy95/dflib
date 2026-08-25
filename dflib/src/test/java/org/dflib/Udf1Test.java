@@ -4,6 +4,7 @@ import org.dflib.unit.DataFrameAsserts;
 import org.junit.jupiter.api.Test;
 
 import static org.dflib.Exp.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class Udf1Test {
 
@@ -80,5 +81,20 @@ public class Udf1Test {
                 .expectRow(0, "xx", "x")
                 .expectRow(1, "m", null)
                 .expectRow(2, null, "y");
+    }
+
+    @Test
+    void ofLambda() {
+        assertEquals("trim(castAsStr(a))", Udf1.of(e -> e.castAsStr().trim()).call("a").toQL());
+    }
+
+    @Test
+    void ofMethodRef() {
+        Udf1<String, String> udf = Udf1.of(Udf1Test::trimmed);
+        assertEquals("trim(a)", udf.call($str("a")).toQL());
+    }
+
+    private static Exp<String> trimmed(Exp<String> exp) {
+        return exp.castAsStr().trim();
     }
 }

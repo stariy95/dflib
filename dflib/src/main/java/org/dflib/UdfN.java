@@ -11,6 +11,15 @@ import static org.dflib.Exp.$col;
 public interface UdfN<R> {
 
     /**
+     * A convenience "cast" method that allows to inline lambdas as a {@link UdfN}.
+     *
+     * @since 2.0.0
+     */
+    static <R> UdfN<R> of(UdfN<R> udf) {
+        return udf;
+    }
+
+    /**
      * Produces an expression based on the provided expressions. This should be the preferred (though also most verbose)
      * way to resolve a UDF if the type of any argument columns is of significance. I.e.
      * <code>call($int("a"), $col("b"))</code> will be faster than <code>call("a", "b")</code>, if the UDF converts

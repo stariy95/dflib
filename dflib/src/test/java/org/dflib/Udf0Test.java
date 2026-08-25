@@ -5,6 +5,8 @@ import org.dflib.exp.agg.CountExp;
 import org.dflib.unit.DataFrameAsserts;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 public class Udf0Test {
 
     @Test
@@ -23,6 +25,11 @@ public class Udf0Test {
                 .expectRow(0, 1, 3)
                 .expectRow(1, 2, 3)
                 .expectRow(2, 3, 3);
+    }
+
+    @Test
+    void ofMethodRef() {
+        assertEquals("rowNum()", Udf0.of(RowNumExp::getInstance).call().toQL());
     }
 
 }

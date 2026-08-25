@@ -4,6 +4,7 @@ import org.dflib.unit.DataFrameAsserts;
 import org.junit.jupiter.api.Test;
 
 import static org.dflib.Exp.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class Udf3Test {
 
@@ -79,4 +80,12 @@ public class Udf3Test {
                 .expectRow(1, null)
                 .expectRow(2, null);
     }
+
+    @Test
+    void ofLambda() {
+        assertEquals("concat(c,a,b)",
+                Udf3.of((e1, e2, e3)
+                        -> concat(e1, e2, e3)).call("c", "a", "b").toQL());
+    }
+
 }

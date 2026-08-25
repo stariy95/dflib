@@ -1,3 +1,7 @@
+## Release 2.0.0-M8
+
+* #578 Static cast methods in Udf interfaces
+
 ## Release 2.0.0-M7
 
 * #410 ECharts can not be displayed in VSCode
