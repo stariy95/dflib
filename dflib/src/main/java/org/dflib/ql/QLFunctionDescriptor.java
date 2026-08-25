@@ -1,6 +1,7 @@
 package org.dflib.ql;
 
 import org.dflib.Condition;
+import org.dflib.exp.fn.Constant;
 import org.dflib.DateExp;
 import org.dflib.DateTimeExp;
 import org.dflib.Exp;
@@ -17,6 +18,7 @@ import org.dflib.exp.ScalarExp;
 
 import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
@@ -29,18 +31,18 @@ public class QLFunctionDescriptor {
 
     final String name;
     final TypeClassifier returnType;
-    final TypeClassifier[] argTypes;
+    final Arg[] args;
     final boolean varArgs;
     final Function<List<Exp<?>>, Exp<?>> fnExpProducer;
 
     private QLFunctionDescriptor(String name,
                                  TypeClassifier returnType,
-                                 TypeClassifier[] argTypes,
+                                 Arg[] args,
                                  boolean varArgs,
                                  Function<List<Exp<?>>, Exp<?>> fnExpProducer) {
         this.name = name;
         this.returnType = returnType;
-        this.argTypes = argTypes;
+        this.args = args;
         this.varArgs = varArgs;
         this.fnExpProducer = fnExpProducer;
     }
@@ -72,7 +74,7 @@ public class QLFunctionDescriptor {
         QLFunctionDescriptor that = (QLFunctionDescriptor) o;
         return name.equals(that.name)
                 && varArgs == that.varArgs
-                && Arrays.equals(argTypes, that.argTypes);
+                && Arrays.equals(args, that.args);
     }
 
     public String name() {
@@ -83,8 +85,8 @@ public class QLFunctionDescriptor {
         return returnType;
     }
 
-    public TypeClassifier[] argTypes() {
-        return argTypes;
+    public Arg[] args() {
+        return args;
     }
 
     public boolean isVarArgs() {
@@ -98,7 +100,7 @@ public class QLFunctionDescriptor {
     @Override
     public int hashCode() {
         int result = name.hashCode();
-        result = 31 * result + Arrays.hashCode(argTypes);
+        result = 31 * result + Arrays.hashCode(args);
         result = 31 * result + Boolean.hashCode(varArgs);
         return result;
     }
@@ -107,7 +109,7 @@ public class QLFunctionDescriptor {
 
         String name;
         TypeClassifier returnType;
-        TypeClassifier[] argTypes;
+        Arg[] args;
         boolean varArgs;
         Function<List<Exp<?>>, Exp<?>> fnExpProducer;
 
@@ -117,7 +119,7 @@ public class QLFunctionDescriptor {
         public Builder udf0(Udf0<?> function) {
             fnExpProducer = exps
                     -> function.call();
-            inferTypes(getCallMethodSafe(function, 0), false);
+            inferTypes(getCallMethodSafe(function), false);
             return this;
         }
 
@@ -125,7 +127,7 @@ public class QLFunctionDescriptor {
         public Builder udf1(Udf1<?, ?> function) {
             fnExpProducer = exps
                     -> function.call((Exp)exps.getFirst());
-            inferTypes(getCallMethodSafe(function, 1), false);
+            inferTypes(getCallMethodSafe(function, Exp.class), false);
             return this;
         }
 
@@ -133,7 +135,7 @@ public class QLFunctionDescriptor {
         public Builder udf2(Udf2<?, ?, ?> function) {
             fnExpProducer = exps
                     -> function.call((Exp)exps.getFirst(), (Exp)exps.get(1));
-            inferTypes(getCallMethodSafe(function, 2), false);
+            inferTypes(getCallMethodSafe(function, Exp.class, Exp.class), false);
             return this;
         }
 
@@ -141,13 +143,13 @@ public class QLFunctionDescriptor {
         public Builder udf3(Udf3<?, ?, ?, ?> function) {
             fnExpProducer = exps
                     -> function.call((Exp)exps.getFirst(), (Exp)exps.get(1), (Exp)exps.get(2));
-            inferTypes(getCallMethodSafe(function, 3), false);
+            inferTypes(getCallMethodSafe(function, Exp.class, Exp.class, Exp.class), false);
             return this;
         }
 
         public Builder udfN(UdfN<?> function) {
             fnExpProducer = exps -> function.call(exps.toArray(new Exp[0]));
-            inferTypes(getCallMethodSafe(function, 4), true);
+            inferTypes(getCallMethodSafe(function, Exp[].class), true);
             return this;
         }
 
@@ -157,23 +159,102 @@ public class QLFunctionDescriptor {
         }
 
         QLFunctionDescriptor build() {
-            return new QLFunctionDescriptor(name, returnType, argTypes, varArgs, fnExpProducer);
+            return new QLFunctionDescriptor(name, returnType, args, varArgs, fnExpProducer);
         }
 
         private void inferTypes(Method method, boolean varArgs) {
-            Type genericReturnType = method.getGenericReturnType();
-            this.returnType = TypeClassifier.classify(genericReturnType);
+            this.returnType = TypeClassifier.classify(method.getGenericReturnType());
             this.varArgs = varArgs;
-            if(varArgs) {
-                this.argTypes = new TypeClassifier[0];
+
+            Parameter[] parameters = method.getParameters();
+
+            if (varArgs) {
+                // varargs declare no individual arguments, so a constant marker on them would be silently dropped
+                for (Parameter p : parameters) {
+                    if (p.isAnnotationPresent(Constant.class)) {
+                        throw new IllegalArgumentException(
+                                "Vararg functions declare no arguments, so none can be @Constant: " + method);
+                    }
+                }
+
+                this.args = new Arg[0];
             } else {
-                Type[] genericParameterTypes = method.getGenericParameterTypes();
-                this.argTypes = new TypeClassifier[genericParameterTypes.length];
-                for (int i = 0; i < genericParameterTypes.length; i++) {
-                    this.argTypes[i] = TypeClassifier.classify(genericParameterTypes[i]);
+                this.args = new Arg[parameters.length];
+                for (int i = 0; i < parameters.length; i++) {
+                    this.args[i] = Arg.of(parameters[i]);
                 }
             }
         }
+    }
+
+    static private Method getCallMethodSafe(Object function, Class<?>... parameterTypes) {
+        Class<?> aClass = function.getClass();
+
+        for (Method m : aClass.getDeclaredMethods()) {
+            if ("call".equals(m.getName())
+                    && !m.isBridge()
+                    && !m.isSynthetic()
+                    && Arrays.equals(m.getParameterTypes(), parameterTypes)) {
+                return m;
+            }
+        }
+
+        throw new RuntimeException(new NoSuchMethodException(
+                aClass.getName() + ".call(" + Arrays.toString(parameterTypes) + ")"));
+    }
+
+    private static Class<?> unwindGeneric(Type type) {
+        switch (type) {
+            case Class<?> c -> {
+                // a non-parameterized expression interface, such as StrExp
+                return Exp.class.isAssignableFrom(c) ? unwindExpType(c) : c;
+            }
+            case ParameterizedType pt -> {
+                // unwrap the expression layer only
+                return pt.getRawType() instanceof Class<?> raw && Exp.class.isAssignableFrom(raw)
+                        ? unwindGeneric(pt.getActualTypeArguments()[0])
+                        : unwindGeneric(pt.getRawType());
+            }
+            case GenericArrayType gat -> {
+                Type genericComponentType = gat.getGenericComponentType();
+                return unwindGeneric(genericComponentType);
+            }
+            case WildcardType wt -> {
+                Type[] lowerBounds = wt.getLowerBounds();
+                if (lowerBounds.length > 0) {
+                    return unwindGeneric(lowerBounds[0]);
+                }
+                Type[] upperBounds = wt.getUpperBounds();
+                if (upperBounds.length > 0) {
+                    return unwindGeneric(upperBounds[0]);
+                }
+                throw new IllegalArgumentException("Wildcard type with no bounds");
+            }
+            case TypeVariable<?> tv
+                    -> throw new RuntimeException("Variable type " + tv + " can't be fully resolved");
+            case null, default
+                    -> throw new IllegalArgumentException("Unexpected type " + type);
+        }
+    }
+
+    /**
+     * Resolves the value type of an expression.
+     */
+    private static Class<?> unwindExpType(Class<?> expType) {
+
+        for (Type i : expType.getGenericInterfaces()) {
+            if (i instanceof ParameterizedType pt
+                    && pt.getRawType() instanceof Class<?> raw
+                    && Exp.class.isAssignableFrom(raw)) {
+
+                Type valueType = pt.getActualTypeArguments()[0];
+                if (!(valueType instanceof TypeVariable)) {
+                    return unwindGeneric(valueType);
+                }
+            }
+        }
+
+        return expType;
     }
 
     public enum TypeClassifier {
@@ -185,20 +266,17 @@ public class QLFunctionDescriptor {
         DATETIME,
 
         /**
-         * A type that is known to be a plain Object: an explicitly Object-typed scalar, including a null literal.
-         * On the declaration side this is a wildcard that accepts an argument of any type.
+         * A type that is known to be a plain Object.
          */
         OBJECT,
 
         /**
          * A type that is not known statically and is only resolved at eval time, e.g. an untyped column reference.
-         * Produced by {@link #classify(Exp)} only.
          */
         ANY;
 
         /**
-         * A {@link #matchCost(TypeClassifier, TypeClassifier)} result indicating that an argument can not be passed
-         * to such a parameter.
+         * A result indicating that an argument can not be passed as a declared parameter.
          */
         public static final int NO_MATCH = -1;
 
@@ -262,49 +340,34 @@ public class QLFunctionDescriptor {
         }
     }
 
-    static private Method getCallMethodSafe(Object function, int arity) {
-        Class<?> aClass = function.getClass();
-        try {
-            return switch (arity) {
-                case 0 -> aClass.getDeclaredMethod("call");
-                case 1 -> aClass.getDeclaredMethod("call", Exp.class);
-                case 2 -> aClass.getDeclaredMethod("call", Exp.class, Exp.class);
-                case 3 -> aClass.getDeclaredMethod("call", Exp.class, Exp.class, Exp.class);
-                default -> aClass.getDeclaredMethod("call", Exp[].class);
-            };
-        } catch (NoSuchMethodException e) {
-            throw new RuntimeException(e);
-        }
-    }
+    /**
+     * Function argument description
+     */
+    public record Arg(TypeClassifier type, boolean constant) {
 
-    private static Class<?> unwindGeneric(Type type) {
-        switch (type) {
-            case Class<?> c -> {
-                return c;
+        public static Arg of(Exp<?> exp) {
+            return new Arg(TypeClassifier.classify(exp), exp instanceof ScalarExp);
+        }
+
+        static Arg of(Parameter parameter) {
+            return new Arg(TypeClassifier.classify(parameter.getParameterizedType()),
+                    parameter.isAnnotationPresent(Constant.class));
+        }
+
+        /**
+         * Returns the cost of passing the argument to a declared parameter or {@link TypeClassifier#NO_MATCH}
+         * if it can not be passed at all.
+         */
+        public static int matchCost(Arg declared, Arg actual) {
+            if (declared.constant() && !actual.constant()) {
+                return TypeClassifier.NO_MATCH;
             }
-            case ParameterizedType pt -> {
-                Type[] actualTypeArguments = pt.getActualTypeArguments();
-                return unwindGeneric(actualTypeArguments[0]);
-            }
-            case GenericArrayType gat -> {
-                Type genericComponentType = gat.getGenericComponentType();
-                return unwindGeneric(genericComponentType);
-            }
-            case WildcardType wt -> {
-                Type[] lowerBounds = wt.getLowerBounds();
-                if (lowerBounds.length > 0) {
-                    return unwindGeneric(lowerBounds[0]);
-                }
-                Type[] upperBounds = wt.getUpperBounds();
-                if (upperBounds.length > 0) {
-                    return unwindGeneric(upperBounds[0]);
-                }
-                throw new IllegalArgumentException("Wildcard type with no bounds");
-            }
-            case TypeVariable<?> tv
-                    -> throw new RuntimeException("Variable type " + tv + " can't be fully resolved");
-            case null, default
-                    -> throw new IllegalArgumentException("Unexpected type " + type);
+            return TypeClassifier.matchCost(declared.type(), actual.type());
+        }
+
+        @Override
+        public String toString() {
+            return constant ? "const " + type : type.toString();
         }
     }
 }

@@ -6,6 +6,7 @@ import org.dflib.Udf2;
 import org.dflib.Udf3;
 import org.dflib.UdfN;
 import org.dflib.exp.fn.*;
+import org.dflib.ql.QLFunctionDescriptor.Arg;
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -42,15 +43,16 @@ public class QLFunctions {
                 .isPresent();
     }
 
-    public QLFunctionDescriptor function(String name, QLFunctionDescriptor.TypeClassifier type, List<QLFunctionDescriptor.TypeClassifier> argTypes) {
+    public QLFunctionDescriptor function(String name, QLFunctionDescriptor.TypeClassifier type, List<Arg> args) {
         return descriptorsForTypeAndName(name, type)
                 // TODO: polymorphic functions support
-                .filter(d -> matchCost(d, argTypes) != NO_MATCH)
-                // prefer fixed arity over varargs, then the most specific match
+                .filter(d -> matchCost(d, args) != NO_MATCH)
+                // prefer fixed arity over varargs, then the most specific match.
+                // Equally specific overloads are resolved in favor of the one registered first.
                 .min(Comparator.comparing(QLFunctionDescriptor::isVarArgs)
-                        .thenComparingInt(d -> matchCost(d, argTypes)))
+                        .thenComparingInt(d -> matchCost(d, args)))
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Function " + type + " " + name + "(" + argTypes + ") not found"
+                        "Function " + type + " " + name + "(" + args + ") not found"
                 ));
     }
 
@@ -59,16 +61,16 @@ public class QLFunctions {
      * more specific the match. Returns {@link QLFunctionDescriptor.TypeClassifier#NO_MATCH} if the arguments can not
      * be passed to this function at all.
      */
-    private static int matchCost(QLFunctionDescriptor descriptor, List<QLFunctionDescriptor.TypeClassifier> argTypes) {
+    private static int matchCost(QLFunctionDescriptor descriptor, List<Arg> args) {
 
         // varargs declare no parameters, so they accept an argument list of any length
-        if (descriptor.argTypes().length != argTypes.size()) {
+        if (descriptor.args().length != args.size()) {
             return descriptor.isVarArgs() ? 0 : NO_MATCH;
         }
 
         int cost = 0;
-        for (int i = 0; i < descriptor.argTypes().length; i++) {
-            int argCost = QLFunctionDescriptor.TypeClassifier.matchCost(descriptor.argTypes()[i], argTypes.get(i));
+        for (int i = 0; i < descriptor.args().length; i++) {
+            int argCost = Arg.matchCost(descriptor.args()[i], args.get(i));
             if (argCost == NO_MATCH) {
                 return NO_MATCH;
             }
@@ -117,7 +119,7 @@ public class QLFunctions {
             QLFunctionDescriptor descriptor = builder.name(name).build();
             boolean hasSameDescriptor = !functions.computeIfAbsent(name, n -> new LinkedHashSet<>()).add(descriptor);
             if(hasSameDescriptor) {
-                throw new IllegalArgumentException("Function " + name + "(" + Arrays.toString(descriptor.argTypes()) + ")  already defined");
+                throw new IllegalArgumentException("Function " + name + "(" + Arrays.toString(descriptor.args()) + ")  already defined");
             }
 
             return this;

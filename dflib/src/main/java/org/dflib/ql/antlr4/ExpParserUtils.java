@@ -511,11 +511,11 @@ public class ExpParserUtils {
 
     @SuppressWarnings("unchecked")
     private static <T extends Exp<?>> T envFunction(String fnName, QLFunctionDescriptor.TypeClassifier type, List<Exp<?>> args) {
-        List<QLFunctionDescriptor.TypeClassifier> types = args.stream()
-                .map(QLFunctionDescriptor.TypeClassifier::classify)
+        List<QLFunctionDescriptor.Arg> argDescriptors = args.stream()
+                .map(QLFunctionDescriptor.Arg::of)
                 .collect(Collectors.toList());
         return (T)Environment.commonEnv().getQLFunctions()
-                .function(fnName, type, types)
+                .function(fnName, type, argDescriptors)
                 .expProducer()
                 .apply(args);
     }

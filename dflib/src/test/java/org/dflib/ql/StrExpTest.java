@@ -226,6 +226,13 @@ public class StrExpTest {
             "substr('example', 'a')",
             "substr('example', 2, null)",
             "substr('example', 2, -1)",
+
+            // "substr" reads its position arguments while building the expression, so they have to be constants.
+            // A column reference matches on type but has no value until eval
+            "substr('example', b)",
+            "substr(a, b)",
+            "substr('example', int(b))",
+            "substr('example', 2, c)",
     })
     public void function_returnsStrExp_throws(String text) {
         assertThrows(QLParserException.class, () -> parseExp(text));

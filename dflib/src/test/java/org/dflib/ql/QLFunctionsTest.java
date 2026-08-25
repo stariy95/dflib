@@ -1,18 +1,28 @@
 package org.dflib.ql;
 
-import org.dflib.Exp;
-import org.dflib.NumExp;
-import org.dflib.Udf1;
-import org.dflib.Udf2;
-import org.dflib.Udf3;
-import org.dflib.UdfN;
+import org.dflib.*;
+import org.dflib.exp.fn.Constant;
+import org.dflib.ql.QLFunctionDescriptor.Arg;
+import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.ANY;
+import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.NUMERIC;
+import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.OBJECT;
+import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.STRING;
 import static org.junit.jupiter.api.Assertions.*;
 
 class QLFunctionsTest {
+
+    private static Arg arg(TypeClassifier type) {
+        return new Arg(type, false);
+    }
+
+    private static Arg constant(TypeClassifier type) {
+        return new Arg(type, true);
+    }
 
     @Test
     void function_Matching2ArgTypes() {
@@ -21,17 +31,12 @@ class QLFunctionsTest {
                 .function("sum", new Int3SumFunction())
                 .build();
 
-        List<QLFunctionDescriptor.TypeClassifier> argTypes = List.of(
-                QLFunctionDescriptor.TypeClassifier.NUMERIC,
-                QLFunctionDescriptor.TypeClassifier.NUMERIC
-        );
-
-        QLFunctionDescriptor result = functions.function("sum", QLFunctionDescriptor.TypeClassifier.NUMERIC, argTypes);
+        QLFunctionDescriptor result = functions.function("sum", NUMERIC, List.of(arg(NUMERIC), arg(NUMERIC)));
 
         assertNotNull(result);
         assertEquals("sum", result.name());
-        assertEquals(QLFunctionDescriptor.TypeClassifier.NUMERIC, result.returnType());
-        assertEquals(2, result.argTypes().length);
+        assertEquals(NUMERIC, result.returnType());
+        assertEquals(2, result.args().length);
     }
 
     @Test
@@ -41,18 +46,13 @@ class QLFunctionsTest {
                 .function("sum", new Int3SumFunction())
                 .build();
 
-        List<QLFunctionDescriptor.TypeClassifier> argTypes = List.of(
-                QLFunctionDescriptor.TypeClassifier.NUMERIC,
-                QLFunctionDescriptor.TypeClassifier.NUMERIC,
-                QLFunctionDescriptor.TypeClassifier.NUMERIC
-        );
-
-        QLFunctionDescriptor result = functions.function("sum", QLFunctionDescriptor.TypeClassifier.NUMERIC, argTypes);
+        QLFunctionDescriptor result = functions.function("sum", NUMERIC,
+                List.of(arg(NUMERIC), arg(NUMERIC), arg(NUMERIC)));
 
         assertNotNull(result);
         assertEquals("sum", result.name());
-        assertEquals(QLFunctionDescriptor.TypeClassifier.NUMERIC, result.returnType());
-        assertEquals(3, result.argTypes().length);
+        assertEquals(NUMERIC, result.returnType());
+        assertEquals(3, result.args().length);
     }
 
     @Test
@@ -60,11 +60,11 @@ class QLFunctionsTest {
         QLFunctions functions = QLFunctions.builder()
                 .function("sum", new Int2SumFunction())
                 .build();
-        List<QLFunctionDescriptor.TypeClassifier> argTypes = List.of(QLFunctionDescriptor.TypeClassifier.NUMERIC, QLFunctionDescriptor.TypeClassifier.NUMERIC);
+        List<Arg> argTypes = List.of(arg(NUMERIC), arg(NUMERIC));
 
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> functions.function("multiply", QLFunctionDescriptor.TypeClassifier.NUMERIC, argTypes)
+                () -> functions.function("multiply", NUMERIC, argTypes)
         );
         assertEquals("Function NUMERIC multiply([NUMERIC, NUMERIC]) not found", exception.getMessage());
     }
@@ -74,14 +74,11 @@ class QLFunctionsTest {
         QLFunctions functions = QLFunctions.builder()
                 .function("sum", new Int2SumFunction())
                 .build();
-        List<QLFunctionDescriptor.TypeClassifier> wrongArgTypes = List.of(
-                QLFunctionDescriptor.TypeClassifier.NUMERIC,
-                QLFunctionDescriptor.TypeClassifier.STRING
-        );
+        List<Arg> wrongArgTypes = List.of(arg(NUMERIC), arg(STRING));
 
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> functions.function("sum", QLFunctionDescriptor.TypeClassifier.NUMERIC, wrongArgTypes)
+                () -> functions.function("sum", NUMERIC, wrongArgTypes)
         );
         assertEquals("Function NUMERIC sum([NUMERIC, STRING]) not found", exception.getMessage());
     }
@@ -91,16 +88,27 @@ class QLFunctionsTest {
         QLFunctions functions = QLFunctions.builder()
                 .function("concat", (Udf2<String, String, String>) Exp::concat)
                 .build();
-        List<QLFunctionDescriptor.TypeClassifier> argTypes = List.of(
-                QLFunctionDescriptor.TypeClassifier.STRING,
-                QLFunctionDescriptor.TypeClassifier.STRING
-        );
+        List<Arg> argTypes = List.of(arg(STRING), arg(STRING));
 
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> functions.function("concat", QLFunctionDescriptor.TypeClassifier.NUMERIC, argTypes)
+                () -> functions.function("concat", NUMERIC, argTypes)
         );
         assertEquals("Function NUMERIC concat([STRING, STRING]) not found", exception.getMessage());
+    }
+
+    @Test
+    void function_ConstantArg_RenderedInNotFoundMessage() {
+        QLFunctions functions = QLFunctions.builder()
+                .function("substr", new StrConstIntFunction())
+                .build();
+
+        // a plain argument renders as the bare type name, a constant one is called out
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> functions.function("substr", STRING, List.of(arg(STRING), constant(STRING)))
+        );
+        assertEquals("Function STRING substr([STRING, const STRING]) not found", exception.getMessage());
     }
 
     @Test
@@ -110,25 +118,23 @@ class QLFunctionsTest {
                 .build();
 
         // match with 2 args
-        QLFunctionDescriptor result2 = functions.function("sum", QLFunctionDescriptor.TypeClassifier.NUMERIC,
-                List.of(QLFunctionDescriptor.TypeClassifier.NUMERIC, QLFunctionDescriptor.TypeClassifier.NUMERIC));
+        QLFunctionDescriptor result2 = functions.function("sum", NUMERIC, List.of(arg(NUMERIC), arg(NUMERIC)));
         assertNotNull(result2);
         assertTrue(result2.isVarArgs());
 
         // match with 3 args
-        QLFunctionDescriptor result3 = functions.function("sum", QLFunctionDescriptor.TypeClassifier.NUMERIC,
-                List.of(QLFunctionDescriptor.TypeClassifier.NUMERIC, QLFunctionDescriptor.TypeClassifier.NUMERIC, QLFunctionDescriptor.TypeClassifier.NUMERIC));
+        QLFunctionDescriptor result3 = functions.function("sum", NUMERIC,
+                List.of(arg(NUMERIC), arg(NUMERIC), arg(NUMERIC)));
         assertNotNull(result3);
         assertTrue(result3.isVarArgs());
 
         // match with 1 arg
-        QLFunctionDescriptor result1 = functions.function("sum", QLFunctionDescriptor.TypeClassifier.NUMERIC,
-                List.of(QLFunctionDescriptor.TypeClassifier.NUMERIC));
+        QLFunctionDescriptor result1 = functions.function("sum", NUMERIC, List.of(arg(NUMERIC)));
         assertNotNull(result1);
         assertTrue(result1.isVarArgs());
 
         // match with 0 args
-        QLFunctionDescriptor result0 = functions.function("sum", QLFunctionDescriptor.TypeClassifier.NUMERIC, List.of());
+        QLFunctionDescriptor result0 = functions.function("sum", NUMERIC, List.of());
         assertNotNull(result0);
         assertTrue(result0.isVarArgs());
     }
@@ -141,15 +147,14 @@ class QLFunctionsTest {
                 .build();
 
         // 2-arg call should prefer the fixed-arity Udf2
-        QLFunctionDescriptor result2 = functions.function("sum", QLFunctionDescriptor.TypeClassifier.NUMERIC,
-                List.of(QLFunctionDescriptor.TypeClassifier.NUMERIC, QLFunctionDescriptor.TypeClassifier.NUMERIC));
+        QLFunctionDescriptor result2 = functions.function("sum", NUMERIC, List.of(arg(NUMERIC), arg(NUMERIC)));
         assertNotNull(result2);
         assertFalse(result2.isVarArgs());
-        assertEquals(2, result2.argTypes().length);
+        assertEquals(2, result2.args().length);
 
         // 3-arg call should fall back to varargs
-        QLFunctionDescriptor result3 = functions.function("sum", QLFunctionDescriptor.TypeClassifier.NUMERIC,
-                List.of(QLFunctionDescriptor.TypeClassifier.NUMERIC, QLFunctionDescriptor.TypeClassifier.NUMERIC, QLFunctionDescriptor.TypeClassifier.NUMERIC));
+        QLFunctionDescriptor result3 = functions.function("sum", NUMERIC,
+                List.of(arg(NUMERIC), arg(NUMERIC), arg(NUMERIC)));
         assertNotNull(result3);
         assertTrue(result3.isVarArgs());
     }
@@ -162,11 +167,10 @@ class QLFunctionsTest {
 
         // ANY is the classification of an argument whose type is only known at eval time. It must be accepted by a
         // parameter of any declared type
-        QLFunctionDescriptor result = functions.function("sum", QLFunctionDescriptor.TypeClassifier.NUMERIC,
-                List.of(QLFunctionDescriptor.TypeClassifier.ANY, QLFunctionDescriptor.TypeClassifier.ANY));
+        QLFunctionDescriptor result = functions.function("sum", NUMERIC, List.of(arg(ANY), arg(ANY)));
 
         assertNotNull(result);
-        assertEquals(2, result.argTypes().length);
+        assertEquals(2, result.args().length);
     }
 
     @Test
@@ -177,14 +181,11 @@ class QLFunctionsTest {
 
         // unlike ANY, OBJECT is a deliberately Object-typed argument (a null literal, most notably), and must not
         // be silently passed to a numeric parameter
-        List<QLFunctionDescriptor.TypeClassifier> argTypes = List.of(
-                QLFunctionDescriptor.TypeClassifier.NUMERIC,
-                QLFunctionDescriptor.TypeClassifier.OBJECT
-        );
+        List<Arg> argTypes = List.of(arg(NUMERIC), arg(OBJECT));
 
         assertThrows(
                 IllegalArgumentException.class,
-                () -> functions.function("sum", QLFunctionDescriptor.TypeClassifier.NUMERIC, argTypes)
+                () -> functions.function("sum", NUMERIC, argTypes)
         );
     }
 
@@ -197,13 +198,9 @@ class QLFunctionsTest {
                 .function("f", new StrArgFunction())
                 .build();
 
-        List<QLFunctionDescriptor.TypeClassifier> argTypes = List.of(QLFunctionDescriptor.TypeClassifier.STRING);
+        QLFunctionDescriptor result = functions.function("f", STRING, List.of(arg(STRING)));
 
-        QLFunctionDescriptor result = functions.function("f", QLFunctionDescriptor.TypeClassifier.STRING, argTypes);
-
-        assertArrayEquals(
-                new QLFunctionDescriptor.TypeClassifier[]{QLFunctionDescriptor.TypeClassifier.STRING},
-                result.argTypes());
+        assertArrayEquals(new Arg[]{arg(STRING)}, result.args());
     }
 
     @Test
@@ -215,13 +212,9 @@ class QLFunctionsTest {
 
         // an ANY argument matches both overloads, but only the one declaring OBJECT is written to handle an
         // argument of any type, so it is the more specific match
-        List<QLFunctionDescriptor.TypeClassifier> argTypes = List.of(QLFunctionDescriptor.TypeClassifier.ANY);
+        QLFunctionDescriptor result = functions.function("f", STRING, List.of(arg(ANY)));
 
-        QLFunctionDescriptor result = functions.function("f", QLFunctionDescriptor.TypeClassifier.STRING, argTypes);
-
-        assertArrayEquals(
-                new QLFunctionDescriptor.TypeClassifier[]{QLFunctionDescriptor.TypeClassifier.OBJECT},
-                result.argTypes());
+        assertArrayEquals(new Arg[]{arg(OBJECT)}, result.args());
     }
 
     @Test
@@ -229,10 +222,7 @@ class QLFunctionsTest {
 
         // neither overload is more specific than the other: each matches one argument exactly and the other via a
         // wildcard. The tie must resolve to whichever was registered first
-        List<QLFunctionDescriptor.TypeClassifier> argTypes = List.of(
-                QLFunctionDescriptor.TypeClassifier.STRING,
-                QLFunctionDescriptor.TypeClassifier.STRING
-        );
+        List<Arg> argTypes = List.of(arg(STRING), arg(STRING));
 
         QLFunctions strFirst = QLFunctions.builder()
                 .function("f", new StrObjArgFunction())
@@ -240,10 +230,8 @@ class QLFunctionsTest {
                 .build();
 
         assertArrayEquals(
-                new QLFunctionDescriptor.TypeClassifier[]{
-                        QLFunctionDescriptor.TypeClassifier.STRING,
-                        QLFunctionDescriptor.TypeClassifier.OBJECT},
-                strFirst.function("f", QLFunctionDescriptor.TypeClassifier.STRING, argTypes).argTypes());
+                new Arg[]{arg(STRING), arg(OBJECT)},
+                strFirst.function("f", STRING, argTypes).args());
 
         QLFunctions objFirst = QLFunctions.builder()
                 .function("f", new ObjStrArgFunction())
@@ -251,10 +239,126 @@ class QLFunctionsTest {
                 .build();
 
         assertArrayEquals(
-                new QLFunctionDescriptor.TypeClassifier[]{
-                        QLFunctionDescriptor.TypeClassifier.OBJECT,
-                        QLFunctionDescriptor.TypeClassifier.STRING},
-                objFirst.function("f", QLFunctionDescriptor.TypeClassifier.STRING, argTypes).argTypes());
+                new Arg[]{arg(OBJECT), arg(STRING)},
+                objFirst.function("f", STRING, argTypes).args());
+    }
+
+    @Test
+    void function_ConstantParam_MatchesConstantArg() {
+        QLFunctions functions = QLFunctions.builder()
+                .function("substr", new StrConstIntFunction())
+                .build();
+
+        QLFunctionDescriptor result = functions.function("substr", STRING, List.of(arg(STRING), constant(NUMERIC)));
+
+        assertNotNull(result);
+        assertArrayEquals(new Arg[]{arg(OBJECT), constant(NUMERIC)}, result.args());
+    }
+
+    @Test
+    void function_ConstantParam_RejectsNonConstantArg() {
+        QLFunctions functions = QLFunctions.builder()
+                .function("substr", new StrConstIntFunction())
+                .build();
+
+        // a column reference is a numeric expression, so it matches on type, but its value is not known until eval
+        List<Arg> argTypes = List.of(arg(STRING), arg(NUMERIC));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> functions.function("substr", STRING, argTypes)
+        );
+        assertEquals("Function STRING substr([STRING, NUMERIC]) not found", exception.getMessage());
+    }
+
+    @Test
+    void function_ConstantParam_UntypedArgStillRejected() {
+        QLFunctions functions = QLFunctions.builder()
+                .function("substr", new StrConstIntFunction())
+                .build();
+
+        // ANY is compatible with any parameter type, but it is by definition not a constant
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> functions.function("substr", STRING, List.of(arg(STRING), arg(ANY)))
+        );
+    }
+
+    @Test
+    void function_PlainParam_AcceptsConstantArg() {
+        QLFunctions functions = QLFunctions.builder()
+                .function("sum", new Int2SumFunction())
+                .build();
+
+        // passing a literal to an unconstrained parameter stays legal - this is what "abs(-5)" does
+        QLFunctionDescriptor result = functions.function("sum", NUMERIC,
+                List.of(constant(NUMERIC), constant(NUMERIC)));
+
+        assertNotNull(result);
+    }
+
+    @Test
+    void function_ConstancyDistinguishesOverloads() {
+
+        // the same signature with a different constancy is a different function, and both must register
+        QLFunctions functions = QLFunctions.builder()
+                .function("substr", new StrConstIntFunction())
+                .function("substr", new StrIntFunction())
+                .build();
+
+        assertArrayEquals(
+                new Arg[]{arg(OBJECT), constant(NUMERIC)},
+                functions.function("substr", STRING, List.of(arg(STRING), constant(NUMERIC))).args());
+
+        assertArrayEquals(
+                new Arg[]{arg(OBJECT), arg(NUMERIC)},
+                functions.function("substr", STRING, List.of(arg(STRING), arg(NUMERIC))).args());
+    }
+
+    @Test
+    void function_SameFunctionIsADuplicate() {
+        QLFunctions.Builder builder = QLFunctions.builder().function("substr", new StrConstIntFunction());
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> builder.function("substr", new StrConstIntFunction())
+        );
+        assertTrue(exception.getMessage().contains("already defined"), exception.getMessage());
+    }
+
+    @Test
+    void constantArg_OnVarArgsIsRejected() {
+
+        // varargs declare no individual arguments, so a constant marker on them would be silently dropped
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> QLFunctions.builder().function("sum", new ConstVarArgsFunction())
+        );
+    }
+
+    private static class StrConstIntFunction implements Udf2<Object, Integer, String> {
+        @Override
+        public Exp<String> call(Exp<Object> exp, @Constant Exp<Integer> from) {
+            return exp.substr(from.reduce((Series<?>) null));
+        }
+    }
+
+    /**
+     * Same erased signature as {@link StrConstIntFunction}, but taking any expression as the second argument.
+     */
+    private static class StrIntFunction implements Udf2<Object, Integer, String> {
+        @Override
+        public Exp<String> call(Exp<Object> exp, Exp<Integer> from) {
+            return exp.castAsStr();
+        }
+    }
+
+    private static class ConstVarArgsFunction implements UdfN<Number> {
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        @Override
+        public NumExp<Number> call(@Constant Exp<?>... exps) {
+            return (NumExp) exps[0];
+        }
     }
 
     private static class StrObjArgFunction implements Udf2<String, Object, String> {
