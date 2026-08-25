@@ -443,7 +443,13 @@ public class NumExpTest {
                 arguments("round(3.14)", $floatVal(3.14f).round()),
                 arguments("scale(decimal(1), 3)", $decimal(1).scale(3)),
                 arguments("scale(double(1), 3)", $double(1).castAsDecimal().scale(3)),
-                arguments("len(str(a))", $str("a").len())
+                arguments("len(str(a))", $str("a").len()),
+
+                // an argument whose type is only known at eval time still resolves against a typed parameter
+                arguments("len(a)", $col("a").castAsStr().len()),
+                arguments("len(ifNull(a, b))", ifNull($col("a"), $col("b")).castAsStr().len()),
+                arguments("len(if(a = 1, b, c))",
+                        ifExp($col("a").eq($val(1)), $col("b"), $col("c")).castAsStr().len())
         );
     }
 

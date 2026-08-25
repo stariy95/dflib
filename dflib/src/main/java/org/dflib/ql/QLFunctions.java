@@ -8,20 +8,21 @@ import org.dflib.UdfN;
 import org.dflib.exp.fn.*;
 
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.SequencedSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
+import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.NO_MATCH;
+
 public class QLFunctions {
 
-    private final Map<String, Set<QLFunctionDescriptor>> functions;
+    private final Map<String, SequencedSet<QLFunctionDescriptor>> functions;
 
-    private QLFunctions(Map<String, Set<QLFunctionDescriptor>> functions) {
+    private QLFunctions(Map<String, SequencedSet<QLFunctionDescriptor>> functions) {
         this.functions = functions;
     }
 
@@ -31,49 +32,63 @@ public class QLFunctions {
 
     public boolean strFn(String fnName) {
         return descriptorsForTypeAndName(fnName, QLFunctionDescriptor.TypeClassifier.STRING)
-                .findFirst()
+                .findAny()
                 .isPresent();
     }
 
     public boolean numFn(String fnName) {
         return descriptorsForTypeAndName(fnName, QLFunctionDescriptor.TypeClassifier.NUMERIC)
-                .findFirst()
+                .findAny()
                 .isPresent();
     }
 
     public QLFunctionDescriptor function(String name, QLFunctionDescriptor.TypeClassifier type, List<QLFunctionDescriptor.TypeClassifier> argTypes) {
         return descriptorsForTypeAndName(name, type)
                 // TODO: polymorphic functions support
-                .filter(d -> d.returnType() == type)
-                .filter(d -> d.isVarArgs() || d.argTypes().length == argTypes.size())
-                .filter(d -> {
-                    if (d.isVarArgs()) {
-                        return true;
-                    }
-                    for (int i = 0; i < d.argTypes().length; i++) {
-                        if (d.argTypes()[i] != QLFunctionDescriptor.TypeClassifier.OBJECT
-                                && d.argTypes()[i] != argTypes.get(i)) {
-                            return false;
-                        }
-                    }
-                    return true;
-                })
-                // prefer fixed-arity matches over varargs
-                .min(Comparator.comparing(QLFunctionDescriptor::isVarArgs))
+                .filter(d -> matchCost(d, argTypes) != NO_MATCH)
+                // prefer fixed arity over varargs, then the most specific match
+                .min(Comparator.comparing(QLFunctionDescriptor::isVarArgs)
+                        .thenComparingInt(d -> matchCost(d, argTypes)))
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Function " + type + " " + name + "(" + argTypes + ") not found"
                 ));
     }
 
+    /**
+     * Returns the combined cost of passing the given arguments to the descriptor parameters. The lower the cost, the
+     * more specific the match. Returns {@link QLFunctionDescriptor.TypeClassifier#NO_MATCH} if the arguments can not
+     * be passed to this function at all.
+     */
+    private static int matchCost(QLFunctionDescriptor descriptor, List<QLFunctionDescriptor.TypeClassifier> argTypes) {
+
+        // varargs declare no parameters, so they accept an argument list of any length
+        if (descriptor.argTypes().length != argTypes.size()) {
+            return descriptor.isVarArgs() ? 0 : NO_MATCH;
+        }
+
+        int cost = 0;
+        for (int i = 0; i < descriptor.argTypes().length; i++) {
+            int argCost = QLFunctionDescriptor.TypeClassifier.matchCost(descriptor.argTypes()[i], argTypes.get(i));
+            if (argCost == NO_MATCH) {
+                return NO_MATCH;
+            }
+
+            cost += argCost;
+        }
+
+        return cost;
+    }
+
     Stream<QLFunctionDescriptor> descriptorsForTypeAndName(String name, QLFunctionDescriptor.TypeClassifier type) {
-        return functions.getOrDefault(name, Collections.emptySet())
-                .stream()
-                .filter(d -> d.returnType() == type);
+        SequencedSet<QLFunctionDescriptor> descriptors = functions.get(name);
+        return descriptors != null
+                ? descriptors.stream().filter(d -> d.returnType() == type)
+                : Stream.empty();
     }
 
     public static class Builder {
 
-        private final Map<String, Set<QLFunctionDescriptor>> functions = new ConcurrentHashMap<>();
+        private final Map<String, SequencedSet<QLFunctionDescriptor>> functions = new ConcurrentHashMap<>();
 
         private Builder() {
         }
@@ -100,7 +115,7 @@ public class QLFunctions {
 
         private Builder defineFunction(String name, QLFunctionDescriptor.Builder builder) {
             QLFunctionDescriptor descriptor = builder.name(name).build();
-            boolean hasSameDescriptor = !functions.computeIfAbsent(name, n -> new HashSet<>()).add(descriptor);
+            boolean hasSameDescriptor = !functions.computeIfAbsent(name, n -> new LinkedHashSet<>()).add(descriptor);
             if(hasSameDescriptor) {
                 throw new IllegalArgumentException("Function " + name + "(" + Arrays.toString(descriptor.argTypes()) + ")  already defined");
             }

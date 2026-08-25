@@ -13,6 +13,7 @@ import org.dflib.Udf1;
 import org.dflib.Udf2;
 import org.dflib.Udf3;
 import org.dflib.UdfN;
+import org.dflib.exp.ScalarExp;
 
 import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.Method;
@@ -114,28 +115,32 @@ public class QLFunctionDescriptor {
         }
 
         public Builder udf0(Udf0<?> function) {
-            fnExpProducer = exps -> function.call();
+            fnExpProducer = exps
+                    -> function.call();
             inferTypes(getCallMethodSafe(function, 0), false);
             return this;
         }
 
         @SuppressWarnings({"rawtypes", "unchecked"})
         public Builder udf1(Udf1<?, ?> function) {
-            fnExpProducer = exps -> function.call((Exp)exps.get(0));
+            fnExpProducer = exps
+                    -> function.call((Exp)exps.getFirst());
             inferTypes(getCallMethodSafe(function, 1), false);
             return this;
         }
 
         @SuppressWarnings({"rawtypes", "unchecked"})
         public Builder udf2(Udf2<?, ?, ?> function) {
-            fnExpProducer = exps -> function.call((Exp)exps.get(0), (Exp)exps.get(1));
+            fnExpProducer = exps
+                    -> function.call((Exp)exps.getFirst(), (Exp)exps.get(1));
             inferTypes(getCallMethodSafe(function, 2), false);
             return this;
         }
 
         @SuppressWarnings({"rawtypes", "unchecked"})
         public Builder udf3(Udf3<?, ?, ?, ?> function) {
-            fnExpProducer = exps -> function.call((Exp)exps.get(0), (Exp)exps.get(1), (Exp)exps.get(2));
+            fnExpProducer = exps
+                    -> function.call((Exp)exps.getFirst(), (Exp)exps.get(1), (Exp)exps.get(2));
             inferTypes(getCallMethodSafe(function, 3), false);
             return this;
         }
@@ -178,7 +183,24 @@ public class QLFunctionDescriptor {
         DATE,
         TIME,
         DATETIME,
-        OBJECT; // TODO: rename
+
+        /**
+         * A type that is known to be a plain Object: an explicitly Object-typed scalar, including a null literal.
+         * On the declaration side this is a wildcard that accepts an argument of any type.
+         */
+        OBJECT,
+
+        /**
+         * A type that is not known statically and is only resolved at eval time, e.g. an untyped column reference.
+         * Produced by {@link #classify(Exp)} only.
+         */
+        ANY;
+
+        /**
+         * A {@link #matchCost(TypeClassifier, TypeClassifier)} result indicating that an argument can not be passed
+         * to such a parameter.
+         */
+        public static final int NO_MATCH = -1;
 
         public static TypeClassifier classify(Type type) {
             Class<?> expressionType = unwindGeneric(type);
@@ -202,23 +224,41 @@ public class QLFunctionDescriptor {
         }
 
         public static TypeClassifier classify(Exp<?> exp) {
-            if(exp instanceof NumExp) {
-                return QLFunctionDescriptor.TypeClassifier.NUMERIC;
-            } else if(exp instanceof StrExp) {
-                return QLFunctionDescriptor.TypeClassifier.STRING;
-            } else if(exp instanceof Condition) {
-                return QLFunctionDescriptor.TypeClassifier.BOOLEAN;
-            } else if(exp instanceof DateExp) {
-                return QLFunctionDescriptor.TypeClassifier.DATE;
-            } else if(exp instanceof TimeExp) {
-                return QLFunctionDescriptor.TypeClassifier.TIME;
-            } else if(exp instanceof DateTimeExp) {
-                return QLFunctionDescriptor.TypeClassifier.DATETIME;
-            } else if(exp instanceof OffsetDateTimeExp) {
-                return QLFunctionDescriptor.TypeClassifier.DATETIME;
-            } else {
-                return QLFunctionDescriptor.TypeClassifier.OBJECT;
+            return switch (exp) {
+                case NumExp<?> ignored -> TypeClassifier.NUMERIC;
+                case StrExp ignored -> TypeClassifier.STRING;
+                case Condition ignored -> TypeClassifier.BOOLEAN;
+                case DateExp ignored -> TypeClassifier.DATE;
+                case TimeExp ignored -> TypeClassifier.TIME;
+                case DateTimeExp ignored -> TypeClassifier.DATETIME;
+                case OffsetDateTimeExp ignored -> TypeClassifier.DATETIME;
+                case ScalarExp<?> ignored -> TypeClassifier.OBJECT;
+                // anything else still typed as Object (a bare column ref, "if", "ifNull", "shift", ...) is only
+                // resolved at eval time, so it is compatible with a parameter of any type
+                case Exp<?> e when e.getType() == Object.class -> TypeClassifier.ANY;
+                case null, default -> TypeClassifier.OBJECT;
+            };
+        }
+
+        /**
+         * Returns the cost of passing an argument of the {@code actual} type to a parameter declared as
+         * {@code declared}. Returns {@link #NO_MATCH} if an argument can not be passed at all.
+         */
+        public static int matchCost(TypeClassifier declared, TypeClassifier actual) {
+
+            if (declared == actual) {
+                return 0; // an exact match
             }
+
+            if (declared == OBJECT) {
+                return 1; // the parameter is declared to accept an argument of any type
+            }
+
+            if (actual == ANY) {
+                return 2; // the argument type is only known at eval time
+            }
+
+            return NO_MATCH;
         }
     }
 
@@ -238,28 +278,33 @@ public class QLFunctionDescriptor {
     }
 
     private static Class<?> unwindGeneric(Type type) {
-        if (type instanceof Class<?> c) {
-            return c;
-        } else if (type instanceof ParameterizedType pt) {
-            Type[] actualTypeArguments = pt.getActualTypeArguments();
-            return unwindGeneric(actualTypeArguments[0]);
-        } else if (type instanceof GenericArrayType gat) {
-            Type genericComponentType = gat.getGenericComponentType();
-            return unwindGeneric(genericComponentType);
-        } else if (type instanceof WildcardType wt) {
-            Type[] lowerBounds = wt.getLowerBounds();
-            if (lowerBounds.length > 0) {
-                return unwindGeneric(lowerBounds[0]);
+        switch (type) {
+            case Class<?> c -> {
+                return c;
             }
-            Type[] upperBounds = wt.getUpperBounds();
-            if (upperBounds.length > 0) {
-                return unwindGeneric(upperBounds[0]);
+            case ParameterizedType pt -> {
+                Type[] actualTypeArguments = pt.getActualTypeArguments();
+                return unwindGeneric(actualTypeArguments[0]);
             }
-            throw new IllegalArgumentException("Wildcard type with no bounds");
-        } else if (type instanceof TypeVariable<?> tv) {
-            throw new RuntimeException("Variable type " + tv + " can't be fully resolved");
-        } else {
-            throw new IllegalArgumentException("Unexpected type " + type);
+            case GenericArrayType gat -> {
+                Type genericComponentType = gat.getGenericComponentType();
+                return unwindGeneric(genericComponentType);
+            }
+            case WildcardType wt -> {
+                Type[] lowerBounds = wt.getLowerBounds();
+                if (lowerBounds.length > 0) {
+                    return unwindGeneric(lowerBounds[0]);
+                }
+                Type[] upperBounds = wt.getUpperBounds();
+                if (upperBounds.length > 0) {
+                    return unwindGeneric(upperBounds[0]);
+                }
+                throw new IllegalArgumentException("Wildcard type with no bounds");
+            }
+            case TypeVariable<?> tv
+                    -> throw new RuntimeException("Variable type " + tv + " can't be fully resolved");
+            case null, default
+                    -> throw new IllegalArgumentException("Unexpected type " + type);
         }
     }
 }

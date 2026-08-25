@@ -2,6 +2,7 @@ package org.dflib.ql;
 
 import org.dflib.Exp;
 import org.dflib.NumExp;
+import org.dflib.Udf1;
 import org.dflib.Udf2;
 import org.dflib.Udf3;
 import org.dflib.UdfN;
@@ -151,6 +152,137 @@ class QLFunctionsTest {
                 List.of(QLFunctionDescriptor.TypeClassifier.NUMERIC, QLFunctionDescriptor.TypeClassifier.NUMERIC, QLFunctionDescriptor.TypeClassifier.NUMERIC));
         assertNotNull(result3);
         assertTrue(result3.isVarArgs());
+    }
+
+    @Test
+    void function_AnyArgType_MatchesTypedParam() {
+        QLFunctions functions = QLFunctions.builder()
+                .function("sum", new Int2SumFunction())
+                .build();
+
+        // ANY is the classification of an argument whose type is only known at eval time. It must be accepted by a
+        // parameter of any declared type
+        QLFunctionDescriptor result = functions.function("sum", QLFunctionDescriptor.TypeClassifier.NUMERIC,
+                List.of(QLFunctionDescriptor.TypeClassifier.ANY, QLFunctionDescriptor.TypeClassifier.ANY));
+
+        assertNotNull(result);
+        assertEquals(2, result.argTypes().length);
+    }
+
+    @Test
+    void function_ObjectArgType_DoesNotMatchTypedParam() {
+        QLFunctions functions = QLFunctions.builder()
+                .function("sum", new Int2SumFunction())
+                .build();
+
+        // unlike ANY, OBJECT is a deliberately Object-typed argument (a null literal, most notably), and must not
+        // be silently passed to a numeric parameter
+        List<QLFunctionDescriptor.TypeClassifier> argTypes = List.of(
+                QLFunctionDescriptor.TypeClassifier.NUMERIC,
+                QLFunctionDescriptor.TypeClassifier.OBJECT
+        );
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> functions.function("sum", QLFunctionDescriptor.TypeClassifier.NUMERIC, argTypes)
+        );
+    }
+
+    @Test
+    void function_ExactMatchPreferredOverWildcard() {
+
+        // the wildcard overload is registered first, so specificity rather than registration order has to decide
+        QLFunctions functions = QLFunctions.builder()
+                .function("f", new ObjectArgFunction())
+                .function("f", new StrArgFunction())
+                .build();
+
+        List<QLFunctionDescriptor.TypeClassifier> argTypes = List.of(QLFunctionDescriptor.TypeClassifier.STRING);
+
+        QLFunctionDescriptor result = functions.function("f", QLFunctionDescriptor.TypeClassifier.STRING, argTypes);
+
+        assertArrayEquals(
+                new QLFunctionDescriptor.TypeClassifier[]{QLFunctionDescriptor.TypeClassifier.STRING},
+                result.argTypes());
+    }
+
+    @Test
+    void function_AnyArg_PrefersWildcardParam() {
+        QLFunctions functions = QLFunctions.builder()
+                .function("f", new StrArgFunction())
+                .function("f", new ObjectArgFunction())
+                .build();
+
+        // an ANY argument matches both overloads, but only the one declaring OBJECT is written to handle an
+        // argument of any type, so it is the more specific match
+        List<QLFunctionDescriptor.TypeClassifier> argTypes = List.of(QLFunctionDescriptor.TypeClassifier.ANY);
+
+        QLFunctionDescriptor result = functions.function("f", QLFunctionDescriptor.TypeClassifier.STRING, argTypes);
+
+        assertArrayEquals(
+                new QLFunctionDescriptor.TypeClassifier[]{QLFunctionDescriptor.TypeClassifier.OBJECT},
+                result.argTypes());
+    }
+
+    @Test
+    void function_EquallySpecific_FirstRegisteredWins() {
+
+        // neither overload is more specific than the other: each matches one argument exactly and the other via a
+        // wildcard. The tie must resolve to whichever was registered first
+        List<QLFunctionDescriptor.TypeClassifier> argTypes = List.of(
+                QLFunctionDescriptor.TypeClassifier.STRING,
+                QLFunctionDescriptor.TypeClassifier.STRING
+        );
+
+        QLFunctions strFirst = QLFunctions.builder()
+                .function("f", new StrObjArgFunction())
+                .function("f", new ObjStrArgFunction())
+                .build();
+
+        assertArrayEquals(
+                new QLFunctionDescriptor.TypeClassifier[]{
+                        QLFunctionDescriptor.TypeClassifier.STRING,
+                        QLFunctionDescriptor.TypeClassifier.OBJECT},
+                strFirst.function("f", QLFunctionDescriptor.TypeClassifier.STRING, argTypes).argTypes());
+
+        QLFunctions objFirst = QLFunctions.builder()
+                .function("f", new ObjStrArgFunction())
+                .function("f", new StrObjArgFunction())
+                .build();
+
+        assertArrayEquals(
+                new QLFunctionDescriptor.TypeClassifier[]{
+                        QLFunctionDescriptor.TypeClassifier.OBJECT,
+                        QLFunctionDescriptor.TypeClassifier.STRING},
+                objFirst.function("f", QLFunctionDescriptor.TypeClassifier.STRING, argTypes).argTypes());
+    }
+
+    private static class StrObjArgFunction implements Udf2<String, Object, String> {
+        @Override
+        public Exp<String> call(Exp<String> a, Exp<Object> b) {
+            return Exp.concat(a, b);
+        }
+    }
+
+    private static class ObjStrArgFunction implements Udf2<Object, String, String> {
+        @Override
+        public Exp<String> call(Exp<Object> a, Exp<String> b) {
+            return Exp.concat(a, b);
+        }
+    }
+
+    private static class StrArgFunction implements Udf1<String, String> {
+        @Override
+        public Exp<String> call(Exp<String> exp) {
+            return exp.castAsStr().trim();
+        }
+    }
+
+    private static class ObjectArgFunction implements Udf1<Object, String> {
+        @Override
+        public Exp<String> call(Exp<Object> exp) {
+            return exp.trim();
+        }
     }
 
     private static class IntNSumFunction implements UdfN<Number> {
