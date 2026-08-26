@@ -64,6 +64,16 @@ class QLFunctionDescriptorTest {
     }
 
     @Test
+    void returnType_ArrayValueType() {
+
+        // "split(..)" and friends produce an array-valued expression. String[] is not a CharSequence, so it must
+        // classify as OBJECT rather than leaking into the STRING namespace
+        assertEquals(
+                QLFunctionDescriptor.TypeClassifier.OBJECT,
+                QLFunctionDescriptor.ofUdf1(new ArrayFn()).name("split").build().returnType());
+    }
+
+    @Test
     void constantArg_CovariantReturn() {
 
         // a covariant return makes javac emit a bridge "call" with the same erased parameters. The bridge carries
@@ -97,6 +107,13 @@ class QLFunctionDescriptorTest {
         @Override
         public Condition call(Exp<Object> exp) {
             return exp.castAsBool();
+        }
+    }
+
+    public static class ArrayFn implements Udf1<String, String[]> {
+        @Override
+        public Exp<String[]> call(Exp<String> exp) {
+            return exp.castAsStr().split(',');
         }
     }
 

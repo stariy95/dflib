@@ -684,16 +684,6 @@ public interface ExpListener extends ParseTreeListener {
 	 */
 	void exitStrFn(ExpParser.StrFnContext ctx);
 	/**
-	 * Enter a parse tree produced by {@link ExpParser#castAsBool}.
-	 * @param ctx the parse tree
-	 */
-	void enterCastAsBool(ExpParser.CastAsBoolContext ctx);
-	/**
-	 * Exit a parse tree produced by {@link ExpParser#castAsBool}.
-	 * @param ctx the parse tree
-	 */
-	void exitCastAsBool(ExpParser.CastAsBoolContext ctx);
-	/**
 	 * Enter a parse tree produced by {@link ExpParser#castAsInt}.
 	 * @param ctx the parse tree
 	 */
@@ -844,16 +834,6 @@ public interface ExpListener extends ParseTreeListener {
 	 */
 	void exitNullableExp(ExpParser.NullableExpContext ctx);
 	/**
-	 * Enter a parse tree produced by {@link ExpParser#split}.
-	 * @param ctx the parse tree
-	 */
-	void enterSplit(ExpParser.SplitContext ctx);
-	/**
-	 * Exit a parse tree produced by {@link ExpParser#split}.
-	 * @param ctx the parse tree
-	 */
-	void exitSplit(ExpParser.SplitContext ctx);
-	/**
 	 * Enter a parse tree produced by {@link ExpParser#shift}.
 	 * @param ctx the parse tree
 	 */
@@ -913,26 +893,6 @@ public interface ExpListener extends ParseTreeListener {
 	 * @param ctx the parse tree
 	 */
 	void exitVConcat(ExpParser.VConcatContext ctx);
-	/**
-	 * Enter a parse tree produced by {@link ExpParser#list}.
-	 * @param ctx the parse tree
-	 */
-	void enterList(ExpParser.ListContext ctx);
-	/**
-	 * Exit a parse tree produced by {@link ExpParser#list}.
-	 * @param ctx the parse tree
-	 */
-	void exitList(ExpParser.ListContext ctx);
-	/**
-	 * Enter a parse tree produced by {@link ExpParser#set}.
-	 * @param ctx the parse tree
-	 */
-	void enterSet(ExpParser.SetContext ctx);
-	/**
-	 * Exit a parse tree produced by {@link ExpParser#set}.
-	 * @param ctx the parse tree
-	 */
-	void exitSet(ExpParser.SetContext ctx);
 	/**
 	 * Enter a parse tree produced by {@link ExpParser#array}.
 	 * @param ctx the parse tree

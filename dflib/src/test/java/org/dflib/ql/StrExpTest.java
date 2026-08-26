@@ -250,7 +250,11 @@ public class StrExpTest {
                 arguments("split('a,b,c', ',')", $strVal("a,b,c").split(",")),
                 arguments("split('a,b,c', ',', 2)", $strVal("a,b,c").split(",", 2)),
                 arguments("split(str(1), '|')", $str(1).split("|")),
-                arguments("split(trim(' a|b|c '), '|', 2)", $strVal(" a|b|c ").trim().split("|", 2))
+                arguments("split(trim(' a|b|c '), '|', 2)", $strVal(" a|b|c ").trim().split("|", 2)),
+
+                // an untyped column no longer needs a "str(..)" wrapper
+                arguments("split(a, ',')", $col("a").castAsStr().split(",")),
+                arguments("split(a, ',', 2)", $col("a").castAsStr().split(",", 2))
         );
     }
 

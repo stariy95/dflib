@@ -509,6 +509,54 @@ public class ExpParserUtils {
         return envFunction(fnName, QLFunctionDescriptor.TypeClassifier.STRING, args);
     }
 
+    public static boolean isBoolFn(String fnName) {
+        return Environment.commonEnv().getQLFunctions().boolFn(fnName);
+    }
+
+    public static Condition envBoolFn(String fnName, List<Exp<?>> args) {
+        return envFunction(fnName, QLFunctionDescriptor.TypeClassifier.BOOLEAN, args);
+    }
+
+    public static boolean isTimeFn(String fnName) {
+        return Environment.commonEnv().getQLFunctions().timeFn(fnName);
+    }
+
+    public static TimeExp envTimeFn(String fnName, List<Exp<?>> args) {
+        return envFunction(fnName, QLFunctionDescriptor.TypeClassifier.TIME, args);
+    }
+
+    public static boolean isDateFn(String fnName) {
+        return Environment.commonEnv().getQLFunctions().dateFn(fnName);
+    }
+
+    public static DateExp envDateFn(String fnName, List<Exp<?>> args) {
+        return envFunction(fnName, QLFunctionDescriptor.TypeClassifier.DATE, args);
+    }
+
+    public static boolean isDateTimeFn(String fnName) {
+        return Environment.commonEnv().getQLFunctions().dateTimeFn(fnName);
+    }
+
+    public static DateTimeExp envDateTimeFn(String fnName, List<Exp<?>> args) {
+        return envFunction(fnName, QLFunctionDescriptor.TypeClassifier.DATETIME, args);
+    }
+
+    public static boolean isOffsetDateTimeFn(String fnName) {
+        return Environment.commonEnv().getQLFunctions().offsetDateTimeFn(fnName);
+    }
+
+    public static OffsetDateTimeExp envOffsetDateTimeFn(String fnName, List<Exp<?>> args) {
+        return envFunction(fnName, QLFunctionDescriptor.TypeClassifier.OFFSETDATETIME, args);
+    }
+
+    public static boolean isObjectFn(String fnName) {
+        return Environment.commonEnv().getQLFunctions().objectFn(fnName);
+    }
+
+    public static Exp<?> envObjectFn(String fnName, List<Exp<?>> args) {
+        return envFunction(fnName, QLFunctionDescriptor.TypeClassifier.OBJECT, args);
+    }
+
     @SuppressWarnings("unchecked")
     private static <T extends Exp<?>> T envFunction(String fnName, QLFunctionDescriptor.TypeClassifier type, List<Exp<?>> args) {
         List<QLFunctionDescriptor.Arg> argDescriptors = args.stream()

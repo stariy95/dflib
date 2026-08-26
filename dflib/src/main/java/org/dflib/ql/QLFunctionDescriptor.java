@@ -264,6 +264,7 @@ public class QLFunctionDescriptor {
         DATE,
         TIME,
         DATETIME,
+        OFFSETDATETIME,
 
         /**
          * A type that is known to be a plain Object.
@@ -293,9 +294,10 @@ public class QLFunctionDescriptor {
                 return DATE;
             } else if (expressionType.equals(java.time.LocalTime.class)) {
                 return TIME;
-            } else if (expressionType.equals(java.time.LocalDateTime.class)
-                    || expressionType.equals(java.time.OffsetDateTime.class)) {
+            } else if (expressionType.equals(java.time.LocalDateTime.class)) {
                 return DATETIME;
+            } else if (expressionType.equals(java.time.OffsetDateTime.class)) {
+                return OFFSETDATETIME;
             } else {
                 return OBJECT;
             }
@@ -309,7 +311,7 @@ public class QLFunctionDescriptor {
                 case DateExp ignored -> TypeClassifier.DATE;
                 case TimeExp ignored -> TypeClassifier.TIME;
                 case DateTimeExp ignored -> TypeClassifier.DATETIME;
-                case OffsetDateTimeExp ignored -> TypeClassifier.DATETIME;
+                case OffsetDateTimeExp ignored -> TypeClassifier.OFFSETDATETIME;
                 case ScalarExp<?> ignored -> TypeClassifier.OBJECT;
                 // anything else still typed as Object (a bare column ref, "if", "ifNull", "shift", ...) is only
                 // resolved at eval time, so it is compatible with a parameter of any type

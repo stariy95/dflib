@@ -43,6 +43,42 @@ public class QLFunctions {
                 .isPresent();
     }
 
+    public boolean boolFn(String fnName) {
+        return descriptorsForTypeAndName(fnName, QLFunctionDescriptor.TypeClassifier.BOOLEAN)
+                .findAny()
+                .isPresent();
+    }
+
+    public boolean dateFn(String fnName) {
+        return descriptorsForTypeAndName(fnName, QLFunctionDescriptor.TypeClassifier.DATE)
+                .findAny()
+                .isPresent();
+    }
+
+    public boolean timeFn(String fnName) {
+        return descriptorsForTypeAndName(fnName, QLFunctionDescriptor.TypeClassifier.TIME)
+                .findAny()
+                .isPresent();
+    }
+
+    public boolean dateTimeFn(String fnName) {
+        return descriptorsForTypeAndName(fnName, QLFunctionDescriptor.TypeClassifier.DATETIME)
+                .findAny()
+                .isPresent();
+    }
+
+    public boolean offsetDateTimeFn(String fnName) {
+        return descriptorsForTypeAndName(fnName, QLFunctionDescriptor.TypeClassifier.OFFSETDATETIME)
+                .findAny()
+                .isPresent();
+    }
+
+    public boolean objectFn(String fnName) {
+        return descriptorsForTypeAndName(fnName, QLFunctionDescriptor.TypeClassifier.OBJECT)
+                .findAny()
+                .isPresent();
+    }
+
     public QLFunctionDescriptor function(String name, QLFunctionDescriptor.TypeClassifier type, List<Arg> args) {
         return descriptorsForTypeAndName(name, type)
                 // TODO: polymorphic functions support
@@ -135,7 +171,16 @@ public class QLFunctions {
                     .function("abs", new AbsFunction())
                     .function("sqrt", new SqrtFunction())
                     .function("round", new RoundFunction())
-                    .function("rowNum", new RowNumFunction());
+                    .function("rowNum", new RowNumFunction())
+                    .function("castAsBool", new CastAsBoolFunction())
+                    .function("matches", new MatchesFunction())
+                    .function("startsWith", new StartsWithFunction())
+                    .function("endsWith", new EndsWithFunction())
+                    .function("contains", new ContainsFunction())
+                    .function("list", new ListFunction())
+                    .function("set", new SetFunction())
+                    .function("split", new Split2Function())
+                    .function("split", new Split3Function());
         }
 
         public QLFunctions build() {

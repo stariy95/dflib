@@ -6,6 +6,8 @@ import org.dflib.ql.QLFunctionDescriptor.Arg;
 import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.ANY;
@@ -22,6 +24,60 @@ class QLFunctionsTest {
 
     private static Arg constant(TypeClassifier type) {
         return new Arg(type, true);
+    }
+
+    @Test
+    void returnTypePredicates_ScopedByReturnType() {
+
+        // the grammar picks the expression rule to parse a call with by asking these predicates about the name
+        // alone, so each must answer only for functions of its own return type
+        QLFunctions functions = QLFunctions.builder()
+                .function("sum", new Int2SumFunction())
+                .function("trim", new ObjectArgFunction())
+                .function("isTrue", new BoolFunction())
+                .function("split", new ArrayFunction())
+                .build();
+
+        assertTrue(functions.numFn("sum"));
+        assertFalse(functions.strFn("sum"));
+        assertFalse(functions.boolFn("sum"));
+        assertFalse(functions.objectFn("sum"));
+
+        assertTrue(functions.strFn("trim"));
+        assertFalse(functions.numFn("trim"));
+
+        assertTrue(functions.boolFn("isTrue"));
+        assertFalse(functions.objectFn("isTrue"));
+
+        // an array-valued function has no dedicated expression type, so it is reachable only as an OBJECT one
+        assertTrue(functions.objectFn("split"));
+        assertFalse(functions.strFn("split"));
+
+        assertFalse(functions.numFn("unknown"));
+        assertFalse(functions.boolFn("unknown"));
+        assertFalse(functions.objectFn("unknown"));
+        assertFalse(functions.timeFn("unknown"));
+        assertFalse(functions.dateFn("unknown"));
+        assertFalse(functions.dateTimeFn("unknown"));
+        assertFalse(functions.offsetDateTimeFn("unknown"));
+    }
+
+    @Test
+    void returnTypePredicates_TemporalTypesAreDistinct() {
+
+        // LocalDateTime and OffsetDateTime are separate expression types in the grammar, and must not share a
+        // classifier - otherwise a function of one would be looked up in the rule of the other
+        QLFunctions functions = QLFunctions.builder()
+                .function("asDate", new DateFunction())
+                .function("asOffsetDateTime", new OffsetDateTimeFunction())
+                .build();
+
+        assertTrue(functions.dateFn("asDate"));
+        assertFalse(functions.dateTimeFn("asDate"));
+        assertFalse(functions.offsetDateTimeFn("asDate"));
+
+        assertTrue(functions.offsetDateTimeFn("asOffsetDateTime"));
+        assertFalse(functions.dateTimeFn("asOffsetDateTime"));
     }
 
     @Test
@@ -334,6 +390,34 @@ class QLFunctionsTest {
                 IllegalArgumentException.class,
                 () -> QLFunctions.builder().function("sum", new ConstVarArgsFunction())
         );
+    }
+
+    private static class BoolFunction implements Udf1<Object, Boolean> {
+        @Override
+        public Condition call(Exp<Object> exp) {
+            return exp.castAsBool();
+        }
+    }
+
+    private static class ArrayFunction implements Udf1<String, String[]> {
+        @Override
+        public Exp<String[]> call(Exp<String> exp) {
+            return exp.castAsStr().split(',');
+        }
+    }
+
+    private static class DateFunction implements Udf1<Object, LocalDate> {
+        @Override
+        public DateExp call(Exp<Object> exp) {
+            return exp.castAsDate();
+        }
+    }
+
+    private static class OffsetDateTimeFunction implements Udf1<Object, OffsetDateTime> {
+        @Override
+        public OffsetDateTimeExp call(Exp<Object> exp) {
+            return exp.castAsOffsetDateTime();
+        }
     }
 
     private static class StrConstIntFunction implements Udf2<Object, Integer, String> {
