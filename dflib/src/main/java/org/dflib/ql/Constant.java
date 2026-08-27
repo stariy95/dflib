@@ -1,4 +1,4 @@
-package org.dflib.exp.fn;
+package org.dflib.ql;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;

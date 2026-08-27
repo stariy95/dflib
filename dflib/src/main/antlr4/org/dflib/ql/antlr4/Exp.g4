@@ -1,5 +1,61 @@
 grammar Exp;
 
+// *** How function calls are parsed ***
+//
+// Built-in functions are not rules of this grammar. They are entries of the "QLFunctions" registry (see
+// "DefaultQLFunctions"), which is reachable from the parser through "ExpParserUtils" and replaceable via
+// "Environment.setQLFunctions(..)". Every call by a registered name - built-in or custom - is matched by the single
+// "fnCall" rule, which hands the name and the parsed arguments to the registry and gets an "Exp" back. Adding a
+// function to the language is a registry entry, not a grammar change; a call by an unregistered name is reported by
+// the last alternative of "expression" as a missing function rather than as a syntax error.
+//
+// *** Why the typed rules still have a "fnCall" hook, and why it is guarded ***
+//
+// The result of a call is used in typed positions - "min(x) + 1" needs a NumExp - so every typed expression rule
+// ("numExp", "strExp", "boolExp", "timeExp", "dateExp", "dateTimeExp", "offsetDateTimeExp") has its own "fnCall"
+// alternative that casts the result to the type the rule produces. These alternatives are token-identical to the
+// untyped one in "expression", so without help ANTLR would see an ambiguity and resolve it by taking the
+// lowest-numbered alternative, mis-dispatching every call that belongs to another rule.
+//
+// The only tool that can prune them is a semantic predicate, and ANTLR hoists a predicate into prediction ONLY when
+// it is reachable from the start of the decision without consuming a token. A predicate placed after "name (" - let
+// alone after the arguments - is invisible to prediction and is only checked once the parser has already committed,
+// where it throws "FailedPredicateException" with no fall-through to another alternative. This is why each typed
+// "fnCall" hook carries a left-edge "typedCall(TYPE)" predicate that reads the function name straight off the token
+// stream, and why the predicates over-approximate (name only, no arity or argument types) - the "asXxx(..)" cast at
+// the call site is what turns a wrong guess into a positioned error message.
+//
+// *** Names whose return type depends on the arguments ***
+//
+// A name with a fixed return type is assigned to a rule by the name alone: "abs" is claimed by "numExp", is not
+// matched by the untyped alternative, and there is no ambiguity to resolve. A polymorphic name ("shift", "min",
+// "plusDays", ... - anything returning the type of one of its arguments, or with overloads of different types) can
+// not be assigned that way, so it is assigned by the syntax around the call, computed once per call site by
+// "ExpParserUtils.continuation(..)":
+//
+//   - a bare call, or a call in an argument position: untyped, i.e. the "fnCall" alternative of "expression";
+//   - an arithmetic or logical operator applied to the result, or a prefix "not" / unary minus in front of the call:
+//     the typed hook, since the operator demands a type;
+//   - a comparison, "between" or "in" directly after the call: "fnRelation", the single untyped relation rule that
+//     dispatches on the expression the call produced. Note "directly": in "(min(x)) > 5" the comparison belongs to
+//     the parenthesized expression, and the call inside it is free to be typed.
+//
+// *** What stays in the grammar ***
+//
+// Constructs that are not calls of an expression to an expression, and so can not be described by a registry
+// signature: the 13 column references (they take a column id - a name or an index - not an expression), "array(e,
+// className)" (its return type is computed from a class name known only at parse time), the "?" parameter
+// validators (the parameter source is a stateful cursor - never design a try/fail/retry dispatch over it),
+// operators, literals, "as", "asc" / "desc" and "in" lists.
+//
+// *** Warning ***
+//
+// A new grammar rule that takes a TYPED expression as an argument and has sibling alternatives told apart only by
+// that argument's type will be ambiguous for registry calls: at the decision point the argument is just
+// "IDENTIFIER (", identical in every alternative, and its type is not known until it is parsed. Either give the
+// alternatives distinct tokens, or take an untyped "expression" and dispatch on the parsed argument in Java (as
+// "fnRelation" does).
+
 @header {
 import java.math.BigInteger;
 import java.time.LocalDate;
@@ -8,21 +64,86 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.temporal.Temporal;
 import java.util.Arrays;
-import java.util.function.Function;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 import org.dflib.*;
+import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
 
 import static org.dflib.ql.antlr4.ExpParserUtils.*;
 }
 
-@members {
+// scoped to the parser: an unscoped "members" action is copied into the lexer as well, and the function call
+// dispatch below reads the token stream, which the lexer does not have
+@parser::members {
 // global state of the parser
 PositionalParamSource paramSource;
 
 public void setParameters(Object... params) {
     this.paramSource = new PositionalParamSource(params);
+}
+
+// *** Function call dispatch ***
+//
+// A call by a registered name is reachable from more than one rule at once: the untyped "fnCall" alternative of the
+// "expression" rule, the "fnCall" hook of whichever typed rule the name may return, and "fnRelation". These
+// alternatives are token-identical and more than one of them completes, which is a true ambiguity: ANTLR resolves
+// it in favor of the lowest-numbered alternative, but it never caches an ambiguous full-context decision, so the
+// prediction is re-simulated on every parse of every such call site. The predicates below keep exactly one of them
+// viable.
+//
+// A name with a fixed return type is assigned to a rule by the name alone: a name that a typed rule claims is not
+// matched by the untyped alternative, and vice versa. A name whose return type depends on its arguments is assigned
+// by the syntax around the call - see "continuation" in ExpParserUtils.
+
+// Cached per call site: a predicate is evaluated once for every alternative that hoists it and once more when the
+// parser commits, and a parser instance only ever parses one input
+private final java.util.Map<Integer, Integer> continuations = new java.util.HashMap<>();
+
+/**
+ * True if the call at the current position must be resolved by the untyped "fnCall" alternative of "expression".
+ */
+boolean untypedCall() {
+    String name = _input.LT(1).getText();
+    // a name no typed rule claims is always resolved here. A polymorphic one only when nothing is applied to the
+    // result of the call: an operator makes it a typed expression, a comparison makes it "fnRelation"
+    return isFn(name)
+        && (!claimedByTyped(name)
+            || (isPolymorphicFn(name) && continuation() == ExpParserUtils.CONTINUATION_NONE));
+}
+
+/**
+ * True if the call at the current position may be resolved by the typed expression rule that produces the given
+ * type. Like "mayReturn" itself this over-approximates - it ignores the arity and the argument types - and the
+ * "asXxx" cast at the call site is what turns a wrong guess into a diagnosable error.
+ */
+boolean typedCall(TypeClassifier type) {
+    String name = _input.LT(1).getText();
+    if (!mayReturn(name, type)) {
+        return false;
+    }
+
+    if (!isPolymorphicFn(name)) {
+        return true;
+    }
+
+    // Which other rule this hook competes with depends on where it was reached from, and "_ctx" is the context of
+    // the rule that owns the decision being predicted - not of the rule the predicate was hoisted from.
+    //
+    // In "expression" the competitor is the untyped alternative, and only an operator applied to the result of the
+    // call can decide in favor of a type. Anywhere else - an argument declared as a typed expression, the
+    // right-hand side of a typed relation, an operand of an operator - the typed rule was reached because the
+    // surrounding syntax demands that very type, and the only competitor is "fnRelation", which owns comparisons.
+    return _ctx instanceof ExpressionContext
+        ? continuation() == ExpParserUtils.CONTINUATION_TYPED
+        : continuation() != ExpParserUtils.CONTINUATION_COMPARISON;
+}
+
+private int continuation() {
+    return continuations.computeIfAbsent(
+        _input.LT(1).getTokenIndex(),
+        i -> ExpParserUtils.continuation(_input)
+    );
 }
 }
 
@@ -72,16 +193,37 @@ sorterArray returns [Sorter[] sorters]
  * An expression represents a single value or a combination of values, operators, and functions.
  */
 expression returns [Exp<?> exp]
-    : PARAMETER { $exp = val(paramSource.next()); }
+    // parenthesized expressions come first: a typed rule's own "'(' X ')'" alternative would otherwise claim the
+    // input and then fail on a body of a different type, e.g. "(min(x))"
+    : '(' expression ')' { $exp = $expression.exp; }
+    // an untyped function call. Nothing here constrains its return type, so it is resolved by name and arguments
+    // alone. The predicate keeps this alternative and the "fnCall" hooks of the typed rules below mutually
+    // exclusive: a call that some typed rule claims is not matched here
+    | { untypedCall() }? fnCall { $exp = $fnCall.exp; }
+    | PARAMETER { $exp = val(paramSource.next()); }
     | boolExp { $exp = $boolExp.exp; }
     | numExp { $exp = $numExp.exp; }
     | strExp { $exp = $strExp.exp; }
     | temporalExp { $exp = $temporalExp.exp; }
     | genericExp { $exp = $genericExp.exp; }
-    | aggregateFn { $exp = $aggregateFn.exp; }
-    | genericFn { $exp = $genericFn.exp; }
+    | array { $exp = $array.exp; }
     | NULL { $exp = val(null); }
-    | '(' expression ')' { $exp = $expression.exp; }
+    // last: the shape of a call by an unregistered name. Reachable only when "fnCall" was pruned by its predicate,
+    // and exists to report a missing function rather than a syntax error at the opening parenthesis
+    | { !isFn(_input.LT(1).getText()) }? IDENTIFIER '(' (expression (',' expression)*)? ')' {
+        $exp = unknownFunction($IDENTIFIER);
+    }
+    ;
+
+/**
+ * A call of a function from the QL function registry, resolved by name and argument types with no expectation about
+ * its return type. This is the single place where a registered function is turned into an expression; the typed
+ * expression rules reach it through a name-only predicate and cast the result.
+ */
+fnCall returns [Exp<?> exp]
+    : { isFn(_input.LT(1).getText()) }? IDENTIFIER '(' (args+=expression (',' args+=expression)*)? ')' {
+        $exp = fn($IDENTIFIER, $args.stream().map(ctx -> ctx.exp).collect(Collectors.toList()));
+    }
     ;
 
 /// **Numeric expressions**
@@ -94,8 +236,7 @@ numExp returns [NumExp<?> exp]
     : numScalar { $exp = (NumExp<?>) val($numScalar.value); }
     | PARAMETER { $exp = numParam(paramSource); }
     | numColumn { $exp = $numColumn.exp; }
-    | numFn { $exp = $numFn.exp; }
-    | numAgg { $exp = $numAgg.exp; }
+    | { typedCall(TypeClassifier.NUMERIC) }? fnCall { $exp = asNum($fnCall.exp, $fnCall.start); }
     | SUB numExp { $exp = negate($numExp.exp); }
     | a=numExp op=(MUL | DIV | MOD) b=numExp { $exp = mulDivOrMod($a.exp, $b.exp, $op); }
     | a=numExp op=(ADD | SUB) b=numExp { $exp = addOrSub($a.exp, $b.exp, $op); }
@@ -113,8 +254,10 @@ boolExp returns [Condition exp]
     : boolScalar { $exp = Exp.\$boolVal($boolScalar.value); }
     | PARAMETER { $exp = boolParam(paramSource); }
     | boolColumn { $exp = $boolColumn.exp; }
-    | boolFn { $exp = $boolFn.exp; }
+    // "relation" must come before the function hook: a call used as the left-hand side of a comparison is matched by
+    // both, and only "relation" can also consume the operator and the right-hand side
     | relation { $exp = $relation.exp; }
+    | { typedCall(TypeClassifier.BOOLEAN) }? fnCall { $exp = asCondition($fnCall.exp, $fnCall.start); }
     | NOT boolExp { $exp = Exp.not($boolExp.exp); }
     | a=boolExp AND b=boolExp { $exp = Exp.and($a.exp, $b.exp); }
     | a=boolExp OR b=boolExp { $exp = Exp.or($a.exp, $b.exp); }
@@ -133,7 +276,7 @@ strExp returns [StrExp exp]
     : strScalar { $exp = Exp.\$strVal($strScalar.value); }
     | PARAMETER { $exp = strParam(paramSource); }
     | strColumn { $exp = $strColumn.exp; }
-    | strFn { $exp = $strFn.exp; }
+    | { typedCall(TypeClassifier.STRING) }? fnCall { $exp = asStr($fnCall.exp, $fnCall.start); }
     | '(' strExp ')' { $exp = $strExp.exp; }
     ;
 
@@ -156,7 +299,7 @@ temporalExp returns [Exp<? extends Temporal> exp]
  */
 timeExp returns [TimeExp exp]
     : timeColumn { $exp = $timeColumn.exp; }
-    | timeFn { $exp = $timeFn.exp; }
+    | { typedCall(TypeClassifier.TIME) }? fnCall { $exp = asTime($fnCall.exp, $fnCall.start); }
     | PARAMETER { $exp = timeParam(paramSource); }
     ;
 
@@ -165,7 +308,7 @@ timeExp returns [TimeExp exp]
  */
 dateExp returns [DateExp exp]
     : dateColumn { $exp = $dateColumn.exp; }
-    | dateFn { $exp = $dateFn.exp; }
+    | { typedCall(TypeClassifier.DATE) }? fnCall { $exp = asDate($fnCall.exp, $fnCall.start); }
     | PARAMETER { $exp = dateParam(paramSource); }
     ;
 
@@ -174,7 +317,7 @@ dateExp returns [DateExp exp]
  */
 dateTimeExp returns [DateTimeExp exp]
     : dateTimeColumn { $exp = $dateTimeColumn.exp; }
-    | dateTimeFn { $exp = $dateTimeFn.exp; }
+    | { typedCall(TypeClassifier.DATETIME) }? fnCall { $exp = asDateTime($fnCall.exp, $fnCall.start); }
     | PARAMETER { $exp = dateTimeParam(paramSource); }
     ;
 
@@ -185,7 +328,9 @@ dateTimeExp returns [DateTimeExp exp]
  */
 offsetDateTimeExp returns [OffsetDateTimeExp exp]
     : offsetDateTimeColumn { $exp = $offsetDateTimeColumn.exp; }
-    | offsetDateTimeFn { $exp = $offsetDateTimeFn.exp; }
+    | { typedCall(TypeClassifier.OFFSETDATETIME) }? fnCall {
+        $exp = asOffsetDateTime($fnCall.exp, $fnCall.start);
+    }
     | PARAMETER { $exp = offsetDateTimeParam(paramSource); }
     ;
 
@@ -490,7 +635,8 @@ identifier returns [String id]
  * These expressions compare two values using operators like >, <, =, !=, etc.
  */
 relation returns [Condition exp]
-    : numRelation { $exp = $numRelation.exp; }
+    : { isPolymorphicFn(_input.LT(1).getText()) }? fnRelation { $exp = $fnRelation.exp; }
+    | numRelation { $exp = $numRelation.exp; }
     | strRelation { $exp = $strRelation.exp; }
     | timeRelation { $exp = $timeRelation.exp; }
     | dateRelation { $exp = $dateRelation.exp; }
@@ -498,6 +644,27 @@ relation returns [Condition exp]
     | offsetDateTimeRelation { $exp = $offsetDateTimeRelation.exp; }
     | genericRelation { $exp = $genericRelation.exp; }
     | '(' relation ')' { $exp = $relation.exp; }
+    ;
+
+/**
+ * A relational expression whose left-hand side is a function call whose return type depends on its arguments, and so
+ * can not be routed to one of the typed relation rules by its name. The right-hand side is parsed untyped and the
+ * comparison is built by dispatching on the type of the expression the call produced, using the same factories the
+ * typed rules use.
+ *
+ * Parameters:
+ *  - The left-hand side function call.
+ *  - The right-hand side expression.
+ *  - The upper bound expression (for BETWEEN).
+ */
+fnRelation returns [Condition exp]
+    : a=fnCall (
+        : op=(GT | GE | LT | LE | EQ | NE) b=expression { $exp = rel($a.exp, $op, $b.exp); }
+        | BETWEEN b=expression AND c=expression { $exp = between($a.exp, $b.exp, $c.exp, false); }
+        | NOT BETWEEN b=expression AND c=expression { $exp = between($a.exp, $b.exp, $c.exp, true); }
+        | IN l=anyScalarList { $exp = in($a.exp, $l.value, false); }
+        | NOT IN l=anyScalarList { $exp = in($a.exp, $l.value, true); }
+    )
     ;
 
 /**
@@ -702,498 +869,7 @@ genericRelation returns [Condition exp] locals [BiFunction<Exp<?>, Exp<?>, Condi
     )
     ;
 
-/// **Functions**
-
-/**
- * Numeric functions, including casting, counting, row number, absolute value, rounding, and field functions.
- * These functions operate on or produce numeric values.
- */
-numFn returns [NumExp<?> exp] locals [Function<NumExp<?>, NumExp<?>> fn]
-    : castAsInt { $exp = $castAsInt.exp; }
-    | castAsLong { $exp = $castAsLong.exp; }
-    | castAsBigint { $exp = $castAsBigint.exp; }
-    | castAsFloat { $exp = $castAsFloat.exp; }
-    | castAsDouble { $exp = $castAsDouble.exp; }
-    | castAsDecimal { $exp = $castAsDecimal.exp; }
-    | timeFieldFn { $exp = $timeFieldFn.exp; }
-    | dateFieldFn { $exp = $dateFieldFn.exp; }
-    | dateTimeFieldFn { $exp = $dateTimeFieldFn.exp; }
-    | offsetDateTimeFieldFn { $exp = $offsetDateTimeFieldFn.exp; }
-    | { isNumFn(_input.LT(1).getText()) }? IDENTIFIER '(' (args+=expression (',' args+=expression)*)? ')' {
-          $exp = envNumFn($IDENTIFIER.text, $args.stream().map(ctx -> ctx.exp).collect(Collectors.toList()));
-    }
-    | COUNT ('(' b=boolExp? ')') { $exp = $ctx.b != null ? Exp.count($b.exp) : Exp.count(); }
-    | SCALE '(' e=numExp ',' s=integerScalar ')' { $exp = $e.exp.castAsDecimal().scale( $s.value.intValue() ); }
-    ;
-
-/**
- * Time field functions.
- *
- * Supports extracting fields like hour, minute, second and millisecond from Time expressions.
- *
- * Parameters:
- *  - The TimeExp from which to extract the field.
- */
-timeFieldFn returns [NumExp<Integer> exp] locals [Function<TimeExp, NumExp<Integer>> fn]
-     : (
-         : HOUR { $fn = e -> e.hour(); }
-         | MINUTE { $fn = e -> e.minute(); }
-         | SECOND { $fn = e -> e.second(); }
-         | MILLISECOND { $fn = e -> e.millisecond(); }
-     ) '(' e=timeExp ')' { $exp = $fn.apply($e.exp); }
-     ;
-
-/**
- * Date field functions.
- *
- * Supports extracting fields like year, month, and day from Date expressions.
- *
- * Parameters:
- *  - The DateExp from which to extract the field.
- */
-dateFieldFn returns [NumExp<Integer> exp] locals [Function<DateExp, NumExp<Integer>> fn]
-     : (
-         : YEAR { $fn = e -> e.year(); }
-         | MONTH { $fn = e -> e.month(); }
-         | DAY { $fn = e -> e.day(); }
-     ) '(' e=dateExp ')' { $exp = $fn.apply($e.exp); }
-     ;
-
-/**
- * Datetime field functions.
- *
- * Supports extracting fields like year, month, day, hour, minute, second,
- * and millisecond from DateTime expressions.
- *
- * Parameters:
- *  - The DateTimeExp from which to extract the field.
- */
-dateTimeFieldFn returns [NumExp<Integer> exp] locals [Function<DateTimeExp, NumExp<Integer>> fn]
-     : (
-         : YEAR { $fn = e -> e.year(); }
-         | MONTH { $fn = e -> e.month(); }
-         | DAY { $fn = e -> e.day(); }
-         | HOUR { $fn = e -> e.hour(); }
-         | MINUTE { $fn = e -> e.minute(); }
-         | SECOND { $fn = e -> e.second(); }
-         | MILLISECOND { $fn = e -> e.millisecond(); }
-     ) '(' e=dateTimeExp ')' { $exp = $fn.apply($e.exp); }
-     ;
-
-/**
- * OffsetDateTime field functions.
- *
- * Supports extracting fields like year, month, day, hour, minute, second,
- * and millisecond from OffsetDateTime expressions.
- *
- * Parameters:
- *  - The OffsetDateTimeExp from which to extract the field.
- */
-offsetDateTimeFieldFn returns [NumExp<Integer> exp] locals [Function<OffsetDateTimeExp, NumExp<Integer>> fn]
-    : (
-        : YEAR { $fn = e -> e.year(); }
-        | MONTH { $fn = e -> e.month(); }
-        | DAY { $fn = e -> e.day(); }
-        | HOUR { $fn = e -> e.hour(); }
-        | MINUTE { $fn = e -> e.minute(); }
-        | SECOND { $fn = e -> e.second(); }
-        | MILLISECOND { $fn = e -> e.millisecond(); }
-    ) '(' e=offsetDateTimeExp ')' { $exp = $fn.apply($e.exp); }
-    ;
-
-/**
- * Boolean functions, resolved against the environment function registry.
- *
- * Parameters:
- *  - The input expression(s) for the boolean function. The types and number of parameters depend on the specific
- *    function. For example, `matches` takes an expression and a string literal, while `castAsBool` takes a single
- *    expression of any type.
- */
-boolFn returns [Condition exp]
-    // lookahead and check that the function name is a boolean function
-    : { isBoolFn(_input.LT(1).getText()) }? IDENTIFIER '(' (args+=expression (',' args+=expression)*)? ')' {
-        $exp = envBoolFn($IDENTIFIER.text, $args.stream().map(ctx -> ctx.exp).collect(Collectors.toList()));
-    }
-    ;
-
-
-/**
- * Time functions, including casting and arithmetic operations. These
- * functions operate on time values.
- *
- * Parameters:
- *  - The base TimeExp.
- *  - An integer representing the value to add (e.g., hours, minutes).
- */
-timeFn returns [TimeExp exp] locals [BiFunction<TimeExp, Integer, TimeExp> fn]
-    : castAsTime { $exp = $castAsTime.exp; }
-    | { isTimeFn(_input.LT(1).getText()) }? IDENTIFIER '(' (args+=expression (',' args+=expression)*)? ')' {
-        $exp = envTimeFn($IDENTIFIER.text, $args.stream().map(ctx -> ctx.exp).collect(Collectors.toList()));
-    }
-    | (
-        : PLUS_HOURS { $fn = (a, b) -> a.plusHours(b); }
-        | PLUS_MINUTES { $fn = (a, b) -> a.plusMinutes(b); }
-        | PLUS_SECONDS { $fn = (a, b) -> a.plusSeconds(b); }
-        | PLUS_MILLISECONDS { $fn = (a, b) -> a.plusMilliseconds(b); }
-        | PLUS_NANOS { $fn = (a, b) -> a.plusNanos(b); }
-    ) '(' a=timeExp ',' b=integerScalar ')' { $exp = $fn.apply($a.exp, $b.value.intValue()); }
-    ;
-
-/**
- * Date functions, enabling casting and arithmetic operations on date values.
- *
- * Parameters:
- *  - The base DateExp.
- *  - An integer representing the value to add (e.g., years, months).
- */
-dateFn returns [DateExp exp] locals [BiFunction<DateExp, Integer, DateExp> fn]
-    : castAsDate { $exp = $castAsDate.exp; }
-    | { isDateFn(_input.LT(1).getText()) }? IDENTIFIER '(' (args+=expression (',' args+=expression)*)? ')' {
-        $exp = envDateFn($IDENTIFIER.text, $args.stream().map(ctx -> ctx.exp).collect(Collectors.toList()));
-    }
-    | (
-        : PLUS_YEARS { $fn = (a, b) -> a.plusYears(b); }
-        | PLUS_MONTHS { $fn = (a, b) -> a.plusMonths(b); }
-        | PLUS_WEEKS { $fn = (a, b) -> a.plusWeeks(b); }
-        | PLUS_DAYS { $fn = (a, b) -> a.plusDays(b); }
-    ) '(' a=dateExp ',' b=integerScalar ')' { $exp = $fn.apply($a.exp, $b.value.intValue()); }
-    ;
-
-/**
- * Datetime functions, including casting and arithmetic operations for datetime values.
- *
- * Parameters:
- *  - The base DateTimeExp.
- *  - An integer representing the value to add (e.g., years, hours).
- */
-dateTimeFn returns [DateTimeExp exp] locals [BiFunction<DateTimeExp, Integer, DateTimeExp> fn]
-    : castAsDateTime { $exp = $castAsDateTime.exp; }
-    | { isDateTimeFn(_input.LT(1).getText()) }? IDENTIFIER '(' (args+=expression (',' args+=expression)*)? ')' {
-        $exp = envDateTimeFn($IDENTIFIER.text, $args.stream().map(ctx -> ctx.exp).collect(Collectors.toList()));
-    }
-    | (
-        : PLUS_YEARS { $fn = (a, b) -> a.plusYears(b); }
-        | PLUS_MONTHS { $fn = (a, b) -> a.plusMonths(b); }
-        | PLUS_WEEKS { $fn = (a, b) -> a.plusWeeks(b); }
-        | PLUS_DAYS { $fn = (a, b) -> a.plusDays(b); }
-        | PLUS_HOURS { $fn = (a, b) -> a.plusHours(b); }
-        | PLUS_MINUTES { $fn = (a, b) -> a.plusMinutes(b); }
-        | PLUS_SECONDS { $fn = (a, b) -> a.plusSeconds(b); }
-        | PLUS_MILLISECONDS { $fn = (a, b) -> a.plusMilliseconds(b); }
-        | PLUS_NANOS { $fn = (a, b) -> a.plusNanos(b); }
-    ) '(' a=dateTimeExp ',' b=integerScalar ')' { $exp = $fn.apply($a.exp, $b.value.intValue()); }
-    ;
-
-/**
- * Datetime functions with an offset from UTC/Greenwich.  Supports casting and
- * arithmetic operations on timezone-aware datetime values.
- *
- * Parameters:
- *  - The base OffsetDateTimeExp.
- *  - An integer representing the value to add (e.g., years, hours).
- */
-offsetDateTimeFn returns [OffsetDateTimeExp exp] locals [BiFunction<OffsetDateTimeExp, Integer, OffsetDateTimeExp> fn]
-    : castAsOffsetDateTime { $exp = $castAsOffsetDateTime.exp; }
-    | { isOffsetDateTimeFn(_input.LT(1).getText()) }? IDENTIFIER '(' (args+=expression (',' args+=expression)*)? ')' {
-        $exp = envOffsetDateTimeFn($IDENTIFIER.text, $args.stream().map(ctx -> ctx.exp).collect(Collectors.toList()));
-    }
-    | (
-        : PLUS_YEARS { $fn = (a, b) -> a.plusYears(b); }
-        | PLUS_MONTHS { $fn = (a, b) -> a.plusMonths(b); }
-        | PLUS_WEEKS { $fn = (a, b) -> a.plusWeeks(b); }
-        | PLUS_DAYS { $fn = (a, b) -> a.plusDays(b); }
-        | PLUS_HOURS { $fn = (a, b) -> a.plusHours(b); }
-        | PLUS_MINUTES { $fn = (a, b) -> a.plusMinutes(b); }
-        | PLUS_SECONDS { $fn = (a, b) -> a.plusSeconds(b); }
-        | PLUS_MILLISECONDS { $fn = (a, b) -> a.plusMilliseconds(b); }
-        | PLUS_NANOS { $fn = (a, b) -> a.plusNanos(b); }
-    ) '(' a=offsetDateTimeExp ',' b=integerScalar ')' { $exp = $fn.apply($a.exp, $b.value.intValue()); }
-    ;
-
-/**
- * String functions, covering casting, trimming, substrings, and concatenation.
- *
- * Parameters:
- *  - The input StrExp (for functions like SUBSTR, TRIM).
- *  - The starting position (an integer, for SUBSTR).
- *  - The length (an integer, optional for SUBSTR).
- *  - A variable number of StrExp arguments (for CONCAT).
- */
-strFn returns [StrExp exp]
-    : castAsStr { $exp = $castAsStr.exp; }
-    // lookahead and check that the function name is a string function
-    | { isStrFn(_input.LT(1).getText()) }? IDENTIFIER '(' (args+=expression (',' args+=expression)*)? ')' {
-        $exp = envStrFn($IDENTIFIER.text, $args.stream().map(ctx -> ctx.exp).collect(Collectors.toList()));
-    }
-    | CONCAT ('(' (args+=expression (',' args+=expression)*)? ')') {
-        $exp = !$args.isEmpty() ? Exp.concat($args.stream().map(a -> a.exp).toArray()) : Exp.concat();
-    }
-    ;
-
-/// **Cast functions**
-
-/**
- * The cast-to-integer function, converting an expression to an integer.
- *
- * Parameters:
- *  - The expression to be cast.
- */
-castAsInt returns [NumExp<Integer> exp]
-    : CAST_AS_INT '(' expression ')' { $exp = $expression.exp.castAsInt(); }
-    ;
-
-/**
- * Casts an expression to a long integer.
- *
- * Parameters:
- *  - The expression to be cast.
- */
-castAsLong returns [NumExp<Long> exp]
-    : CAST_AS_LONG '(' expression ')' { $exp = $expression.exp.castAsLong(); }
-    ;
-
-/**
- * Casts an expression to a BigInteger value.
- *
- * Parameters:
- *  - The expression to be cast.
- */
-castAsBigint returns [NumExp<BigInteger> exp]
-    : CAST_AS_BIGINT '(' expression ')' { $exp = $expression.exp.castAsBigint(); }
-    ;
-
-/**
- * Casts an expression to a floating-point value (float).
- *
- * Parameters:
- *  - The expression to be cast.
- */
-castAsFloat returns [NumExp<Float> exp]
-    : CAST_AS_FLOAT '(' expression ')' { $exp = $expression.exp.castAsFloat(); }
-    ;
-
-/**
- * Casts an expression to a double-precision floating-point value.
- *
- * Parameters:
- *  - The expression to be cast.
- */
-castAsDouble returns [NumExp<Double> exp]
-    : CAST_AS_DOUBLE '(' expression ')' { $exp = $expression.exp.castAsDouble(); }
-    ;
-
-/**
- * Casts an expression to a Decimal value. Decimals are used for high-precision arithmetic.
- *
- * Parameters:
- *  - The expression to be cast.
- */
-castAsDecimal returns [DecimalExp exp]
-    : CAST_AS_DECIMAL '(' expression ')' { $exp = $expression.exp.castAsDecimal(); }
-    ;
-
-/**
- * Casts an expression to a string.
- *
- * Parameters:
- *  - The expression to be cast.
- */
-castAsStr returns [StrExp exp]
-    : CAST_AS_STR '(' expression ')' { $exp = $expression.exp.castAsStr(); }
-    ;
-
-/**
- * Casts an expression to a Time value. Supports optional formatting.
- *
- * Parameters:
- *  - The expression to be cast.
- *  - A format string specifying how to interpret the time (optional).
- */
-castAsTime returns [TimeExp exp]
-    : CAST_AS_TIME '(' e=expression (',' f=strScalar )? ')' {
-        $exp = $ctx.f != null ? $e.exp.castAsTime($f.value) : $e.exp.castAsTime();
-    }
-    ;
-
-/**
- * Casts an expression to a Date value.  Handles optional date formatting.
- *
- * Parameters:
- *  - The expression to be cast.
- *  - A format string specifying how to interpret the date (optional).
- */
-castAsDate returns [DateExp exp]
-    : CAST_AS_DATE '(' e=expression (',' f=strScalar )? ')' {
-        $exp = $ctx.f != null ? $e.exp.castAsDate($f.value) : $e.exp.castAsDate();
-    }
-    ;
-
-/**
- * Casts an expression to a DateTime value, with optional formatting.
- *
- * Parameters:
- *  - The expression to be cast.
- *  - A format string specifying how to interpret the datetime (optional).
- */
-castAsDateTime returns [DateTimeExp exp]
-    : CAST_AS_DATETIME '(' e=expression (',' f=strScalar )? ')' {
-        $exp = $ctx.f != null ? $e.exp.castAsDateTime($f.value) : $e.exp.castAsDateTime();
-    }
-    ;
-
-/**
- * A cast operation to convert an expression into an OffsetDateTime.
- *
- * Parameters:
- *  - The expression to be cast.
- *  - A format string specifying how to interpret the OffsetDateTime (optional).
- */
-castAsOffsetDateTime returns [OffsetDateTimeExp exp]
-    : CAST_AS_OFFSET_DATETIME '(' e=expression (',' f=strScalar )? ')' {
-        $exp = $ctx.f != null ? $e.exp.castAsOffsetDateTime($f.value) : $e.exp.castAsOffsetDateTime();
-    }
-    ;
-
-/// **Special functions**
-
-/**
- * Special functions that provide control flow, data manipulation, or other type-agnostic operations.
- */
-genericFn returns [Exp<?> exp]
-    : ifExp { $exp = $ifExp.exp; }
-    | ifNull { $exp = $ifNull.exp; }
-    | shift { $exp = $shift.exp; }
-    // lookahead and check that the function name is a function with a non-specific return type
-    | { isObjectFn(_input.LT(1).getText()) }? IDENTIFIER '(' (args+=expression (',' args+=expression)*)? ')' {
-        $exp = envObjectFn($IDENTIFIER.text, $args.stream().map(ctx -> ctx.exp).collect(Collectors.toList()));
-    }
-    ;
-
-/**
- * An IF expression, a conditional expression that returns one of two values based on a condition.
- *
- * Parameters:
- *  - The boolean condition.
- *  - The expression to return if the condition is true.
- *  - The expression to return if the condition is false.
- */
-ifExp returns [Exp<?> exp]
-    : IF '(' condition=boolExp ',' trueExp=expression ',' elseExpression=expression ')' {
-        $exp = Exp.ifExp($condition.exp, (Exp)$trueExp.exp, (Exp)$elseExpression.exp);
-    }
-    ;
-
-/**
- * An IF_NULL expression. This function returns the first expression if it is not null;
- * otherwise, it returns the second expression.
- *
- * Parameters:
- *  - The expression to check for null.
- *  - The expression to return if the first expression is null. Must be the same type as the first expression.
- */
-ifNull returns [Exp<?> exp]
-    : IF_NULL '(' nullableExp ',' expression ')' { $exp = ifNullExp($nullableExp.exp, $expression.exp); }
-    ;
-
-//@ doc:no-diagram
-//@ doc:nodoc
-//@ doc:name nullable expression
-nullableExp returns [Exp<?> exp]
-    : expression { $exp = $expression.exp; }
-    ;
-
-/**
- * A SHIFT expression, shifting values in a sequence forward or backward.
- * Head or tail gaps produced by the shift are filled with the provided filler value or null.
- *
- * Parameters:
- *  - The expression to shift.
- *  - The integer shift amount (positive for forward, negative for backward).
- *  - The default value to use for positions that become empty after shifting (optional).
- */
-shift returns [Exp<?> exp]
-    : SHIFT '(' (
-        be=boolExp ',' i=integerScalar (',' bs=boolScalar)? {
-            $exp = $ctx.bs != null ? $be.exp.shift($i.value.intValue(), $bs.value) : $be.exp.shift($i.value.intValue());
-        }
-        | ne=numExp ',' i=integerScalar (',' ns=numScalar)? {
-            $exp = $ctx.ns != null ? ((NumExp<Number>) $ne.exp).shift($i.value.intValue(), (Number) $ns.value) : $ne.exp.shift($i.value.intValue());
-        }
-        | se=strExp ',' i=integerScalar (',' ss=strScalar)? {
-            $exp = $ctx.ss != null ? $se.exp.shift($i.value.intValue(), $ss.value) : $se.exp.shift($i.value.intValue());
-        }
-        | ge=genericShiftExp ',' i=integerScalar (',' s=anyScalar)? {
-            $exp = $ctx.s != null ? ((Exp)$ge.exp).shift($i.value.intValue(), (Object)$s.value) : $ge.exp.shift($i.value.intValue());
-        }
-    ) ')'
-    ;
-
-//@ doc:inline
-genericShiftExp returns [Exp<?> exp]
-    : genericExp { $exp = $genericExp.exp; }
-    | aggregateFn { $exp = $aggregateFn.exp; }
-    | genericFn { $exp = $genericFn.exp; }
-    // TODO: temporal exp here, or a special case in the shift rule
-    ;
-
 /// **Aggregate expressions**
-
-/**
- * Aggregate expressions, such as MIN, MAX, SUM, AVG, etc.
- * Aggregates perform calculations across multiple rows of data.
- */
-aggregateFn returns [Exp<?> exp]
-    : genericAgg { $exp = $genericAgg.exp; }
-    | numAgg { $exp = $numAgg.exp; }
-    | timeAgg { $exp = $timeAgg.exp; }
-    | dateAgg { $exp = $dateAgg.exp; }
-    | dateTimeAgg { $exp = $dateTimeAgg.exp; }
-    | strAgg { $exp = $strAgg.exp; }
-    ;
-
-/**
- * Generic aggregate functions that could be used with any expression type.
- */
-genericAgg returns [Exp<?> exp]
-    : positionalAgg { $exp = $positionalAgg.exp; }
-    | vConcat { $exp = $vConcat.exp; }
-    | array { $exp = $array.exp; }
-    ;
-
-/**
- * Positional aggregate expressions, like FIRST and LAST. These functions
- * return the first or last value encountered in a sequence.
- *
- * Parameters:
- *  - The expression from which to get the first or last value.
- *  - A boolean expression to filter the data before finding the first element (optional).
- */
-positionalAgg returns [Exp<?> exp]
-    : FIRST '(' e=expression (',' b=boolExp)? ')' { $exp = $ctx.b != null ? $e.exp.first($b.exp) : $e.exp.first(); }
-    | LAST '(' e=expression ')' { $exp = $e.exp.last(); } // TODO: bool condition
-    ;
-
-/**
- * Creates an aggregating expression whose "reduce" operation returns a String of concatenated filtered Series values
- * separated by the delimiter preceded by the prefix and followed by the suffix.
- *
- * Parameters:
- *  - The expression to reduce
- *  - [optional] filter condition
- *  - delimiter to join values with
- *  - [optional] prefix to add
- *  - [optional] suffix to add
- */
-vConcat returns [Exp<?> exp]
-    : VCONCAT '(' e=expression (',' c=boolExp)? ',' d=strScalar (',' p=strScalar ',' s=strScalar)? ')' {
-        $exp = $e.exp.vConcat(
-            $ctx.c == null ? null : $ctx.c.exp,
-            $d.value,
-            $ctx.p == null ? "" : $ctx.p.value,
-            $ctx.s == null ? "" : $ctx.s.value
-        );
-    }
-    ;
 
 /**
  * Creates an aggregating expression whose "reduce" operation returns an array containing all Series values.
@@ -1204,110 +880,9 @@ array returns [Exp<?> exp]
     ;
 
 /**
- * Numeric aggregate expressions, calculating aggregates like MIN, MAX, SUM, AVG, MEDIAN, and QUANTILE.
- *
- * Parameters:
- *  - The numeric column expression to aggregate.
- *  - A boolean expression to filter the rows involved in the aggregation (optional).
- *  - The quantile value to compute (between 0 and 1, for QUANTILE).
- */
-numAgg returns [NumExp<?> exp] locals [BiFunction<NumExp, Condition, NumExp> aggFn]
-    : (
-        : MIN { $aggFn = (c, b) -> c.min(b); }
-        | MAX { $aggFn = (c, b) -> c.max(b); }
-        | SUM { $aggFn = (c, b) -> c.sum(b); }
-        | AVG { $aggFn = (c, b) -> c.avg(b); }
-        | MEDIAN { $aggFn = (c, b) -> c.median(b); }
-    ) '(' c=numExp (',' b=boolExp)? ')' { $exp = $aggFn.apply($c.exp, $ctx.b != null ? $b.exp: null); }
-    | CUMSUM '(' c=numExp ')' { $exp = $c.exp.cumSum(); } // Cumulative Sum, no filter currently supported
-    | QUANTILE '(' c=numExp ',' q=numScalar (',' b=boolExp)? ')' {
-        $exp = $ctx.b != null
-            ? $c.exp.quantile($q.value.doubleValue(), $b.exp)
-            : $c.exp.quantile($q.value.doubleValue());
-    }
-    ;
-
-/**
- * Time aggregate expressions, performing operations like MIN, MAX, AVG, MEDIAN and QUANTILE on time values.
- *
- * Parameters:
- *  - The time column expression to aggregate.
- *  - A boolean expression to filter the rows involved in the aggregation (optional).
- *  - The quantile value to compute (between 0 and 1, for QUANTILE).
- */
-timeAgg returns [TimeExp exp] locals [BiFunction<TimeExp, Condition, TimeExp> aggFn]
-    : (
-        : MIN { $aggFn = (c, b) -> c.min(b); }
-        | MAX { $aggFn = (c, b) -> c.max(b); }
-        | AVG { $aggFn = (c, b) -> c.avg(b); }
-        | MEDIAN { $aggFn = (c, b) -> c.median(b); }
-    ) '(' c=timeExp (',' b=boolExp)? ')' { $exp = $aggFn.apply($c.exp, $ctx.b != null ? $b.exp: null); }
-    | QUANTILE '(' c=timeExp ',' q=numScalar (',' b=boolExp)? ')' {  // Quantile of times
-        $exp = $ctx.b != null ? $c.exp.quantile($q.value.doubleValue(), $b.exp) : $c.exp.quantile($q.value.doubleValue());
-    }
-    ;
-
-/**
- * Date aggregate expressions, computing aggregates like MIN, MAX, AVG, MEDIAN, and QUANTILE over dates.
- *
- * Parameters:
- *  - The date column expression to aggregate.
- *  - A boolean expression to filter the rows involved in the aggregation (optional).
- *  - The quantile value to compute (between 0 and 1, for QUANTILE).
- */
-dateAgg returns [DateExp exp] locals [BiFunction<DateExp, Condition, DateExp> aggFn]
-    : (
-        : MIN { $aggFn = (c, b) -> c.min(b); }
-        | MAX { $aggFn = (c, b) -> c.max(b); }
-        | AVG { $aggFn = (c, b) -> c.avg(b); }
-        | MEDIAN { $aggFn = (c, b) -> c.median(b); }
-    ) '(' c=dateExp (',' b=boolExp)? ')' { $exp = $aggFn.apply($c.exp, $ctx.b != null ? $b.exp: null); }
-    | QUANTILE '(' c=dateExp ',' q=numScalar (',' b=boolExp)? ')' {
-        $exp = $ctx.b != null
-            ? $c.exp.quantile($q.value.doubleValue(), $b.exp)
-            : $c.exp.quantile($q.value.doubleValue());
-    }
-    ;
-
-/**
- * Datetime aggregate expressions, performing MIN, MAX, AVG, MEDIAN, or QUANTILE calculations over datetime values.
- *
- * Parameters:
- *  - The datetime column expression to aggregate.
- *  - A boolean expression to filter the rows involved in the aggregation (optional).
- *  - The quantile value to compute (between 0 and 1, for QUANTILE).
- */
-dateTimeAgg returns [DateTimeExp exp] locals [BiFunction<DateTimeExp, Condition, DateTimeExp> aggFn]
-    : (
-        : MIN { $aggFn = (c, b) -> c.min(b); }
-        | MAX { $aggFn = (c, b) -> c.max(b); }
-        | AVG { $aggFn = (c, b) -> c.avg(b); }
-        | MEDIAN { $aggFn = (c, b) -> c.median(b); }
-    ) '(' c=dateTimeExp (',' b=boolExp)? ')' { $exp = $aggFn.apply($c.exp, $ctx.b != null ? $b.exp: null); }
-    | QUANTILE '(' c=dateTimeExp ',' q=numScalar (',' b=boolExp)? ')' {
-        $exp = $ctx.b != null
-            ? $c.exp.quantile($q.value.doubleValue(), $b.exp)
-            : $c.exp.quantile($q.value.doubleValue());
-    }
-    ;
-
-/**
- * String aggregate expressions, specifically MIN and MAX. These find the lexicographically minimum or maximum string value.
- *
- * Parameters:
- *  - The string expression to aggregate.
- *  - A filtering condition (optional).
- */
-strAgg returns [StrExp exp] locals [BiFunction<StrExp, Condition, StrExp> aggFn]
-    : (
-        : MIN { $aggFn = (c, b) -> c.min(b); }
-        | MAX { $aggFn = (c, b) -> c.max(b); }
-    ) '(' c=strExp (',' b=boolExp)? ')' { $exp = $aggFn.apply($c.exp, $ctx.b != null ? $b.exp: null); }
-    ;
-
-/**
- * Rule that consumes all function names in the context of an identifier.
- * Any new function name should be copied here.
+ * Rule that lets the keywords of the grammar be used where an identifier is expected, e.g. as a column name.
+ * It lists the tokens only, so a name added to the function registry does not belong here - a registered name is
+ * lexed as an IDENTIFIER to begin with.
  */
 //@ doc:inline
 fnName returns [String id]
@@ -1321,53 +896,10 @@ fnName returns [String id]
     | DECIMAL
     | STR
     | COL
-    | CAST_AS_INT
-    | CAST_AS_LONG
-    | CAST_AS_BIGINT
-    | CAST_AS_FLOAT
-    | CAST_AS_DOUBLE
-    | CAST_AS_DECIMAL
-    | CAST_AS_STR
-    | CAST_AS_TIME
-    | CAST_AS_DATE
-    | CAST_AS_DATETIME
-    | CAST_AS_OFFSET_DATETIME
-    | IF
-    | IF_NULL
-    | SHIFT
-    | CONCAT
     | DATE
     | TIME
     | DATETIME
     | OFFSET_DATETIME
-    | YEAR
-    | MONTH
-    | DAY
-    | HOUR
-    | MINUTE
-    | SECOND
-    | MILLISECOND
-    | PLUS_YEARS
-    | PLUS_MONTHS
-    | PLUS_WEEKS
-    | PLUS_DAYS
-    | PLUS_HOURS
-    | PLUS_MINUTES
-    | PLUS_SECONDS
-    | PLUS_MILLISECONDS
-    | PLUS_NANOS
-    | SCALE
-    | COUNT
-    | SUM
-    | CUMSUM
-    | MIN
-    | MAX
-    | AVG
-    | MEDIAN
-    | QUANTILE
-    | FIRST
-    | LAST
-    | VCONCAT
     | ARRAY
     | ASC
     | DESC
@@ -1465,54 +997,7 @@ STR: 'str';
 //@ doc:inline
 COL: 'col';
 
-// *Cast functions*
-
-//@ doc:inline
-CAST_AS_INT: 'castAsInt';
-
-//@ doc:inline
-CAST_AS_LONG: 'castAsLong';
-
-//@ doc:inline
-CAST_AS_BIGINT: 'castAsBigint';
-
-//@ doc:inline
-CAST_AS_FLOAT: 'castAsFloat';
-
-//@ doc:inline
-CAST_AS_DOUBLE: 'castAsDouble';
-
-//@ doc:inline
-CAST_AS_DECIMAL: 'castAsDecimal';
-
-//@ doc:inline
-CAST_AS_STR: 'castAsStr';
-
-//@ doc:inline
-CAST_AS_TIME: 'castAsTime';
-
-//@ doc:inline
-CAST_AS_DATE: 'castAsDate';
-
-//@ doc:inline
-CAST_AS_DATETIME: 'castAsDateTime';
-
-//@ doc:inline
-CAST_AS_OFFSET_DATETIME: 'castAsOffsetDateTime';
-
 // *Functions*
-
-//@ doc:inline
-IF: 'if';
-
-//@ doc:inline
-IF_NULL: 'ifNull';
-
-//@ doc:inline
-SHIFT: 'shift';
-
-//@ doc:inline
-CONCAT: 'concat';
 
 //@ doc:inline
 DATE: 'date';
@@ -1526,91 +1011,7 @@ DATETIME: 'dateTime';
 //@ doc:inline
 OFFSET_DATETIME: 'offsetDateTime';
 
-//@ doc:inline
-YEAR: 'year';
-
-//@ doc:inline
-MONTH: 'month';
-
-//@ doc:inline
-DAY: 'day';
-
-//@ doc:inline
-HOUR: 'hour';
-
-//@ doc:inline
-MINUTE: 'minute';
-
-//@ doc:inline
-SECOND: 'second';
-
-//@ doc:inline
-MILLISECOND: 'millisecond';
-
-//@ doc:inline
-PLUS_YEARS: 'plusYears';
-
-//@ doc:inline
-PLUS_MONTHS: 'plusMonths';
-
-//@ doc:inline
-PLUS_WEEKS: 'plusWeeks';
-
-//@ doc:inline
-PLUS_DAYS: 'plusDays';
-
-//@ doc:inline
-PLUS_HOURS: 'plusHours';
-
-//@ doc:inline
-PLUS_MINUTES: 'plusMinutes';
-
-//@ doc:inline
-PLUS_SECONDS: 'plusSeconds';
-
-//@ doc:inline
-PLUS_MILLISECONDS: 'plusMilliseconds';
-
-//@ doc:inline
-PLUS_NANOS: 'plusNanos';
-
-//@ doc:inline
-SCALE: 'scale';
-
 // *Aggregates*
-
-//@ doc:inline
-COUNT: 'count';
-
-//@ doc:inline
-SUM: 'sum';
-
-//@ doc:inline
-CUMSUM: 'cumSum';
-
-//@ doc:inline
-MIN: 'min';
-
-//@ doc:inline
-MAX: 'max';
-
-//@ doc:inline
-AVG: 'avg';
-
-//@ doc:inline
-MEDIAN: 'median';
-
-//@ doc:inline
-QUANTILE: 'quantile';
-
-//@ doc:inline
-FIRST: 'first';
-
-//@ doc:inline
-LAST: 'last';
-
-//@ doc:inline
-VCONCAT: 'vConcat';
 
 //@ doc:inline
 ARRAY: 'array';

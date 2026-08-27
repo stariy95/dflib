@@ -1,7 +1,6 @@
 package org.dflib.ql;
 
 import org.dflib.*;
-import org.dflib.exp.fn.Constant;
 import org.dflib.ql.QLFunctionDescriptor.Arg;
 import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
 import org.junit.jupiter.api.Test;
@@ -11,8 +10,12 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.ANY;
+import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.BOOLEAN;
+import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.DATE;
+import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.DATETIME;
 import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.NUMERIC;
 import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.OBJECT;
+import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.OFFSETDATETIME;
 import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.STRING;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -27,67 +30,63 @@ class QLFunctionsTest {
     }
 
     @Test
-    void returnTypePredicates_ScopedByReturnType() {
+    void mayReturn_ScopedByReturnType() {
 
-        // the grammar picks the expression rule to parse a call with by asking these predicates about the name
-        // alone, so each must answer only for functions of its own return type
-        QLFunctions functions = QLFunctions.builder()
+        // the grammar picks the expression rule to parse a call with by asking this predicate about the name
+        // alone, so it must answer only for functions of the type being asked about
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("sum", new Int2SumFunction())
                 .function("trim", new ObjectArgFunction())
                 .function("isTrue", new BoolFunction())
                 .function("split", new ArrayFunction())
                 .build();
 
-        assertTrue(functions.numFn("sum"));
-        assertFalse(functions.strFn("sum"));
-        assertFalse(functions.boolFn("sum"));
-        assertFalse(functions.objectFn("sum"));
+        assertTrue(functions.mayReturn("sum", NUMERIC));
+        assertFalse(functions.mayReturn("sum", STRING));
+        assertFalse(functions.mayReturn("sum", BOOLEAN));
+        assertFalse(functions.mayReturn("sum", OBJECT));
 
-        assertTrue(functions.strFn("trim"));
-        assertFalse(functions.numFn("trim"));
+        assertTrue(functions.mayReturn("trim", STRING));
+        assertFalse(functions.mayReturn("trim", NUMERIC));
 
-        assertTrue(functions.boolFn("isTrue"));
-        assertFalse(functions.objectFn("isTrue"));
+        assertTrue(functions.mayReturn("isTrue", BOOLEAN));
+        assertFalse(functions.mayReturn("isTrue", OBJECT));
 
         // an array-valued function has no dedicated expression type, so it is reachable only as an OBJECT one
-        assertTrue(functions.objectFn("split"));
-        assertFalse(functions.strFn("split"));
+        assertTrue(functions.mayReturn("split", OBJECT));
+        assertFalse(functions.mayReturn("split", STRING));
 
-        assertFalse(functions.numFn("unknown"));
-        assertFalse(functions.boolFn("unknown"));
-        assertFalse(functions.objectFn("unknown"));
-        assertFalse(functions.timeFn("unknown"));
-        assertFalse(functions.dateFn("unknown"));
-        assertFalse(functions.dateTimeFn("unknown"));
-        assertFalse(functions.offsetDateTimeFn("unknown"));
+        for (TypeClassifier t : TypeClassifier.values()) {
+            assertFalse(functions.mayReturn("unknown", t), t.name());
+        }
     }
 
     @Test
-    void returnTypePredicates_TemporalTypesAreDistinct() {
+    void mayReturn_TemporalTypesAreDistinct() {
 
         // LocalDateTime and OffsetDateTime are separate expression types in the grammar, and must not share a
         // classifier - otherwise a function of one would be looked up in the rule of the other
-        QLFunctions functions = QLFunctions.builder()
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("asDate", new DateFunction())
                 .function("asOffsetDateTime", new OffsetDateTimeFunction())
                 .build();
 
-        assertTrue(functions.dateFn("asDate"));
-        assertFalse(functions.dateTimeFn("asDate"));
-        assertFalse(functions.offsetDateTimeFn("asDate"));
+        assertTrue(functions.mayReturn("asDate", DATE));
+        assertFalse(functions.mayReturn("asDate", DATETIME));
+        assertFalse(functions.mayReturn("asDate", OFFSETDATETIME));
 
-        assertTrue(functions.offsetDateTimeFn("asOffsetDateTime"));
-        assertFalse(functions.dateTimeFn("asOffsetDateTime"));
+        assertTrue(functions.mayReturn("asOffsetDateTime", OFFSETDATETIME));
+        assertFalse(functions.mayReturn("asOffsetDateTime", DATETIME));
     }
 
     @Test
     void function_Matching2ArgTypes() {
-        QLFunctions functions = QLFunctions.builder()
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("sum", new Int2SumFunction())
                 .function("sum", new Int3SumFunction())
                 .build();
 
-        QLFunctionDescriptor result = functions.function("sum", NUMERIC, List.of(arg(NUMERIC), arg(NUMERIC)));
+        QLFunctionDescriptor result = functions.function("sum", List.of(arg(NUMERIC), arg(NUMERIC)));
 
         assertNotNull(result);
         assertEquals("sum", result.name());
@@ -97,12 +96,12 @@ class QLFunctionsTest {
 
     @Test
     void function_Matching3ArgTypes() {
-        QLFunctions functions = QLFunctions.builder()
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("sum", new Int2SumFunction())
                 .function("sum", new Int3SumFunction())
                 .build();
 
-        QLFunctionDescriptor result = functions.function("sum", NUMERIC,
+        QLFunctionDescriptor result = functions.function("sum",
                 List.of(arg(NUMERIC), arg(NUMERIC), arg(NUMERIC)));
 
         assertNotNull(result);
@@ -112,118 +111,88 @@ class QLFunctionsTest {
     }
 
     @Test
-    void function_NoMatchingName() {
-        QLFunctions functions = QLFunctions.builder()
-                .function("sum", new Int2SumFunction())
-                .build();
-        List<Arg> argTypes = List.of(arg(NUMERIC), arg(NUMERIC));
-
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> functions.function("multiply", NUMERIC, argTypes)
-        );
-        assertEquals("Function NUMERIC multiply([NUMERIC, NUMERIC]) not found", exception.getMessage());
-    }
-
-    @Test
     void function_WrongArgTypes() {
-        QLFunctions functions = QLFunctions.builder()
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("sum", new Int2SumFunction())
                 .build();
         List<Arg> wrongArgTypes = List.of(arg(NUMERIC), arg(STRING));
 
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> functions.function("sum", NUMERIC, wrongArgTypes)
+                () -> functions.function("sum", wrongArgTypes)
         );
-        assertEquals("Function NUMERIC sum([NUMERIC, STRING]) not found", exception.getMessage());
-    }
-
-    @Test
-    void function_WrongReturnType() {
-        QLFunctions functions = QLFunctions.builder()
-                .function("concat", (Udf2<String, String, String>) Exp::concat)
-                .build();
-        List<Arg> argTypes = List.of(arg(STRING), arg(STRING));
-
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> functions.function("concat", NUMERIC, argTypes)
-        );
-        assertEquals("Function NUMERIC concat([STRING, STRING]) not found", exception.getMessage());
+        assertEquals("Function sum([NUMERIC, STRING]) not found", exception.getMessage());
     }
 
     @Test
     void function_ConstantArg_RenderedInNotFoundMessage() {
-        QLFunctions functions = QLFunctions.builder()
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("substr", new StrConstIntFunction())
                 .build();
 
         // a plain argument renders as the bare type name, a constant one is called out
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> functions.function("substr", STRING, List.of(arg(STRING), constant(STRING)))
+                () -> functions.function("substr", List.of(arg(STRING), constant(STRING)))
         );
-        assertEquals("Function STRING substr([STRING, const STRING]) not found", exception.getMessage());
+        assertEquals("Function substr([STRING, const STRING]) not found", exception.getMessage());
     }
 
     @Test
     void function_VarArgs_MatchesAnyArity() {
-        QLFunctions functions = QLFunctions.builder()
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("sum", new IntNSumFunction())
                 .build();
 
         // match with 2 args
-        QLFunctionDescriptor result2 = functions.function("sum", NUMERIC, List.of(arg(NUMERIC), arg(NUMERIC)));
+        QLFunctionDescriptor result2 = functions.function("sum", List.of(arg(NUMERIC), arg(NUMERIC)));
         assertNotNull(result2);
         assertTrue(result2.isVarArgs());
 
         // match with 3 args
-        QLFunctionDescriptor result3 = functions.function("sum", NUMERIC,
-                List.of(arg(NUMERIC), arg(NUMERIC), arg(NUMERIC)));
+        QLFunctionDescriptor result3 = functions.function("sum", List.of(arg(NUMERIC), arg(NUMERIC), arg(NUMERIC)));
         assertNotNull(result3);
         assertTrue(result3.isVarArgs());
 
         // match with 1 arg
-        QLFunctionDescriptor result1 = functions.function("sum", NUMERIC, List.of(arg(NUMERIC)));
+        QLFunctionDescriptor result1 = functions.function("sum", List.of(arg(NUMERIC)));
         assertNotNull(result1);
         assertTrue(result1.isVarArgs());
 
         // match with 0 args
-        QLFunctionDescriptor result0 = functions.function("sum", NUMERIC, List.of());
+        QLFunctionDescriptor result0 = functions.function("sum", List.of());
         assertNotNull(result0);
         assertTrue(result0.isVarArgs());
     }
 
     @Test
     void function_VarArgs_FixedArityPreferred() {
-        QLFunctions functions = QLFunctions.builder()
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("sum", new Int2SumFunction())
                 .function("sum", new IntNSumFunction())
                 .build();
 
         // 2-arg call should prefer the fixed-arity Udf2
-        QLFunctionDescriptor result2 = functions.function("sum", NUMERIC, List.of(arg(NUMERIC), arg(NUMERIC)));
+        QLFunctionDescriptor result2 = functions.function("sum", List.of(arg(NUMERIC), arg(NUMERIC)));
         assertNotNull(result2);
         assertFalse(result2.isVarArgs());
         assertEquals(2, result2.args().length);
 
         // 3-arg call should fall back to varargs
-        QLFunctionDescriptor result3 = functions.function("sum", NUMERIC,
-                List.of(arg(NUMERIC), arg(NUMERIC), arg(NUMERIC)));
+        QLFunctionDescriptor result3 = functions.function("sum", List.of(arg(NUMERIC), arg(NUMERIC), arg(NUMERIC)));
         assertNotNull(result3);
         assertTrue(result3.isVarArgs());
     }
 
     @Test
     void function_AnyArgType_MatchesTypedParam() {
-        QLFunctions functions = QLFunctions.builder()
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("sum", new Int2SumFunction())
                 .build();
 
         // ANY is the classification of an argument whose type is only known at eval time. It must be accepted by a
         // parameter of any declared type
-        QLFunctionDescriptor result = functions.function("sum", NUMERIC, List.of(arg(ANY), arg(ANY)));
+        QLFunctionDescriptor result = functions.function("sum", List.of(arg(ANY), arg(ANY)));
 
         assertNotNull(result);
         assertEquals(2, result.args().length);
@@ -231,7 +200,7 @@ class QLFunctionsTest {
 
     @Test
     void function_ObjectArgType_DoesNotMatchTypedParam() {
-        QLFunctions functions = QLFunctions.builder()
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("sum", new Int2SumFunction())
                 .build();
 
@@ -241,7 +210,7 @@ class QLFunctionsTest {
 
         assertThrows(
                 IllegalArgumentException.class,
-                () -> functions.function("sum", NUMERIC, argTypes)
+                () -> functions.function("sum", argTypes)
         );
     }
 
@@ -249,26 +218,26 @@ class QLFunctionsTest {
     void function_ExactMatchPreferredOverWildcard() {
 
         // the wildcard overload is registered first, so specificity rather than registration order has to decide
-        QLFunctions functions = QLFunctions.builder()
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("f", new ObjectArgFunction())
                 .function("f", new StrArgFunction())
                 .build();
 
-        QLFunctionDescriptor result = functions.function("f", STRING, List.of(arg(STRING)));
+        QLFunctionDescriptor result = functions.function("f", List.of(arg(STRING)));
 
         assertArrayEquals(new Arg[]{arg(STRING)}, result.args());
     }
 
     @Test
     void function_AnyArg_PrefersWildcardParam() {
-        QLFunctions functions = QLFunctions.builder()
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("f", new StrArgFunction())
                 .function("f", new ObjectArgFunction())
                 .build();
 
         // an ANY argument matches both overloads, but only the one declaring OBJECT is written to handle an
         // argument of any type, so it is the more specific match
-        QLFunctionDescriptor result = functions.function("f", STRING, List.of(arg(ANY)));
+        QLFunctionDescriptor result = functions.function("f", List.of(arg(ANY)));
 
         assertArrayEquals(new Arg[]{arg(OBJECT)}, result.args());
     }
@@ -280,32 +249,32 @@ class QLFunctionsTest {
         // wildcard. The tie must resolve to whichever was registered first
         List<Arg> argTypes = List.of(arg(STRING), arg(STRING));
 
-        QLFunctions strFirst = QLFunctions.builder()
+        QLFunctions strFirst = QLFunctions.builder().noDefaultFunctions()
                 .function("f", new StrObjArgFunction())
                 .function("f", new ObjStrArgFunction())
                 .build();
 
         assertArrayEquals(
                 new Arg[]{arg(STRING), arg(OBJECT)},
-                strFirst.function("f", STRING, argTypes).args());
+                strFirst.function("f", argTypes).args());
 
-        QLFunctions objFirst = QLFunctions.builder()
+        QLFunctions objFirst = QLFunctions.builder().noDefaultFunctions()
                 .function("f", new ObjStrArgFunction())
                 .function("f", new StrObjArgFunction())
                 .build();
 
         assertArrayEquals(
                 new Arg[]{arg(OBJECT), arg(STRING)},
-                objFirst.function("f", STRING, argTypes).args());
+                objFirst.function("f", argTypes).args());
     }
 
     @Test
     void function_ConstantParam_MatchesConstantArg() {
-        QLFunctions functions = QLFunctions.builder()
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("substr", new StrConstIntFunction())
                 .build();
 
-        QLFunctionDescriptor result = functions.function("substr", STRING, List.of(arg(STRING), constant(NUMERIC)));
+        QLFunctionDescriptor result = functions.function("substr", List.of(arg(STRING), constant(NUMERIC)));
 
         assertNotNull(result);
         assertArrayEquals(new Arg[]{arg(OBJECT), constant(NUMERIC)}, result.args());
@@ -313,7 +282,7 @@ class QLFunctionsTest {
 
     @Test
     void function_ConstantParam_RejectsNonConstantArg() {
-        QLFunctions functions = QLFunctions.builder()
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("substr", new StrConstIntFunction())
                 .build();
 
@@ -322,33 +291,32 @@ class QLFunctionsTest {
 
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> functions.function("substr", STRING, argTypes)
+                () -> functions.function("substr", argTypes)
         );
-        assertEquals("Function STRING substr([STRING, NUMERIC]) not found", exception.getMessage());
+        assertEquals("Function substr([STRING, NUMERIC]) not found", exception.getMessage());
     }
 
     @Test
     void function_ConstantParam_UntypedArgStillRejected() {
-        QLFunctions functions = QLFunctions.builder()
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("substr", new StrConstIntFunction())
                 .build();
 
         // ANY is compatible with any parameter type, but it is by definition not a constant
         assertThrows(
                 IllegalArgumentException.class,
-                () -> functions.function("substr", STRING, List.of(arg(STRING), arg(ANY)))
+                () -> functions.function("substr", List.of(arg(STRING), arg(ANY)))
         );
     }
 
     @Test
     void function_PlainParam_AcceptsConstantArg() {
-        QLFunctions functions = QLFunctions.builder()
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("sum", new Int2SumFunction())
                 .build();
 
         // passing a literal to an unconstrained parameter stays legal - this is what "abs(-5)" does
-        QLFunctionDescriptor result = functions.function("sum", NUMERIC,
-                List.of(constant(NUMERIC), constant(NUMERIC)));
+        QLFunctionDescriptor result = functions.function("sum", List.of(constant(NUMERIC), constant(NUMERIC)));
 
         assertNotNull(result);
     }
@@ -357,23 +325,23 @@ class QLFunctionsTest {
     void function_ConstancyDistinguishesOverloads() {
 
         // the same signature with a different constancy is a different function, and both must register
-        QLFunctions functions = QLFunctions.builder()
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("substr", new StrConstIntFunction())
                 .function("substr", new StrIntFunction())
                 .build();
 
         assertArrayEquals(
                 new Arg[]{arg(OBJECT), constant(NUMERIC)},
-                functions.function("substr", STRING, List.of(arg(STRING), constant(NUMERIC))).args());
+                functions.function("substr", List.of(arg(STRING), constant(NUMERIC))).args());
 
         assertArrayEquals(
                 new Arg[]{arg(OBJECT), arg(NUMERIC)},
-                functions.function("substr", STRING, List.of(arg(STRING), arg(NUMERIC))).args());
+                functions.function("substr", List.of(arg(STRING), arg(NUMERIC))).args());
     }
 
     @Test
     void function_SameFunctionIsADuplicate() {
-        QLFunctions.Builder builder = QLFunctions.builder().function("substr", new StrConstIntFunction());
+        QLFunctions.Builder builder = QLFunctions.builder().noDefaultFunctions().function("substr", new StrConstIntFunction());
 
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
@@ -388,8 +356,334 @@ class QLFunctionsTest {
         // varargs declare no individual arguments, so a constant marker on them would be silently dropped
         assertThrows(
                 IllegalArgumentException.class,
-                () -> QLFunctions.builder().function("sum", new ConstVarArgsFunction())
+                () -> QLFunctions.builder().noDefaultFunctions().function("sum", new ConstVarArgsFunction())
         );
+    }
+
+    // --- single-hook resolution API (name -> descriptor, no return type filter) ---
+
+    @Test
+    void isFn() {
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions().function("sum", new Int2SumFunction()).build();
+
+        assertTrue(functions.isFn("sum"));
+        assertFalse(functions.isFn("unknown"));
+    }
+
+    @Test
+    void mayReturn_FixedReturnType() {
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                .function("sum", new Int2SumFunction())
+                .function("trim", new ObjectArgFunction())
+                .build();
+
+        assertTrue(functions.mayReturn("sum", NUMERIC));
+        assertFalse(functions.mayReturn("sum", STRING));
+        assertTrue(functions.mayReturn("trim", STRING));
+        assertFalse(functions.mayReturn("unknown", NUMERIC));
+    }
+
+    @Test
+    void mayReturn_OverloadsWithDifferentReturnTypes() {
+
+        // "mayReturn" is a per-name over-approximation: it must answer for the union of the name's overloads
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                .function("f", new ObjectArgFunction())
+                .function("f", new Int2SumFunction())
+                .build();
+
+        assertTrue(functions.mayReturn("f", STRING));
+        assertTrue(functions.mayReturn("f", NUMERIC));
+        assertFalse(functions.mayReturn("f", BOOLEAN));
+    }
+
+    @Test
+    void mayReturn_Polymorphic() {
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                .function("shift", QLFunctionSignature.signature()
+                        .returningArgType(0)
+                        .arg(OBJECT)
+                        .constArg(NUMERIC)
+                        .as(args -> args.get(0)))
+                .build();
+
+        // a function returning the type of its argument may return any concrete type, but never ANY: ANY is the
+        // absence of a type and no typed expression rule can consume it
+        for (TypeClassifier t : TypeClassifier.values()) {
+            assertEquals(t != ANY, functions.mayReturn("shift", t), t.name());
+        }
+    }
+
+    @Test
+    void mayReturn_AnyReturningFunction() {
+
+        // "first"/"if"/"ifNull" produce expressions that implement no typed interface, so no typed rule may claim
+        // them. They stay reachable from the untyped expression position, which never asks "mayReturn"
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                .function("first", QLFunctionSignature.signature()
+                        .returning(ANY)
+                        .arg(OBJECT)
+                        .as(args -> args.get(0).first()))
+                .build();
+
+        assertTrue(functions.isFn("first"));
+        assertTrue(functions.mayReturn("first", ANY));
+        assertFalse(functions.mayReturn("first", NUMERIC));
+        assertFalse(functions.mayReturn("first", STRING));
+        assertFalse(functions.mayReturn("first", OBJECT));
+    }
+
+    @Test
+    void hasTypedReturn() {
+
+        // the question the grammar asks to decide whether a call site belongs to a typed rule or to the untyped
+        // expression position: it is the union of "mayReturn" over the types that have a rule of their own
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                .function("sum", new Int2SumFunction())
+                .function("split", QLFunctionSignature.signature()
+                        .returning(OBJECT)
+                        .arg(OBJECT)
+                        .as(args -> args.get(0).list()))
+                .function("first", QLFunctionSignature.signature()
+                        .returning(ANY)
+                        .arg(OBJECT)
+                        .as(args -> args.get(0).first()))
+                .function("shift", QLFunctionSignature.signature()
+                        .returningArgType(0)
+                        .arg(OBJECT)
+                        .constArg(NUMERIC)
+                        .as(args -> args.get(0)))
+                .build();
+
+        assertTrue(functions.hasTypedReturn("sum"));
+
+        // a polymorphic function may return any concrete type, so every typed rule claims it
+        assertTrue(functions.hasTypedReturn("shift"));
+
+        // neither a plain object nor a type known only at eval time has a rule of its own
+        assertFalse(functions.hasTypedReturn("split"));
+        assertFalse(functions.hasTypedReturn("first"));
+
+        assertFalse(functions.hasTypedReturn("unknown"));
+    }
+
+    @Test
+    void isPolymorphicFn() {
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                // a single fixed return type
+                .function("trim", new ObjectArgFunction())
+                // two overloads, same fixed return type
+                .function("sum", new Int2SumFunction())
+                .function("sum", new Int3SumFunction())
+                // two overloads with different fixed return types
+                .function("f", new ObjectArgFunction())
+                .function("f", new Int2SumFunction())
+                // returns the type of its argument
+                .function("shift", QLFunctionSignature.signature()
+                        .returningArgType(0)
+                        .arg(OBJECT)
+                        .as(args -> args.get(0)))
+                .build();
+
+        assertFalse(functions.isPolymorphicFn("trim"));
+        assertFalse(functions.isPolymorphicFn("sum"));
+        assertTrue(functions.isPolymorphicFn("f"));
+        assertTrue(functions.isPolymorphicFn("shift"));
+        assertFalse(functions.isPolymorphicFn("unknown"));
+    }
+
+    @Test
+    void functionByName_IgnoresReturnType() {
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                .function("f", new ObjectArgFunction())
+                .function("f", new Int2SumFunction())
+                .build();
+
+        assertEquals(STRING, functions.function("f", List.of(arg(STRING))).returnType());
+        assertEquals(NUMERIC, functions.function("f", List.of(arg(NUMERIC), arg(NUMERIC))).returnType());
+    }
+
+    @Test
+    void functionByName_NotFound() {
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions().function("sum", new Int2SumFunction()).build();
+        List<Arg> argTypes = List.of(arg(NUMERIC), arg(NUMERIC));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> functions.function("multiply", argTypes)
+        );
+        assertEquals("Function multiply([NUMERIC, NUMERIC]) not found", exception.getMessage());
+    }
+
+    @Test
+    void functionByName_TypedExpressionWithoutATypedInterface() {
+
+        // "year(first(date(a)))": the argument is a FirstExp<LocalDate>, which implements no typed Exp interface.
+        // It classifies as ANY and so must still be passable to a DATE parameter
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                .function("year", QLFunctionSignature.signature()
+                        .returning(NUMERIC)
+                        .arg(DATE)
+                        .as(args -> ((DateExp) args.get(0)).year()))
+                .build();
+
+        QLFunctionDescriptor descriptor = functions.function("year", List.of(Arg.of(Exp.$date("a").first())));
+
+        assertNotNull(descriptor);
+        assertEquals(NUMERIC, descriptor.returnType());
+    }
+
+    // --- explicit signature registration ---
+
+    @Test
+    void signature_FourArgs() {
+
+        // reflection tops out at Udf3. An explicit signature has no arity ceiling
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                .function("between", QLFunctionSignature.signature()
+                        .returning(BOOLEAN)
+                        .arg(NUMERIC)
+                        .arg(NUMERIC)
+                        .arg(NUMERIC)
+                        .constArg(STRING)
+                        .as(args -> args.get(0).castAsBool()))
+                .build();
+
+        QLFunctionDescriptor descriptor = functions.function("between",
+                List.of(arg(NUMERIC), arg(NUMERIC), arg(NUMERIC), constant(STRING)));
+
+        assertEquals(4, descriptor.args().length);
+        assertEquals(BOOLEAN, descriptor.returnType());
+
+        assertThrows(IllegalArgumentException.class, () -> functions.function("between",
+                List.of(arg(NUMERIC), arg(NUMERIC), arg(NUMERIC))));
+    }
+
+    @Test
+    void signature_ZeroArgOverloadBesideVarArgs() {
+
+        // "concat()" is a zero-arity overload registered next to the varargs one. Fixed arity is preferred, so the
+        // empty call resolves to it rather than to a zero-length vararg list
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                .function("concat", QLFunctionSignature.signature()
+                        .returning(STRING)
+                        .varArgs()
+                        .as(args -> args.get(0).castAsStr()))
+                .function("concat", QLFunctionSignature.signature()
+                        .returning(STRING)
+                        .as(args -> Exp.$strVal("")))
+                .build();
+
+        assertFalse(functions.function("concat", List.of()).isVarArgs());
+        assertTrue(functions.function("concat", List.of(arg(STRING))).isVarArgs());
+        assertTrue(functions.function("concat", List.of(arg(STRING), arg(NUMERIC))).isVarArgs());
+    }
+
+    @Test
+    void signature_VarArgsWithLeadingTypedParams() {
+
+        // declared args of a vararg function are leading typed parameters: they have to be present and to match,
+        // everything past them is unconstrained
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                .function("vConcat", QLFunctionSignature.signature()
+                        .returning(STRING)
+                        .constArg(STRING)
+                        .varArgs()
+                        .as(args -> args.get(1).castAsStr()))
+                .build();
+
+        assertNotNull(functions.function("vConcat", List.of(constant(STRING), arg(NUMERIC), arg(DATE))));
+        assertNotNull(functions.function("vConcat", List.of(constant(STRING))));
+
+        // the leading parameter is missing
+        assertThrows(IllegalArgumentException.class, () -> functions.function("vConcat", List.of()));
+
+        // ... or is not a constant
+        assertThrows(IllegalArgumentException.class,
+                () -> functions.function("vConcat", List.of(arg(STRING), arg(STRING))));
+
+        // ... or is of the wrong type
+        assertThrows(IllegalArgumentException.class,
+                () -> functions.function("vConcat", List.of(constant(NUMERIC), arg(STRING))));
+    }
+
+    @Test
+    void signature_ConstArgNeedsNoAnnotation() {
+
+        // the explicit path declares constancy directly, without a @Constant annotation to reflect on
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                .function("substr", QLFunctionSignature.signature()
+                        .returning(STRING)
+                        .arg(OBJECT)
+                        .constArg(NUMERIC)
+                        .as(args -> args.get(0).castAsStr()))
+                .build();
+
+        assertArrayEquals(
+                new Arg[]{arg(OBJECT), constant(NUMERIC)},
+                functions.function("substr", List.of(arg(STRING), constant(NUMERIC))).args());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> functions.function("substr", List.of(arg(STRING), arg(NUMERIC))));
+    }
+
+    @Test
+    void signature_ReturningArgType() {
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                .function("shift", QLFunctionSignature.signature()
+                        .returningArgType(0)
+                        .arg(OBJECT)
+                        .constArg(NUMERIC)
+                        .as(args -> args.get(0)))
+                .build();
+
+        List<Arg> dateArgs = List.of(arg(DATE), constant(NUMERIC));
+        QLFunctionDescriptor descriptor = functions.function("shift", dateArgs);
+
+        assertNull(descriptor.returnType());
+        assertEquals(0, descriptor.returnArgIndex());
+        assertEquals(DATE, descriptor.returnType(dateArgs));
+        assertEquals(STRING, descriptor.returnType(List.of(arg(STRING), constant(NUMERIC))));
+        assertEquals(ANY, descriptor.returnType(List.of(arg(ANY), constant(NUMERIC))));
+    }
+
+    @Test
+    void signature_DuplicateShapeRejected() {
+
+        // the return type is not part of a descriptor's identity: two overloads with the same argument shape are
+        // unresolvable regardless of what they return, and must fail at build time
+        QLFunctions.Builder builder = QLFunctions.builder().noDefaultFunctions()
+                .function("f", QLFunctionSignature.signature()
+                        .returning(STRING)
+                        .arg(NUMERIC)
+                        .as(args -> args.get(0).castAsStr()));
+
+        assertThrows(IllegalArgumentException.class, () -> builder
+                .function("f", QLFunctionSignature.signature()
+                        .returning(BOOLEAN)
+                        .arg(NUMERIC)
+                        .as(args -> args.get(0).castAsBool())));
+    }
+
+    @Test
+    void signature_ProducerRequired() {
+        assertThrows(IllegalArgumentException.class, () -> QLFunctions.builder().noDefaultFunctions()
+                .function("f", QLFunctionSignature.signature().returning(STRING).arg(NUMERIC)));
+    }
+
+    @Test
+    void signature_ReturnTypeRequired() {
+        assertThrows(IllegalArgumentException.class, () -> QLFunctions.builder().noDefaultFunctions()
+                .function("f", QLFunctionSignature.signature().arg(NUMERIC).as(args -> args.get(0))));
+    }
+
+    @Test
+    void signature_ReturnArgIndexOutOfRange() {
+        assertThrows(IllegalArgumentException.class, () -> QLFunctions.builder().noDefaultFunctions()
+                .function("f", QLFunctionSignature.signature()
+                        .returningArgType(1)
+                        .arg(NUMERIC)
+                        .as(args -> args.get(0))));
     }
 
     private static class BoolFunction implements Udf1<Object, Boolean> {

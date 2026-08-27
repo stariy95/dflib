@@ -1,7 +1,6 @@
 package org.dflib.ql;
 
 import org.dflib.Condition;
-import org.dflib.exp.fn.Constant;
 import org.dflib.DateExp;
 import org.dflib.DateTimeExp;
 import org.dflib.Exp;
@@ -24,27 +23,55 @@ import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.function.Function;
 
 public class QLFunctionDescriptor {
 
     final String name;
+
+    /**
+     * A return type that does not depend on the arguments, or null for a polymorphic function
+     * (see {@link #returnArgIndex}).
+     */
     final TypeClassifier returnType;
+
+    /**
+     * An index of the argument whose type is the return type of this function, or
+     * {@link QLFunctionSignature#FIXED_RETURN} if the return type is fixed.
+     */
+    final int returnArgIndex;
+
     final Arg[] args;
     final boolean varArgs;
     final Function<List<Exp<?>>, Exp<?>> fnExpProducer;
 
-    private QLFunctionDescriptor(String name,
-                                 TypeClassifier returnType,
-                                 Arg[] args,
-                                 boolean varArgs,
-                                 Function<List<Exp<?>>, Exp<?>> fnExpProducer) {
+    private final EnumSet<TypeClassifier> possibleReturnTypes;
+
+    QLFunctionDescriptor(String name, QLFunctionSignature signature) {
+        signature.validate(name);
+
         this.name = name;
-        this.returnType = returnType;
-        this.args = args;
-        this.varArgs = varArgs;
-        this.fnExpProducer = fnExpProducer;
+        this.returnType = signature.returnType();
+        this.returnArgIndex = signature.returnArgIndex();
+        this.args = signature.args();
+        this.varArgs = signature.isVarArgs();
+        this.fnExpProducer = signature.producer();
+        this.possibleReturnTypes = possibleReturnTypes(this.returnType);
+    }
+
+    private static EnumSet<TypeClassifier> possibleReturnTypes(TypeClassifier fixedReturnType) {
+
+        if (fixedReturnType != null) {
+            return EnumSet.of(fixedReturnType);
+        }
+
+        // A polymorphic function returns the type of one of its arguments, so statically it "may return" anything.
+        // ANY is excluded on purpose: it is not a type, but the absence of one, and a caller asking
+        // "may this name return T?" is always asking about a concrete T it knows how to consume. A polymorphic call
+        // that does resolve to ANY is reachable from the untyped expression position, which never asks.
+        return EnumSet.complementOf(EnumSet.of(TypeClassifier.ANY));
     }
 
     public static Builder ofUdf0(Udf0<?> function) {
@@ -67,6 +94,13 @@ public class QLFunctionDescriptor {
         return new Builder().udfN(function);
     }
 
+    /**
+     * Two descriptors are equal when they have the same name and the same declared argument shape. The return type
+     * is deliberately excluded: function resolution is driven by the name and the arguments alone, so two
+     * descriptors with an identical argument shape are genuinely unresolvable no matter what they return. Treating
+     * them as equal is what turns such a pair into an error at registry build time, instead of a silent
+     * first-one-wins at parse time.
+     */
     @Override
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) return false;
@@ -81,8 +115,38 @@ public class QLFunctionDescriptor {
         return name;
     }
 
+    /**
+     * Returns the return type of this function if it does not depend on the arguments, null otherwise.
+     *
+     * @see #returnType(List)
+     */
     public TypeClassifier returnType() {
         return returnType;
+    }
+
+    /**
+     * Returns the index of the argument whose type this function returns, or
+     * {@link QLFunctionSignature#FIXED_RETURN} for a function with a fixed return type.
+     */
+    public int returnArgIndex() {
+        return returnArgIndex;
+    }
+
+    /**
+     * Returns the effective return type of a call with the given arguments.
+     */
+    public TypeClassifier returnType(List<Arg> actualArgs) {
+        return returnArgIndex == QLFunctionSignature.FIXED_RETURN
+                ? returnType
+                : actualArgs.get(returnArgIndex).type();
+    }
+
+    /**
+     * Returns an over-approximation of the types this function may return, regardless of the arguments. Used by the
+     * parser to decide whether a call by this name can possibly be parsed as an expression of a given type.
+     */
+    public EnumSet<TypeClassifier> possibleReturnTypes() {
+        return EnumSet.copyOf(possibleReturnTypes);
     }
 
     public Arg[] args() {
@@ -105,52 +169,49 @@ public class QLFunctionDescriptor {
         return result;
     }
 
+    /**
+     * A builder of a descriptor for a reflectively described user function. It is a thin adapter over
+     * {@link QLFunctionSignature}, which is the single descriptor construction path.
+     */
     public static class Builder {
 
         String name;
-        TypeClassifier returnType;
-        Arg[] args;
-        boolean varArgs;
-        Function<List<Exp<?>>, Exp<?>> fnExpProducer;
+        QLFunctionSignature signature;
 
         private Builder() {
         }
 
         public Builder udf0(Udf0<?> function) {
-            fnExpProducer = exps
-                    -> function.call();
-            inferTypes(getCallMethodSafe(function), false);
-            return this;
+            return signature(
+                    getCallMethodSafe(function), false,
+                    exps -> function.call());
         }
 
         @SuppressWarnings({"rawtypes", "unchecked"})
         public Builder udf1(Udf1<?, ?> function) {
-            fnExpProducer = exps
-                    -> function.call((Exp)exps.getFirst());
-            inferTypes(getCallMethodSafe(function, Exp.class), false);
-            return this;
+            return signature(
+                    getCallMethodSafe(function, Exp.class), false,
+                    exps -> function.call((Exp) exps.getFirst()));
         }
 
         @SuppressWarnings({"rawtypes", "unchecked"})
         public Builder udf2(Udf2<?, ?, ?> function) {
-            fnExpProducer = exps
-                    -> function.call((Exp)exps.getFirst(), (Exp)exps.get(1));
-            inferTypes(getCallMethodSafe(function, Exp.class, Exp.class), false);
-            return this;
+            return signature(
+                    getCallMethodSafe(function, Exp.class, Exp.class), false,
+                    exps -> function.call((Exp) exps.getFirst(), (Exp) exps.get(1)));
         }
 
         @SuppressWarnings({"rawtypes", "unchecked"})
         public Builder udf3(Udf3<?, ?, ?, ?> function) {
-            fnExpProducer = exps
-                    -> function.call((Exp)exps.getFirst(), (Exp)exps.get(1), (Exp)exps.get(2));
-            inferTypes(getCallMethodSafe(function, Exp.class, Exp.class, Exp.class), false);
-            return this;
+            return signature(
+                    getCallMethodSafe(function, Exp.class, Exp.class, Exp.class), false,
+                    exps -> function.call((Exp) exps.getFirst(), (Exp) exps.get(1), (Exp) exps.get(2)));
         }
 
         public Builder udfN(UdfN<?> function) {
-            fnExpProducer = exps -> function.call(exps.toArray(new Exp[0]));
-            inferTypes(getCallMethodSafe(function, Exp[].class), true);
-            return this;
+            return signature(
+                    getCallMethodSafe(function, Exp[].class), true,
+                    exps -> function.call(exps.toArray(new Exp[0])));
         }
 
         public Builder name(String name) {
@@ -158,32 +219,13 @@ public class QLFunctionDescriptor {
             return this;
         }
 
-        QLFunctionDescriptor build() {
-            return new QLFunctionDescriptor(name, returnType, args, varArgs, fnExpProducer);
+        private Builder signature(Method method, boolean varArgs, Function<List<Exp<?>>, Exp<?>> producer) {
+            this.signature = QLFunctionSignature.reflect(method, varArgs).as(producer);
+            return this;
         }
 
-        private void inferTypes(Method method, boolean varArgs) {
-            this.returnType = TypeClassifier.classify(method.getGenericReturnType());
-            this.varArgs = varArgs;
-
-            Parameter[] parameters = method.getParameters();
-
-            if (varArgs) {
-                // varargs declare no individual arguments, so a constant marker on them would be silently dropped
-                for (Parameter p : parameters) {
-                    if (p.isAnnotationPresent(Constant.class)) {
-                        throw new IllegalArgumentException(
-                                "Vararg functions declare no arguments, so none can be @Constant: " + method);
-                    }
-                }
-
-                this.args = new Arg[0];
-            } else {
-                this.args = new Arg[parameters.length];
-                for (int i = 0; i < parameters.length; i++) {
-                    this.args[i] = Arg.of(parameters[i]);
-                }
-            }
+        QLFunctionDescriptor build() {
+            return new QLFunctionDescriptor(name, signature);
         }
     }
 
@@ -313,11 +355,27 @@ public class QLFunctionDescriptor {
                 case DateTimeExp ignored -> TypeClassifier.DATETIME;
                 case OffsetDateTimeExp ignored -> TypeClassifier.OFFSETDATETIME;
                 case ScalarExp<?> ignored -> TypeClassifier.OBJECT;
-                // anything else still typed as Object (a bare column ref, "if", "ifNull", "shift", ...) is only
-                // resolved at eval time, so it is compatible with a parameter of any type
-                case Exp<?> e when e.getType() == Object.class -> TypeClassifier.ANY;
-                case null, default -> TypeClassifier.OBJECT;
+
+                // What is left is an expression that implements none of the typed Exp interfaces: a bare column
+                // ref, "if", "ifNull", "shift", "first" and friends. Its value type - when it has one - is only
+                // recoverable at eval time, so it classifies as ANY and is passable to a parameter of any type
+                case Exp<?> e -> classifyValueType(e.getType());
+
+                case null -> TypeClassifier.OBJECT;
             };
+        }
+
+        private static TypeClassifier classifyValueType(Class<?> valueType) {
+
+            if (valueType == null || valueType == Object.class) {
+                // no static type at all, e.g. a bare column ref or "ifNull(a, b)" over untyped columns
+                return ANY;
+            }
+
+            // "first(date(a))" is a FirstExp<LocalDate> and "if(c, int(a), int(b))" is an IfExp<Integer>: both are
+            // usable as a typed argument, they just can't be recognized by their interface. Only a genuinely
+            // Object-valued expression - Exp<String[]> from "split()", Exp<List<T>> from "list()" - stays OBJECT
+            return classify(valueType) == OBJECT ? OBJECT : ANY;
         }
 
         /**

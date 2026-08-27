@@ -31,7 +31,11 @@ public class ShiftTest {
                 arguments("shift(1 + 2, 1)", $intVal(1).add(2).shift(1)),
                 arguments("shift(str(1), 1)", $str(1).shift(1)),
                 arguments("shift(str(1), 1, 'default')", $str(1).shift(1, "default")),
-                arguments("shift(str(1), -1)", $str(1).shift(-1))
+                arguments("shift(str(1), -1)", $str(1).shift(-1)),
+
+                // a temporal receiver used to be rejected: the grammar had no temporal alternative in "shift", and
+                // the generic one only accepted a column reference, an aggregate or another special form
+                arguments("shift(plusDays(date(1), 1), 1)", $date(1).plusDays(1).shift(1))
         );
     }
 
@@ -42,7 +46,6 @@ public class ShiftTest {
             "shift(int(1), )",
             "shift(, 2)",
             "shift(int(1), 2, 'replace')",
-            "shift(plusDays(date(1), 1), 1)",
     })
     public void shift_throws(String text) {
         assertThrows(QLParserException.class, () -> parseExp(text));

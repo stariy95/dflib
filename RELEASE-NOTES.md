@@ -1,5 +1,6 @@
 ## Release 2.0.0-M8
 
+* #567 QL: context-based functions
 * #578 Static cast methods in Udf interfaces
 
 ## Release 2.0.0-M7

@@ -289,6 +289,27 @@ public class StrExpTest {
     }
 
     @ParameterizedTest
+    @MethodSource
+    public void aggregate_overAFunction(String text, Exp<?> expected) {
+
+        // "min"/"max" used to be grammar rules, and "min ( IDENTIFIER (" was token-viable for the numeric aggregate,
+        // which was the lower-numbered alternative. The predicate that would have ruled it out sat inside the
+        // numeric expression rule, past the tokens the decision consumes, so it was not hoisted into the prediction
+        // and only failed once the numeric aggregate had been committed to. Resolving the aggregate through the
+        // registry, from its actual argument, is what fixes this
+        Exp<?> exp = parseExp(text);
+        assertInstanceOf(StrExp.class, exp);
+        assertEquals(expected, exp);
+    }
+
+    static Stream<Arguments> aggregate_overAFunction() {
+        return Stream.of(
+                arguments("min(trim(a))", $col("a").trim().min()),
+                arguments("max(lower(a))", $col("a").lower().max())
+        );
+    }
+
+    @ParameterizedTest
     @ValueSource(strings = {
             "MIN(str(1))",
             "max()",

@@ -8,11 +8,11 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.temporal.Temporal;
 import java.util.Arrays;
-import java.util.function.Function;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 import org.dflib.*;
+import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
 
 import static org.dflib.ql.antlr4.ExpParserUtils.*;
 
@@ -68,6 +68,12 @@ public interface ExpVisitor<T> extends ParseTreeVisitor<T> {
 	 * @return the visitor result
 	 */
 	T visitExpression(ExpParser.ExpressionContext ctx);
+	/**
+	 * Visit a parse tree produced by {@link ExpParser#fnCall}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitFnCall(ExpParser.FnCallContext ctx);
 	/**
 	 * Visit a parse tree produced by {@link ExpParser#numExp}.
 	 * @param ctx the parse tree
@@ -315,6 +321,12 @@ public interface ExpVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitRelation(ExpParser.RelationContext ctx);
 	/**
+	 * Visit a parse tree produced by {@link ExpParser#fnRelation}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitFnRelation(ExpParser.FnRelationContext ctx);
+	/**
 	 * Visit a parse tree produced by {@link ExpParser#numRelation}.
 	 * @param ctx the parse tree
 	 * @return the visitor result
@@ -357,233 +369,11 @@ public interface ExpVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitGenericRelation(ExpParser.GenericRelationContext ctx);
 	/**
-	 * Visit a parse tree produced by {@link ExpParser#numFn}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitNumFn(ExpParser.NumFnContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#timeFieldFn}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitTimeFieldFn(ExpParser.TimeFieldFnContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#dateFieldFn}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitDateFieldFn(ExpParser.DateFieldFnContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#dateTimeFieldFn}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitDateTimeFieldFn(ExpParser.DateTimeFieldFnContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#offsetDateTimeFieldFn}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitOffsetDateTimeFieldFn(ExpParser.OffsetDateTimeFieldFnContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#boolFn}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitBoolFn(ExpParser.BoolFnContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#timeFn}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitTimeFn(ExpParser.TimeFnContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#dateFn}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitDateFn(ExpParser.DateFnContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#dateTimeFn}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitDateTimeFn(ExpParser.DateTimeFnContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#offsetDateTimeFn}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitOffsetDateTimeFn(ExpParser.OffsetDateTimeFnContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#strFn}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitStrFn(ExpParser.StrFnContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#castAsInt}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitCastAsInt(ExpParser.CastAsIntContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#castAsLong}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitCastAsLong(ExpParser.CastAsLongContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#castAsBigint}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitCastAsBigint(ExpParser.CastAsBigintContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#castAsFloat}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitCastAsFloat(ExpParser.CastAsFloatContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#castAsDouble}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitCastAsDouble(ExpParser.CastAsDoubleContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#castAsDecimal}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitCastAsDecimal(ExpParser.CastAsDecimalContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#castAsStr}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitCastAsStr(ExpParser.CastAsStrContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#castAsTime}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitCastAsTime(ExpParser.CastAsTimeContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#castAsDate}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitCastAsDate(ExpParser.CastAsDateContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#castAsDateTime}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitCastAsDateTime(ExpParser.CastAsDateTimeContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#castAsOffsetDateTime}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitCastAsOffsetDateTime(ExpParser.CastAsOffsetDateTimeContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#genericFn}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitGenericFn(ExpParser.GenericFnContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#ifExp}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitIfExp(ExpParser.IfExpContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#ifNull}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitIfNull(ExpParser.IfNullContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#nullableExp}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitNullableExp(ExpParser.NullableExpContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#shift}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitShift(ExpParser.ShiftContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#genericShiftExp}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitGenericShiftExp(ExpParser.GenericShiftExpContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#aggregateFn}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitAggregateFn(ExpParser.AggregateFnContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#genericAgg}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitGenericAgg(ExpParser.GenericAggContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#positionalAgg}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitPositionalAgg(ExpParser.PositionalAggContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#vConcat}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitVConcat(ExpParser.VConcatContext ctx);
-	/**
 	 * Visit a parse tree produced by {@link ExpParser#array}.
 	 * @param ctx the parse tree
 	 * @return the visitor result
 	 */
 	T visitArray(ExpParser.ArrayContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#numAgg}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitNumAgg(ExpParser.NumAggContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#timeAgg}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitTimeAgg(ExpParser.TimeAggContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#dateAgg}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitDateAgg(ExpParser.DateAggContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#dateTimeAgg}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitDateTimeAgg(ExpParser.DateTimeAggContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#strAgg}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitStrAgg(ExpParser.StrAggContext ctx);
 	/**
 	 * Visit a parse tree produced by {@link ExpParser#fnName}.
 	 * @param ctx the parse tree

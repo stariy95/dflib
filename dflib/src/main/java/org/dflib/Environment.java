@@ -57,9 +57,7 @@ public class Environment {
     }
 
     private static QLFunctions createDefaultQLFunctions() {
-        return QLFunctions.builder()
-                .defaultFunctions()
-                .build();
+        return QLFunctions.builder().build();
     }
 
     /**
@@ -127,6 +125,10 @@ public class Environment {
     }
 
     /**
+     * Sets the registry of functions recognized by the QL parser. As {@link QLFunctions#builder()} starts with the
+     * built-in functions already registered, adding a custom function to the language is
+     * {@code setQLFunctions(QLFunctions.builder().function("myFn", udf).build())}.
+     *
      * @param glFunctions new QL functions to set to the current environment
      * @since 2.0.0
      */

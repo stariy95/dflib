@@ -476,7 +476,11 @@ public class NumExpTest {
                 arguments("avg(int(1), int(1) > 0)", $int(1).avg($int(1).gt(1))),
                 arguments("median(int(1), int(1) > 0)", $int(1).median($int(1).gt(1))),
                 arguments("quantile(int(1), 0.5, int(1) > 0)", $int(1).quantile(0.5, $int(1).gt(1))),
-                arguments("sum(int(1), int(2) > 0)", $int(1).sum($int(2).gt(1)))
+                arguments("sum(int(1), int(2) > 0)", $int(1).sum($int(2).gt(1))),
+
+                // an aggregate over a registry function: the aggregate is still a grammar rule, and reaches the
+                // call through the numeric expression rule
+                arguments("min(len(a))", $col("a").castAsStr().len().min())
         );
     }
 }
