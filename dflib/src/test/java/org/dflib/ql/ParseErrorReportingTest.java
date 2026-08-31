@@ -65,10 +65,10 @@ public class ParseErrorReportingTest {
     @Test
     public void semanticError_ProducerRejectsArgument() {
 
-        // an argument a registered function does not support is rejected by its producer, and reported with the
+        // a receiver type a registered function declares no overload for is a resolution failure, reported with the
         // position of the call
         QLParserException e = assertThrows(QLParserException.class, () -> Exp.parseExp("year(str(a))"));
-        assertEquals("1:0 year() is not supported for expression: a", e.getMessage());
+        assertEquals("1:0 Function year([STRING]) not found", e.getMessage());
 
         // "scale" used to take an integer literal by grammar; the constant is now narrowed by its producer, which
         // must not silently truncate a fractional literal

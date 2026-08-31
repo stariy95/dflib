@@ -26,6 +26,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * "fnRelation" that dispatches on the expression the call produced. The built-in polymorphic names are covered by
  * {@link PolymorphicBuiltinTest}; this test exercises the rule in isolation, against a registry with one function
  * of a known shape, so that a failure points at the rule rather than at a built-in's signature.
+ * <p>
+ * That stand-in is declared with {@code returningArgType}. No built-in is written that way any more - each declares
+ * one fixed-return overload per receiver type instead - but the declaration is still supported for explicit
+ * registrations, and it is the shortest way to get a call whose type is not known from its name.
  */
 public class FnRelationTest {
 

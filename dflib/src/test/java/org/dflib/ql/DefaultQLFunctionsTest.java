@@ -56,39 +56,20 @@ class DefaultQLFunctionsTest {
      * casts a call result to whatever type the expression rule it was parsed by requires, so a descriptor whose
      * producer returns something else is a ClassCastException inside generated code.
      * <p>
-     * Many built-ins accept several receiver types and support different operations on each, so every descriptor is
-     * exercised with one argument list per candidate receiver type. A receiver a function does not support must be
-     * rejected with a message naming the function, and at least one receiver must work.
+     * Every descriptor is exercised with a single argument list - the one it declares. A built-in that accepts
+     * several receiver types declares one {@code call} overload, and so one descriptor, per receiver, so no producer
+     * dispatches on its receiver any more and there is no second argument list to try. That the descriptor really is
+     * the one these arguments resolve to is {@link #isResolvableByItsOwnSignature}.
      */
     @ParameterizedTest(name = "{0}")
     @MethodSource("defaultDescriptors")
     void returnTypeIsHonest(String label, QLFunctionDescriptor descriptor) {
 
-        boolean anySupported = false;
+        List<Exp<?>> args = plausibleArgs(descriptor);
+        List<Arg> argTypes = args.stream().map(Arg::of).toList();
 
-        for (List<Exp<?>> args : plausibleArgLists(descriptor)) {
-
-            List<Arg> argTypes = args.stream().map(Arg::of).toList();
-
-            // another overload may claim these arguments - it is that overload's own case, not this one's
-            if (FUNCTIONS.function(descriptor.name(), argTypes) != descriptor) {
-                continue;
-            }
-
-            Exp<?> result;
-            try {
-                result = descriptor.expProducer().apply(args);
-            } catch (IllegalArgumentException e) {
-                assertTrue(e.getMessage() != null && e.getMessage().contains(descriptor.name()),
-                        () -> label + " rejects " + argTypes + " without naming the function: " + e.getMessage());
-                continue;
-            }
-
-            anySupported = true;
-            assertReturnTypeIsHonest(label + " called with " + argTypes, descriptor.returnType(argTypes), result);
-        }
-
-        assertTrue(anySupported, () -> label + ": no receiver type is supported by the producer");
+        Exp<?> result = descriptor.expProducer().apply(args);
+        assertReturnTypeIsHonest(label + " called with " + argTypes, descriptor.returnType(argTypes), result);
     }
 
     private static void assertReturnTypeIsHonest(String label, TypeClassifier declared, Exp<?> result) {
@@ -118,7 +99,7 @@ class DefaultQLFunctionsTest {
     @MethodSource("defaultDescriptors")
     void isResolvableByItsOwnSignature(String label, QLFunctionDescriptor descriptor) {
 
-        List<Arg> argTypes = plausibleArgs(descriptor, null).stream().map(Arg::of).toList();
+        List<Arg> argTypes = plausibleArgs(descriptor).stream().map(Arg::of).toList();
 
         assertSame(
                 descriptor,
@@ -145,10 +126,13 @@ class DefaultQLFunctionsTest {
 
         assertEquals(60, names.size());
 
-        // 60 names, 81 descriptors. The extra 21 are overloads: "substr", "split", "count", "concat", "sum",
-        // "first" and the 4 temporal casts have 2 each; "min", "max", "avg", "median" and "quantile" have 2 each;
-        // "shift" has 4 and "vConcat" has 4
-        assertEquals(81, FUNCTIONS.descriptors().count());
+        // 60 names, 159 descriptors. 27 names have exactly one; the rest are overload sets, most of them one
+        // overload per receiver type: "year"/"month"/"day" and "hour".."millisecond" have 3 each (21), the 9
+        // "plusX" have 3 each (27), "min" and "max" have 5 receivers x {unfiltered, filtered} (20), "avg" and
+        // "median" 4 x 2 (16) and "quantile" 4 x 2 (8). "shift" has 8 receivers - the 7 typed ones plus an untyped
+        // one - x {no filler, filler} (16). The remaining 24 are arity overloads: "substr", "split", "count",
+        // "concat", "sum", "first" and the 4 temporal casts have 2 each; "vConcat" has 4
+        assertEquals(159, FUNCTIONS.descriptors().count());
     }
 
     @Test
@@ -159,10 +143,15 @@ class DefaultQLFunctionsTest {
         assertFalse(FUNCTIONS.isFn("noSuchFunction"));
     }
 
+    /**
+     * The grammar routes a call site by this, so it has to stay true for every name that can produce more than one
+     * type. A name with one typed {@code call} overload per receiver qualifies through the second half of the rule -
+     * its overloads disagree on their fixed return - rather than by returning the type of an argument.
+     */
     @Test
     void isPolymorphicFn() {
 
-        // returns the receiver type
+        // returns the receiver type: one overload per receiver, each with its own fixed return
         assertTrue(FUNCTIONS.isPolymorphicFn("min"));
         assertTrue(FUNCTIONS.isPolymorphicFn("max"));
         assertTrue(FUNCTIONS.isPolymorphicFn("avg"));
@@ -183,13 +172,18 @@ class DefaultQLFunctionsTest {
     }
 
     /**
-     * An ANY-returning function is only reachable from the untyped expression position: it satisfies no typed rule.
+     * An untyped function is only reachable from the untyped expression position: it satisfies no typed rule.
+     * <p>
+     * ANY and OBJECT are both "untyped" here and are excluded: a name declaring either is not claimed by a typed
+     * rule, and the grammar only ever asks {@link QLFunctions#mayReturn} about the seven typed classifiers. Which
+     * of the two a declaration uses is an artifact of how it is written - a {@code QLFunction} class returning
+     * {@code Exp<?>} classifies as OBJECT, an explicit signature can say ANY.
      */
     @Test
     void untypedFunctionsClaimNoTypedRule() {
         for (String name : List.of("first", "last", "if", "ifNull", "vConcat")) {
             for (TypeClassifier t : TypeClassifier.values()) {
-                if (t != TypeClassifier.ANY) {
+                if (t != TypeClassifier.ANY && t != TypeClassifier.OBJECT) {
                     assertFalse(FUNCTIONS.mayReturn(name, t), name + " may return " + t);
                 }
             }
@@ -233,11 +227,39 @@ class DefaultQLFunctionsTest {
     /**
      * An argument whose type is only known at eval time is passable to a typed parameter, so a call by an ANY
      * argument resolves. Whether the producer can then build an expression is a separate question.
+     * <p>
+     * This holds for a name with a single candidate in that position. A name with several receiver overloads - every
+     * one of which such an argument matches equally well - is ambiguous instead, see
+     * {@link #untypedReceiverOfAMultiReceiverNameIsAmbiguous()}.
      */
     @Test
     void anyArgumentResolves() {
-        assertSame(resolve("year", $date("d")), resolve("year", $date("d").first()));
-        assertSame(resolve("year", $date("d")), resolve("year", $col("c")));
+
+        // "sum" declares a single numeric receiver, "len" a single string one
+        assertSame(resolve("sum", $int("i")), resolve("sum", $col("c")));
+        assertSame(resolve("sum", $int("i")), resolve("sum", $date("d").first()));
+        assertSame(resolve("len", $str("s")), resolve("len", $col("c")));
+    }
+
+    /**
+     * A name with several receiver overloads can not be called with an argument whose type is only known at eval
+     * time: every overload matches it equally well, so the choice would come down to registration order.
+     */
+    @Test
+    void untypedReceiverOfAMultiReceiverNameIsAmbiguous() {
+
+        assertEquals("Ambiguous call to year(): the type of argument 1 is only known at eval time, and year is"
+                        + " defined for [DATE, DATETIME, OFFSETDATETIME] arguments in that position."
+                        + " Cast it, e.g. year(castAsDate(..))",
+                assertThrows(IllegalArgumentException.class, () -> resolve("year", $col("c"))).getMessage());
+
+        assertEquals("Ambiguous call to min(): the type of argument 1 is only known at eval time, and min is"
+                        + " defined for [NUMERIC, STRING, DATE, TIME, DATETIME] arguments in that position."
+                        + " Cast it, e.g. min(castAsInt(..))",
+                assertThrows(IllegalArgumentException.class, () -> resolve("min", $col("c"))).getMessage());
+
+        // an expression whose value type is only recoverable at eval time is no better than a bare column ref
+        assertThrows(IllegalArgumentException.class, () -> resolve("year", $date("d").first()));
     }
 
     /**
@@ -258,7 +280,9 @@ class DefaultQLFunctionsTest {
     }
 
     /**
-     * A polymorphic descriptor's effective return type is the classifier of its receiver.
+     * A polymorphic call's effective return type is the classifier of its receiver. For these names that is not a
+     * {@code returningArgType} declaration but a consequence of resolution: the receiver picks the overload, and the
+     * overload's own fixed return is the receiver's type.
      */
     @Test
     void polymorphicReturnFollowsReceiver() {
@@ -357,12 +381,12 @@ class DefaultQLFunctionsTest {
 
     /**
      * Shifting a Condition produces a plain Exp&lt;Boolean&gt;, since Condition does not override shift(). Its
-     * overloads are therefore registered as ANY rather than as "the type of argument 0".
+     * overloads therefore declare a bare {@code Exp<?>} - classifying as OBJECT - rather than BOOLEAN.
      */
     @Test
     void shiftOfAConditionIsUntyped() {
-        assertEquals(TypeClassifier.ANY, resolve("shift", $bool("b"), $intVal(1)).returnType());
-        assertEquals(TypeClassifier.ANY,
+        assertEquals(TypeClassifier.OBJECT, resolve("shift", $bool("b"), $intVal(1)).returnType());
+        assertEquals(TypeClassifier.OBJECT,
                 resolve("shift", $bool("b"), $intVal(1), $boolVal(true)).returnType());
 
         assertNotSame(
@@ -386,29 +410,27 @@ class DefaultQLFunctionsTest {
                 () -> resolve("plusWeeks", $date("d"), $intVal(1).add(2)));
     }
 
+    /**
+     * A receiver a function does not support is one it declares no overload for, so the call does not resolve at
+     * all. There is no producer-level "unsupported receiver" check left behind these names.
+     */
     @Test
-    void unsupportedReceiverNamesTheFunctionAndTheExpression() {
+    void unsupportedReceiverDoesNotResolve() {
 
         // OffsetDateTimeExp declares no aggregates
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> call("min", $offsetDateTime("odt")));
-        assertTrue(e.getMessage().startsWith("min() is not supported for expression: "), e.getMessage());
-        assertTrue(e.getMessage().contains($offsetDateTime("odt").toQL()), e.getMessage());
+        assertEquals("Function min([OFFSETDATETIME]) not found",
+                assertThrows(IllegalArgumentException.class,
+                        () -> call("min", $offsetDateTime("odt"))).getMessage());
 
-        // an untyped column can not be aggregated: its type is only known at eval time
-        IllegalArgumentException untyped = assertThrows(IllegalArgumentException.class,
-                () -> call("avg", $col("a")));
-        assertEquals("avg() is not supported for expression: a", untyped.getMessage());
+        // "avg" and "median" are not declared on StrExp
+        assertEquals("Function avg([STRING]) not found",
+                assertThrows(IllegalArgumentException.class, () -> call("avg", $str("s"))).getMessage());
 
         // "year" of a time, "hour" of a date
-        assertEquals("year() is not supported for expression: t",
+        assertEquals("Function year([TIME]) not found",
                 assertThrows(IllegalArgumentException.class, () -> call("year", $time("t"))).getMessage());
-        assertEquals("hour() is not supported for expression: d",
+        assertEquals("Function hour([DATE]) not found",
                 assertThrows(IllegalArgumentException.class, () -> call("hour", $date("d"))).getMessage());
-
-        // resolution succeeds for an ANY argument, the producer is what rejects it
-        assertEquals("year() is not supported for expression: first(d)",
-                assertThrows(IllegalArgumentException.class, () -> call("year", $date("d").first())).getMessage());
 
         // "quantile" and "plusX" of an unsupported receiver
         assertThrows(IllegalArgumentException.class, () -> call("quantile", $str("s"), $doubleVal(0.5)));
@@ -418,7 +440,7 @@ class DefaultQLFunctionsTest {
 
     /**
      * The grammar enforced the filler type by having one shift alternative per receiver type, each with a matching
-     * scalar filler rule. A single registration has to check it in the producer.
+     * scalar filler rule. The untyped overload, which accepts a receiver of any type, has to check it by hand.
      */
     @Test
     void shiftFillerMustMatchTheReceiverType() {
@@ -439,7 +461,7 @@ class DefaultQLFunctionsTest {
     @Test
     void booleanParameterRejectsAnUntypedArgumentInTheProducer() {
         // "count(a)" resolves via ANY -> BOOLEAN, but an untyped column is not a Condition
-        assertEquals("count() expects a boolean expression, got: a",
+        assertEquals("count() expects argument 1 to be BOOLEAN, got: a",
                 assertThrows(IllegalArgumentException.class, () -> call("count", $col("a"))).getMessage());
     }
 
@@ -475,33 +497,14 @@ class DefaultQLFunctionsTest {
     }
 
     /**
-     * Argument lists to exercise a descriptor with. A parameter declared as OBJECT accepts every receiver type, and
-     * the producers behind such parameters dispatch on the receiver, so one list is generated per candidate
-     * receiver type. Descriptors with no OBJECT parameter get a single list.
+     * An argument list matching exactly what the descriptor declares: one expression per parameter, of the
+     * parameter's own classifier, constant where the parameter is.
      */
-    private static List<List<Exp<?>>> plausibleArgLists(QLFunctionDescriptor descriptor) {
-
-        boolean dispatches = Arrays.stream(descriptor.args()).anyMatch(a -> a.type() == TypeClassifier.OBJECT);
-        if (!dispatches) {
-            return List.of(plausibleArgs(descriptor, null));
-        }
-
-        List<List<Exp<?>>> lists = new ArrayList<>();
-        for (TypeClassifier receiver : TypeClassifier.values()) {
-            lists.add(plausibleArgs(descriptor, receiver));
-        }
-
-        return lists;
-    }
-
-    /**
-     * @param receiver the type to use for OBJECT-declared parameters, or null to use OBJECT itself
-     */
-    private static List<Exp<?>> plausibleArgs(QLFunctionDescriptor descriptor, TypeClassifier receiver) {
+    private static List<Exp<?>> plausibleArgs(QLFunctionDescriptor descriptor) {
 
         List<Exp<?>> args = new ArrayList<>();
         for (Arg a : descriptor.args()) {
-            TypeClassifier type = a.type() == TypeClassifier.OBJECT && receiver != null ? receiver : a.type();
+            TypeClassifier type = a.type();
             args.add(a.constant() ? constant(type) : column(type));
         }
 

@@ -210,7 +210,8 @@ public class ExpParser extends Parser {
 	private int continuation() {
 	    return continuations.computeIfAbsent(
 	        _input.LT(1).getTokenIndex(),
-	        i -> ExpParserUtils.continuation(_input));
+	        i -> ExpParserUtils.continuation(_input)
+	    );
 	}
 
 	public ExpParser(TokenStream input) {

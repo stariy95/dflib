@@ -140,9 +140,10 @@ public class PolymorphicBuiltinTest {
     }
 
     /**
-     * A call that the registry resolves but whose producer rejects the arguments is a parse error carrying the
-     * position of the call. These used to be syntax errors reported at the opening parenthesis, or - for the
-     * receiver types the grammar had no alternative for - at the argument.
+     * A call the registry can not turn into an expression - because no overload accepts the arguments, because the
+     * argument types can not tell the overloads apart, or because the producer rejects the arguments - is a parse
+     * error carrying the position of the call. These used to be syntax errors reported at the opening parenthesis,
+     * or - for the receiver types the grammar had no alternative for - at the argument.
      */
     @ParameterizedTest
     @MethodSource
@@ -154,19 +155,26 @@ public class PolymorphicBuiltinTest {
     static Stream<Arguments> producerError() {
         return Stream.of(
 
-                // an untyped column has no type until eval, so no receiver-dispatching function accepts it
-                arguments("year(a)", "1:0 year() is not supported for expression: a"),
-                arguments("min(a)", "1:0 min() is not supported for expression: a"),
-                arguments("plusDays(a, 1)", "1:0 plusDays() is not supported for expression: a"),
+                // an untyped column has no type until eval, so it matches every receiver overload of a
+                // multi-receiver name equally well and picks none of them
+                arguments("year(a)", "1:0 Ambiguous call to year(): the type of argument 1 is only known at eval"
+                        + " time, and year is defined for [DATE, DATETIME, OFFSETDATETIME] arguments in that"
+                        + " position. Cast it, e.g. year(castAsDate(..))"),
+                arguments("min(a)", "1:0 Ambiguous call to min(): the type of argument 1 is only known at eval"
+                        + " time, and min is defined for [NUMERIC, STRING, DATE, TIME, DATETIME] arguments in that"
+                        + " position. Cast it, e.g. min(castAsInt(..))"),
+                arguments("plusDays(a, 1)", "1:0 Ambiguous call to plusDays(): the type of argument 1 is only known"
+                        + " at eval time, and plusDays is defined for [DATE, DATETIME, OFFSETDATETIME] arguments in"
+                        + " that position. Cast it, e.g. plusDays(castAsDate(..))"),
 
-                // "avg" and "median" are not declared on StrExp
-                arguments("avg(str(a))", "1:0 avg() is not supported for expression: a"),
+                // "avg" and "median" are not declared on StrExp, so there is no overload to resolve to
+                arguments("avg(str(a))", "1:0 Function avg([STRING]) not found"),
 
                 // a "plusX" count is a constant int, not any number
                 arguments("plusDays(date(a), 1.5)", "1:0 Not an integer constant: 1.5"),
 
                 // "if" needs a condition, and an untyped column is not one
-                arguments("if(a, 1, 2)", "1:0 if() expects a boolean expression, got: a")
+                arguments("if(a, 1, 2)", "1:0 if() expects argument 1 to be BOOLEAN, got: a")
         );
     }
 

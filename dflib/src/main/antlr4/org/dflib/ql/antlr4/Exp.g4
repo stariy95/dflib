@@ -2,8 +2,9 @@ grammar Exp;
 
 // *** How function calls are parsed ***
 //
-// Built-in functions are not rules of this grammar. They are entries of the "QLFunctions" registry (see
-// "DefaultQLFunctions"), which is reachable from the parser through "ExpParserUtils" and replaceable via
+// Built-in functions are not rules of this grammar. They are entries of the "QLFunctions" registry, one "QLFunction"
+// class per name in "org.dflib.ql.fn", each declaring one typed "call" overload per receiver type and arity. The
+// registry is reachable from the parser through "ExpParserUtils" and is replaceable via
 // "Environment.setQLFunctions(..)". Every call by a registered name - built-in or custom - is matched by the single
 // "fnCall" rule, which hands the name and the parsed arguments to the registry and gets an "Exp" back. Adding a
 // function to the language is a registry entry, not a grammar change; a call by an unregistered name is reported by

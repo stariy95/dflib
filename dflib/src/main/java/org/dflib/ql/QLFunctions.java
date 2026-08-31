@@ -8,10 +8,10 @@ import org.dflib.UdfN;
 import org.dflib.ql.QLFunctionDescriptor.Arg;
 import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -161,20 +161,175 @@ public class QLFunctions {
 
     /**
      * Resolves a function by its name and actual argument types. Overloads are ranked by preferring a fixed arity
-     * over varargs, then by the most specific argument match, and finally by registration order.
+     * over varargs, then by the most specific argument match, and finally by registration order. A tie that is only
+     * a tie because an argument type is unknown until eval time is reported as ambiguous rather than resolved
+     * arbitrarily.
      */
     public QLFunctionDescriptor function(String name, List<Arg> args) {
+
         SequencedSet<QLFunctionDescriptor> descriptors = functions.get(name);
-        return (descriptors != null ? descriptors.stream() : Stream.<QLFunctionDescriptor>empty())
-                .filter(d -> matchCost(d, args) != NO_MATCH)
-                // prefer fixed arity over varargs, then the most specific match.
-                // Equally specific overloads are resolved in favor of the one registered first.
-                .min(Comparator.comparing(QLFunctionDescriptor::isVarArgs)
-                        .thenComparingInt(d -> matchCost(d, args)))
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Function " + name + "(" + args + ") not found"
-                ));
+        if (descriptors == null) {
+            throw notFound(name, args);
+        }
+
+        // prefer fixed arity over varargs, then the most specific match, collecting every candidate that is
+        // equally good, as such a tie may be an unresolvable ambiguity rather than a registration-order question
+        List<QLFunctionDescriptor> best = new ArrayList<>(2);
+        boolean bestVarArgs = false;
+        int bestCost = 0;
+
+        for (QLFunctionDescriptor d : descriptors) {
+
+            int cost = matchCost(d, args);
+            if (cost == NO_MATCH) {
+                continue;
+            }
+
+            boolean varArgs = d.isVarArgs();
+
+            if (best.isEmpty()) {
+                best.add(d);
+                bestVarArgs = varArgs;
+                bestCost = cost;
+                continue;
+            }
+
+            int cmp = Boolean.compare(varArgs, bestVarArgs);
+            if (cmp == 0) {
+                cmp = Integer.compare(cost, bestCost);
+            }
+
+            if (cmp < 0) {
+                best.clear();
+                best.add(d);
+                bestVarArgs = varArgs;
+                bestCost = cost;
+            } else if (cmp == 0) {
+                best.add(d);
+            }
+        }
+
+        if (best.isEmpty()) {
+            throw notFound(name, args);
+        }
+
+        if (best.size() > 1) {
+            best = preferWildcardAtUntypedArgs(args, best);
+        }
+
+        if (best.size() > 1) {
+            checkAmbiguity(name, args, best);
+        }
+
+        // an ambiguity the argument types can not explain is resolved in favor of the overload registered first
+        return best.getFirst();
     }
+
+    /**
+     * Narrows a set of equally specific candidates to those declaring an OBJECT parameter everywhere the actual
+     * argument is {@link TypeClassifier#ANY}. Such an overload is the one written to handle an argument of any type,
+     * so it is the more specific match for an argument whose type is only known at eval time - the same rule that
+     * makes an OBJECT parameter cheaper than a typed one for a single argument, applied where the per-argument costs
+     * happen to add up to a tie.
+     * <p>
+     * This is what makes {@code shift(a, 1, 'x')} over an untyped column resolve to the untyped-receiver overload
+     * rather than collide with the string one: the untyped overload pays a wildcard for the filler and the string
+     * one pays a wildcard for the receiver, and only the former can actually accept the receiver.
+     * <p>
+     * If no candidate qualifies - the ANY argument is disputed by typed overloads only - the set is returned
+     * unchanged, and the tie is reported as ambiguous.
+     */
+    private static List<QLFunctionDescriptor> preferWildcardAtUntypedArgs(
+            List<Arg> args,
+            List<QLFunctionDescriptor> candidates) {
+
+        List<QLFunctionDescriptor> wildcards = new ArrayList<>(candidates.size());
+        for (QLFunctionDescriptor d : candidates) {
+            if (declaresWildcardAtUntypedArgs(args, d)) {
+                wildcards.add(d);
+            }
+        }
+
+        return wildcards.isEmpty() || wildcards.size() == candidates.size() ? candidates : wildcards;
+    }
+
+    private static boolean declaresWildcardAtUntypedArgs(List<Arg> args, QLFunctionDescriptor descriptor) {
+
+        Arg[] declared = descriptor.args();
+        int len = Math.min(args.size(), declared.length);
+
+        for (int i = 0; i < len; i++) {
+            if (args.get(i).type() == TypeClassifier.ANY && declared[i].type() != TypeClassifier.OBJECT) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static IllegalArgumentException notFound(String name, List<Arg> args) {
+        return new IllegalArgumentException("Function " + name + "(" + args + ") not found");
+    }
+
+    /**
+     * Throws if equally specific candidates disagree on the declared type of a parameter whose actual argument is
+     * {@link TypeClassifier#ANY}. Such an argument matches every one of them at the same cost, so the choice would
+     * come down to registration order - silently picking one overload for an expression whose type is only known at
+     * eval time. The caller has to say which one it means.
+     */
+    private static void checkAmbiguity(String name, List<Arg> args, List<QLFunctionDescriptor> candidates) {
+
+        int len = args.size();
+        for (int i = 0; i < len; i++) {
+
+            if (args.get(i).type() != TypeClassifier.ANY) {
+                continue;
+            }
+
+            EnumSet<TypeClassifier> declared = EnumSet.noneOf(TypeClassifier.class);
+            for (QLFunctionDescriptor d : candidates) {
+                // a vararg candidate may declare fewer parameters than the call passes
+                if (i < d.args().length) {
+                    declared.add(d.args()[i].type());
+                }
+            }
+
+            if (declared.size() > 1) {
+                throw new IllegalArgumentException("Ambiguous call to " + name + "(): the type of argument "
+                        + (i + 1) + " is only known at eval time, and " + name + " is defined for " + declared
+                        + " arguments in that position. " + castHint(name, declared));
+            }
+        }
+    }
+
+    /**
+     * The cast a caller would wrap an untyped argument in to pick one of the ambiguous overloads. Names one of the
+     * declared types, so the hint is a call the user can paste.
+     */
+    private static String castHint(String name, EnumSet<TypeClassifier> declared) {
+
+        for (TypeClassifier t : declared) {
+            String cast = CAST_FUNCTIONS.get(t);
+            if (cast != null) {
+                return "Cast it, e.g. " + name + "(" + cast + "(..))";
+            }
+        }
+
+        return "Cast it to one of them.";
+    }
+
+    /**
+     * The QL cast function that produces an expression of each classifier. {@code OBJECT} and {@code ANY} are absent
+     * on purpose: neither is a type a caller can cast to.
+     */
+    private static final Map<TypeClassifier, String> CAST_FUNCTIONS = Map.of(
+            TypeClassifier.NUMERIC, "castAsInt",
+            TypeClassifier.STRING, "castAsStr",
+            TypeClassifier.BOOLEAN, "castAsBool",
+            TypeClassifier.DATE, "castAsDate",
+            TypeClassifier.TIME, "castAsTime",
+            TypeClassifier.DATETIME, "castAsDateTime",
+            TypeClassifier.OFFSETDATETIME, "castAsOffsetDateTime");
 
     /**
      * Returns the combined cost of passing the given arguments to the descriptor parameters. The lower the cost, the
@@ -248,6 +403,22 @@ public class QLFunctions {
 
         public Builder function(String name, UdfN<?> function) {
             return defineFunction(name, QLFunctionDescriptor.ofUdfN(function));
+        }
+
+        /**
+         * Registers a function implemented as a class of typed {@code call} overloads. Every public {@code call}
+         * method declared in the class becomes one signature of the function, so a single call registers a whole
+         * overload set - one per receiver type and arity. See {@link QLFunction} for the rules such a class must
+         * follow; violating any of them is reported from here.
+         *
+         * @since 2.0.0
+         */
+        public Builder function(String name, QLFunction function) {
+            for (QLFunctionSignature s : QLFunctionSignature.reflectQLFunction(name, function)) {
+                defineFunction(name, new QLFunctionDescriptor(name, s));
+            }
+
+            return this;
         }
 
         /**

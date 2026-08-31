@@ -33,6 +33,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * minimal stand-ins for the built-in shapes ("shift", "plusDays", "min", "first"), so that a failure points at the
  * dispatch rules rather than at a built-in's signature; the built-ins themselves are covered by
  * {@link PolymorphicBuiltinTest}.
+ * <p>
+ * The stand-ins are declared with {@code returningArgType} - a return type that follows an argument's type. No
+ * built-in is written that way any more (each of them declares one fixed-return overload per receiver type instead),
+ * but the declaration is still supported for explicit registrations, and it is the shortest way to produce a
+ * polymorphic call site here.
  */
 public class PolymorphicDispatchTest {
 
@@ -50,7 +55,7 @@ public class PolymorphicDispatchTest {
                         .arg(OBJECT)
                         .as(args -> args.get(0)))
 
-                // a polymorphic function of two arguments, in the shape of "plusDays(e, n)"
+                // a polymorphic function of two arguments, an expression and a constant, like "plusDays(e, n)"
                 .function("plusLike", signature()
                         .returningArgType(0)
                         .arg(OBJECT)

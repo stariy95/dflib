@@ -24,7 +24,9 @@ import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 
 public class QLFunctionDescriptor {
@@ -245,6 +247,59 @@ public class QLFunctionDescriptor {
                 aClass.getName() + ".call(" + Arrays.toString(parameterTypes) + ")"));
     }
 
+    /**
+     * Expression interfaces whose classifier is fixed by the interface itself, whatever its value type parameter
+     * reflects as. Consulted before any generic unwinding, because {@code NumExp<?>}, raw {@code NumExp} and
+     * {@code <N extends Number> NumExp<N>} all carry their numeric-ness in the interface and not in the reflected
+     * type argument: a wildcard's reflected upper bound is {@code Object}, a raw type has no argument at all, and
+     * the interface-declared {@code N extends Number} bound is propagated into neither. Iterated in order, first
+     * assignable wins; the entries are mutually disjoint except for {@link org.dflib.DecimalExp}, which is a
+     * {@link NumExp}.
+     */
+    private static final Map<Class<?>, TypeClassifier> EXP_INTERFACE_CLASSIFIERS;
+
+    /**
+     * Primitives are boxed before classification: {@code Number.class.isAssignableFrom(int.class)} is false, so an
+     * implicit constant parameter declared as {@code int} or {@code double} would otherwise classify as OBJECT.
+     */
+    private static final Map<Class<?>, Class<?>> BOXED_PRIMITIVES = Map.of(
+            boolean.class, Boolean.class,
+            byte.class, Byte.class,
+            char.class, Character.class,
+            short.class, Short.class,
+            int.class, Integer.class,
+            long.class, Long.class,
+            float.class, Float.class,
+            double.class, Double.class);
+
+    static {
+        Map<Class<?>, TypeClassifier> m = new LinkedHashMap<>();
+        m.put(NumExp.class, TypeClassifier.NUMERIC);
+        m.put(StrExp.class, TypeClassifier.STRING);
+        m.put(Condition.class, TypeClassifier.BOOLEAN);
+        m.put(DateExp.class, TypeClassifier.DATE);
+        m.put(TimeExp.class, TypeClassifier.TIME);
+        m.put(DateTimeExp.class, TypeClassifier.DATETIME);
+        m.put(OffsetDateTimeExp.class, TypeClassifier.OFFSETDATETIME);
+        EXP_INTERFACE_CLASSIFIERS = m;
+    }
+
+    /**
+     * Returns the erasure of a type if it is a class or a parameterized type, null for anything else (a type
+     * variable, a wildcard, a generic array).
+     */
+    private static Class<?> erasedOrNull(Type type) {
+        return switch (type) {
+            case Class<?> c -> c;
+            case ParameterizedType pt when pt.getRawType() instanceof Class<?> raw -> raw;
+            case null, default -> null;
+        };
+    }
+
+    private static Class<?> box(Class<?> type) {
+        return type.isPrimitive() ? BOXED_PRIMITIVES.getOrDefault(type, type) : type;
+    }
+
     private static Class<?> unwindGeneric(Type type) {
         switch (type) {
             case Class<?> c -> {
@@ -272,8 +327,13 @@ public class QLFunctionDescriptor {
                 }
                 throw new IllegalArgumentException("Wildcard type with no bounds");
             }
-            case TypeVariable<?> tv
-                    -> throw new RuntimeException("Variable type " + tv + " can't be fully resolved");
+            case TypeVariable<?> tv -> {
+                // a method-level type variable, as in "<T> Exp<T> call(..)" or "<N extends Number> N filler".
+                // Reflection can not resolve it to a call site, so it is worth exactly its declared bound:
+                // "T" is Object (OBJECT), "N extends Number" is Number (NUMERIC)
+                Type[] bounds = tv.getBounds();
+                return bounds.length > 0 ? unwindGeneric(bounds[0]) : Object.class;
+            }
             case null, default
                     -> throw new IllegalArgumentException("Unexpected type " + type);
         }
@@ -323,14 +383,50 @@ public class QLFunctionDescriptor {
          */
         public static final int NO_MATCH = -1;
 
+        /**
+         * Classifies a declared Java type: a method return type, a parameter type or the value type of an
+         * expression.
+         */
         public static TypeClassifier classify(Type type) {
-            Class<?> expressionType = unwindGeneric(type);
+
+            switch (type) {
+                case TypeVariable<?> tv -> {
+                    // "<T> Exp<T> call(Exp<T> e, T filler)": a bare type variable in a parameter or return
+                    // position is worth its declared bound - Object for an unbounded "T", Number for
+                    // "<N extends Number> N"
+                    Type[] bounds = tv.getBounds();
+                    return bounds.length > 0 ? classify(bounds[0]) : OBJECT;
+                }
+                case WildcardType wt -> {
+                    Type[] lowerBounds = wt.getLowerBounds();
+                    if (lowerBounds.length > 0) {
+                        return classify(lowerBounds[0]);
+                    }
+                    Type[] upperBounds = wt.getUpperBounds();
+                    return upperBounds.length > 0 ? classify(upperBounds[0]) : OBJECT;
+                }
+                case null, default -> {
+                }
+            }
+
+            // a typed expression interface classifies by the interface alone. Its reflected type argument is
+            // useless for "NumExp<?>" and absent for raw "NumExp", and unwinding it would land on Object
+            Class<?> erased = erasedOrNull(type);
+            if (erased != null && !erased.isArray()) {
+                for (Map.Entry<Class<?>, TypeClassifier> e : EXP_INTERFACE_CLASSIFIERS.entrySet()) {
+                    if (e.getKey().isAssignableFrom(erased)) {
+                        return e.getValue();
+                    }
+                }
+            }
+
+            // what is left is a raw "Exp<V>" (or a non-expression type): classify its value type
+            Class<?> expressionType = box(unwindGeneric(type));
             if (Number.class.isAssignableFrom(expressionType)) {
                 return NUMERIC;
             } else if (CharSequence.class.isAssignableFrom(expressionType)) {
                 return STRING;
-            } else if (expressionType.equals(Boolean.class)
-                    || expressionType.equals(boolean.class)) {
+            } else if (expressionType.equals(Boolean.class)) {
                 return BOOLEAN;
             } else if (expressionType.equals(java.time.LocalDate.class)) {
                 return DATE;

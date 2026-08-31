@@ -268,6 +268,186 @@ class QLFunctionsTest {
                 objFirst.function("f", argTypes).args());
     }
 
+    // --- ambiguity caused by an argument whose type is only known at eval time ---
+
+    /**
+     * Two overloads that differ only in the type of one parameter, e.g. "avg(NumExp)" and "avg(DateExp)".
+     */
+    private static QLFunctions.Builder twoReceivers(TypeClassifier a, TypeClassifier b) {
+        return QLFunctions.builder().noDefaultFunctions()
+                .function("f", QLFunctionSignature.signature().returning(STRING).arg(a).as(args -> args.get(0).castAsStr()))
+                .function("f", QLFunctionSignature.signature().returning(STRING).arg(b).as(args -> args.get(0).castAsStr()));
+    }
+
+    @Test
+    void function_AnyArg_AmbiguousAmongTypedOverloads() {
+
+        // an untyped argument matches both overloads at the same cost, so registration order would decide which
+        // receiver type the call is compiled for. That is a coin toss over the user's data, not a resolution
+        QLFunctions functions = twoReceivers(NUMERIC, DATE).build();
+
+        assertNotNull(functions.function("f", List.of(arg(NUMERIC))));
+        assertNotNull(functions.function("f", List.of(arg(DATE))));
+
+        IllegalArgumentException e = assertThrows(
+                IllegalArgumentException.class,
+                () -> functions.function("f", List.of(arg(ANY))));
+
+        assertEquals("Ambiguous call to f(): the type of argument 1 is only known at eval time,"
+                + " and f is defined for [NUMERIC, DATE] arguments in that position."
+                + " Cast it, e.g. f(castAsInt(..))", e.getMessage());
+    }
+
+    @Test
+    void function_AnyArg_AmbiguityReportedAtItsOwnPosition() {
+
+        // the ambiguous position is not necessarily the first one, and the hint names one of the types actually
+        // declared there
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                .function("f", QLFunctionSignature.signature()
+                        .returning(STRING).arg(BOOLEAN).arg(DATE).as(args -> args.get(0).castAsStr()))
+                .function("f", QLFunctionSignature.signature()
+                        .returning(STRING).arg(BOOLEAN).arg(STRING).as(args -> args.get(0).castAsStr()))
+                .build();
+
+        IllegalArgumentException e = assertThrows(
+                IllegalArgumentException.class,
+                () -> functions.function("f", List.of(arg(BOOLEAN), arg(ANY))));
+
+        assertEquals("Ambiguous call to f(): the type of argument 2 is only known at eval time,"
+                + " and f is defined for [STRING, DATE] arguments in that position."
+                + " Cast it, e.g. f(castAsStr(..))", e.getMessage());
+    }
+
+    @Test
+    void function_AnyArg_AmbiguityIsPerArgument() {
+
+        // only the untyped argument is ambiguous - the same overloads resolve fine as soon as its type is known
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                .function("f", QLFunctionSignature.signature()
+                        .returning(STRING).arg(NUMERIC).arg(BOOLEAN).as(args -> args.get(0).castAsStr()))
+                .function("f", QLFunctionSignature.signature()
+                        .returning(STRING).arg(DATE).arg(BOOLEAN).as(args -> args.get(0).castAsStr()))
+                .build();
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> functions.function("f", List.of(arg(ANY), arg(BOOLEAN))));
+
+        assertArrayEquals(
+                new Arg[]{arg(NUMERIC), arg(BOOLEAN)},
+                functions.function("f", List.of(arg(NUMERIC), arg(BOOLEAN))).args());
+
+        assertArrayEquals(
+                new Arg[]{arg(DATE), arg(BOOLEAN)},
+                functions.function("f", List.of(arg(DATE), arg(BOOLEAN))).args());
+    }
+
+    @Test
+    void function_AnyArg_TieAwayFromTheAnyPositionIsNotAmbiguous() {
+
+        // the two overloads tie, but not because of the untyped argument: they agree on its declared type and
+        // differ only where the caller did provide a type. Registration order remains the right answer
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                .function("f", QLFunctionSignature.signature()
+                        .returning(STRING).arg(DATE).arg(STRING).arg(OBJECT).as(args -> args.get(0).castAsStr()))
+                .function("f", QLFunctionSignature.signature()
+                        .returning(STRING).arg(DATE).arg(OBJECT).arg(STRING).as(args -> args.get(0).castAsStr()))
+                .build();
+
+        assertArrayEquals(
+                new Arg[]{arg(DATE), arg(STRING), arg(OBJECT)},
+                functions.function("f", List.of(arg(ANY), arg(STRING), arg(STRING))).args());
+    }
+
+    @Test
+    void function_AnyArg_WildcardOverloadResolvesTheAmbiguity() {
+
+        // "shift(a, 2)": an overload written to accept an argument of any type is strictly the better match for an
+        // untyped argument, so it wins outright and there is nothing to be ambiguous about
+        QLFunctions functions = twoReceivers(NUMERIC, DATE)
+                .function("f", QLFunctionSignature.signature()
+                        .returning(STRING).arg(OBJECT).as(args -> args.get(0).castAsStr()))
+                .build();
+
+        assertArrayEquals(new Arg[]{arg(OBJECT)}, functions.function("f", List.of(arg(ANY))).args());
+    }
+
+    @Test
+    void function_AnyArg_WildcardOverloadWinsATie() {
+
+        // "shift(a, 1, 'x')": the wildcard overload pays for the second argument what the typed one pays for the
+        // untyped first, so the per-argument costs add up to a tie. It is still not an ambiguity - only the
+        // wildcard overload is written to accept a receiver of any type, and the typed one would reject it
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                .function("f", QLFunctionSignature.signature()
+                        .returning(STRING).arg(STRING).arg(STRING).as(args -> args.get(0).castAsStr()))
+                .function("f", QLFunctionSignature.signature()
+                        .returning(OBJECT).arg(OBJECT).arg(OBJECT).as(args -> args.get(0).castAsStr()))
+                .build();
+
+        assertArrayEquals(
+                new Arg[]{arg(OBJECT), arg(OBJECT)},
+                functions.function("f", List.of(arg(ANY), arg(STRING))).args());
+
+        // a typed argument in that position still picks the typed overload
+        assertArrayEquals(
+                new Arg[]{arg(STRING), arg(STRING)},
+                functions.function("f", List.of(arg(STRING), arg(STRING))).args());
+    }
+
+    @Test
+    void function_AnyArg_FixedArityWinsOverVarArgs() {
+
+        // a vararg overload never ties with a fixed-arity one, so an untyped argument can not make them ambiguous
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                .function("f", QLFunctionSignature.signature()
+                        .returning(STRING).arg(NUMERIC).as(args -> args.get(0).castAsStr()))
+                .function("f", QLFunctionSignature.signature()
+                        .returning(STRING).varArgs().as(args -> args.get(0).castAsStr()))
+                .build();
+
+        QLFunctionDescriptor descriptor = functions.function("f", List.of(arg(ANY)));
+
+        assertFalse(descriptor.isVarArgs());
+        assertArrayEquals(new Arg[]{arg(NUMERIC)}, descriptor.args());
+    }
+
+    @Test
+    void function_AnyArg_VarArgsAmbiguousOnALeadingParam() {
+
+        // vararg overloads are compared by their leading typed parameters only. The first argument is ambiguous;
+        // the second one is untyped too, but lands past everything either overload declares
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                .function("f", QLFunctionSignature.signature()
+                        .returning(STRING).arg(NUMERIC).varArgs().as(args -> args.get(0).castAsStr()))
+                .function("f", QLFunctionSignature.signature()
+                        .returning(STRING).arg(DATE).varArgs().as(args -> args.get(0).castAsStr()))
+                .build();
+
+        IllegalArgumentException e = assertThrows(
+                IllegalArgumentException.class,
+                () -> functions.function("f", List.of(arg(ANY), arg(ANY))));
+
+        assertEquals("Ambiguous call to f(): the type of argument 1 is only known at eval time,"
+                + " and f is defined for [NUMERIC, DATE] arguments in that position."
+                + " Cast it, e.g. f(castAsInt(..))", e.getMessage());
+    }
+
+    @Test
+    void function_AnyArg_NotFoundStillReportsNotFound() {
+
+        // an ambiguity is only possible among matching overloads. When none match, the message stays the one the
+        // parser reports for an unknown call
+        QLFunctions functions = twoReceivers(NUMERIC, DATE).build();
+
+        IllegalArgumentException e = assertThrows(
+                IllegalArgumentException.class,
+                () -> functions.function("f", List.of(arg(ANY), arg(ANY))));
+
+        assertEquals("Function f([ANY, ANY]) not found", e.getMessage());
+    }
+
     @Test
     void function_ConstantParam_MatchesConstantArg() {
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()

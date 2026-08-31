@@ -45,19 +45,23 @@ public class FixedReturnFunctionTest {
         assertEquals($dateTimeVal(ldt).hour(), parseExp("hour(?)", ldt));
     }
 
+    /**
+     * A null literal is an Object-valued constant, and no field function declares an OBJECT receiver, so the call
+     * does not resolve.
+     */
     @ParameterizedTest
     @ValueSource(strings = {"year(null)", "hour(null)"})
     public void fieldFn_null_throws(String text) {
         QLParserException e = assertThrows(QLParserException.class, () -> parseExp(text));
-        assertEquals("1:0 " + text.substring(0, text.indexOf('('))
-                + "() is not supported for expression: null", e.getMessage());
+        assertEquals("1:0 Function " + text.substring(0, text.indexOf('('))
+                + "([const OBJECT]) not found", e.getMessage());
     }
 
     @Test
     public void fieldFn_nullParameter_throws() {
         QLParserException e = assertThrows(QLParserException.class,
                 () -> parseExp("month(?)", new Object[]{null}));
-        assertEquals("1:0 month() is not supported for expression: null", e.getMessage());
+        assertEquals("1:0 Function month([const OBJECT]) not found", e.getMessage());
     }
 
     @Test
@@ -67,7 +71,7 @@ public class FixedReturnFunctionTest {
         // column reference is not one. The registry resolves the single-argument overload - an untyped column is
         // classified as ANY and matches its BOOLEAN parameter - and the producer is what rejects it, with a message
         QLParserException e = assertThrows(QLParserException.class, () -> parseExp("count(a)"));
-        assertEquals("1:0 count() expects a boolean expression, got: a", e.getMessage());
+        assertEquals("1:0 count() expects argument 1 to be BOOLEAN, got: a", e.getMessage());
     }
 
     @ParameterizedTest
