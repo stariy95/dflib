@@ -30,7 +30,8 @@ class CallProducer implements Function<List<Exp<?>>, Exp<?>> {
             boolean.class, Boolean.class,
             String.class,
             Number.class,
-            LocalDate.class, LocalTime.class, LocalDateTime.class, OffsetDateTime.class);
+            LocalDate.class, LocalTime.class, LocalDateTime.class, OffsetDateTime.class,
+            Object.class);
 
     private final String name;
     private final QLFunction function;
@@ -111,6 +112,10 @@ class CallProducer implements Function<List<Exp<?>>, Exp<?>> {
 
         Class<?> declared = paramTypes[i];
         Object value = ConstantArgs.constantValue(arg);
+
+        if (declared == Object.class) {
+            return value;
+        }
 
         if (declared == int.class || declared == Integer.class) {
             return ConstantArgs.toInt(requireNumber(i, arg, value), arg);

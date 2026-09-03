@@ -8,8 +8,6 @@ import org.dflib.NumExp;
 import org.dflib.OffsetDateTimeExp;
 import org.dflib.StrExp;
 import org.dflib.TimeExp;
-import org.dflib.ql.Constant;
-import org.dflib.ql.ConstantArgs;
 import org.dflib.ql.QLFunction;
 import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
 
@@ -86,18 +84,20 @@ public class ShiftFunction implements QLFunction {
         return e.shift(offset);
     }
 
-    // Also catches a typed receiver with a filler of another type, so the filler type is checked here. The filler
-    // stays an expression, as an unbounded type variable is not an allowed constant parameter type
-    public <T> Exp<T> call(Exp<T> e, int offset, @Constant Exp<T> filler) {
+    // Also catches a typed receiver with a filler of another type, so the filler type is checked here
+    @SuppressWarnings("unchecked")
+    public <T> Exp<T> call(Exp<T> e, int offset, Object filler) {
 
         TypeClassifier receiverType = TypeClassifier.classify(e);
-        TypeClassifier fillerType = TypeClassifier.classify(filler);
+        TypeClassifier fillerType = filler != null
+                ? TypeClassifier.classify(filler.getClass())
+                : TypeClassifier.OBJECT;
 
         if (receiverType.isTyped() && fillerType.isTyped() && receiverType != fillerType) {
             throw new IllegalArgumentException("shift() filler of type " + fillerType
                     + " is not compatible with a " + receiverType + " expression: " + e.toQL());
         }
 
-        return e.shift(offset, ConstantArgs.constantValue(filler));
+        return e.shift(offset, (T) filler);
     }
 }

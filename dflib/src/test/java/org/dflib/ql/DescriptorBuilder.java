@@ -1,0 +1,55 @@
+package org.dflib.ql;
+
+import org.dflib.Exp;
+import org.dflib.ql.QLFunctionDescriptor.Arg;
+import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Function;
+
+/**
+ * A fluent test helper assembling a {@link QLFunctionDescriptor} of an arbitrary shape.
+ */
+class DescriptorBuilder {
+
+    private final String name;
+    private TypeClassifier returnType;
+    private final List<Arg> args = new ArrayList<>();
+    private boolean varArgs;
+
+    private DescriptorBuilder(String name) {
+        this.name = name;
+    }
+
+    static DescriptorBuilder descriptor(String name) {
+        return new DescriptorBuilder(name);
+    }
+
+    DescriptorBuilder returning(TypeClassifier type) {
+        this.returnType = type;
+        return this;
+    }
+
+    DescriptorBuilder arg(TypeClassifier type) {
+        return arg(new Arg(type, false));
+    }
+
+    DescriptorBuilder constArg(TypeClassifier type) {
+        return arg(new Arg(type, true));
+    }
+
+    DescriptorBuilder arg(Arg arg) {
+        this.args.add(arg);
+        return this;
+    }
+
+    DescriptorBuilder varArgs() {
+        this.varArgs = true;
+        return this;
+    }
+
+    QLFunctionDescriptor as(Function<List<Exp<?>>, Exp<?>> producer) {
+        return new QLFunctionDescriptor(name, returnType, args, varArgs, producer);
+    }
+}

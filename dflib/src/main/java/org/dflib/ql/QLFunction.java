@@ -13,8 +13,7 @@ import org.dflib.Exp;
  * an {@code Exp<?>} parameter accepts anything;</li>
  * <li>a non-{@code Exp} parameter is a constant argument of one of {@code int}, {@code long}, {@code double},
  * {@code boolean}, {@code String}, {@code LocalDate}, {@code LocalTime}, {@code LocalDateTime},
- * {@code OffsetDateTime} or a type variable bounded by {@code Number}; use {@link Constant @Constant Exp<T>} to
- * receive a constant as an expression;</li>
+ * {@code OffsetDateTime}, {@code Object} (a constant of any type) or a type variable bounded by {@code Number};</li>
  * <li>a trailing {@code Exp<?>...} parameter accepts any number of arguments of any type;</li>
  * <li>no two overloads may share an argument shape;</li>
  * <li>argument problems are reported as {@link IllegalArgumentException} naming the function.</li>

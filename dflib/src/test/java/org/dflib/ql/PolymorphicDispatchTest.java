@@ -20,7 +20,7 @@ import static org.dflib.ql.IdentityFunctions.identity;
 import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.ANY;
 import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.NUMERIC;
 import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.OBJECT;
-import static org.dflib.ql.QLFunctionSignature.signature;
+import static org.dflib.ql.DescriptorBuilder.descriptor;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
@@ -39,11 +39,11 @@ public class PolymorphicDispatchTest {
         identity(builder, "plusLike", new Arg(NUMERIC, true));
 
         Environment.setQLFunctions(builder
-                .function("foo", signature()
+                .function(descriptor("foo")
                         .returning(NUMERIC)
                         .arg(OBJECT)
                         .as(args -> args.get(0).castAsInt()))
-                .function("anyLike", signature()
+                .function(descriptor("anyLike")
                         .returning(ANY)
                         .arg(OBJECT)
                         .as(args -> args.get(0).first()))

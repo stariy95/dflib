@@ -23,13 +23,14 @@ import static org.dflib.Exp.$int;
 import static org.dflib.Exp.$offsetDateTime;
 import static org.dflib.Exp.$str;
 import static org.dflib.Exp.$time;
+import static org.dflib.ql.DescriptorBuilder.descriptor;
 import static org.junit.jupiter.api.Assertions.*;
 
 class QLFunctionDescriptorTest {
 
     @Test
     void test() {
-        QLFunctionDescriptor descriptor = new QLFunctionDescriptor("add", QLFunctionSignature.udf1(new AdditionFn()));
+        QLFunctionDescriptor descriptor = QLFunctionReflection.udf1("add", new AdditionFn());
         assertNotNull(descriptor);
 
         Exp<?> fnCall = descriptor.expProducer().apply(List.of($int("a")));
@@ -38,7 +39,7 @@ class QLFunctionDescriptorTest {
 
     @Test
     void udfN() {
-        QLFunctionDescriptor descriptor = new QLFunctionDescriptor("vadd", QLFunctionSignature.udfN(new VarArgsFn()));
+        QLFunctionDescriptor descriptor = QLFunctionReflection.udfN("vadd", new VarArgsFn());
         assertNotNull(descriptor);
         assertTrue(descriptor.isVarArgs());
         assertEquals(0, descriptor.args().length);
@@ -52,38 +53,38 @@ class QLFunctionDescriptorTest {
     void returnType_NonParameterizedExpInterface() {
         assertEquals(
                 QLFunctionDescriptor.TypeClassifier.NUMERIC,
-                new QLFunctionDescriptor("dec", QLFunctionSignature.udf1(new DecimalFn())).returnType());
+                QLFunctionReflection.udf1("dec", new DecimalFn()).returnType());
 
         assertEquals(
                 QLFunctionDescriptor.TypeClassifier.BOOLEAN,
-                new QLFunctionDescriptor("cond", QLFunctionSignature.udf1(new ConditionFn())).returnType());
+                QLFunctionReflection.udf1("cond", new ConditionFn()).returnType());
     }
 
     @Test
     void returnType_NestedGenerics() {
         assertEquals(
                 QLFunctionDescriptor.TypeClassifier.OBJECT,
-                new QLFunctionDescriptor("list", QLFunctionSignature.udf1(new ListFn())).returnType());
+                QLFunctionReflection.udf1("list", new ListFn()).returnType());
     }
 
     @Test
     void returnType_ArrayValueType() {
         assertEquals(
                 QLFunctionDescriptor.TypeClassifier.OBJECT,
-                new QLFunctionDescriptor("split", QLFunctionSignature.udf1(new ArrayFn())).returnType());
+                QLFunctionReflection.udf1("split", new ArrayFn()).returnType());
     }
 
     @Test
-    void constantArg_CovariantReturn() {
+    void covariantReturn() {
 
-        // the bridge "call" emitted for a covariant return carries no parameter annotations
-        QLFunctionDescriptor descriptor = new QLFunctionDescriptor("scale", QLFunctionSignature.udf2(new ConstArgNumFn()));
+        // the bridge "call" emitted for a covariant return carries no generic types
+        QLFunctionDescriptor descriptor = QLFunctionReflection.udf2("scale", new CovariantFn());
 
         assertEquals(QLFunctionDescriptor.TypeClassifier.NUMERIC, descriptor.returnType());
         assertArrayEquals(
                 new QLFunctionDescriptor.Arg[]{
                         new QLFunctionDescriptor.Arg(QLFunctionDescriptor.TypeClassifier.NUMERIC, false),
-                        new QLFunctionDescriptor.Arg(QLFunctionDescriptor.TypeClassifier.NUMERIC, true)},
+                        new QLFunctionDescriptor.Arg(QLFunctionDescriptor.TypeClassifier.NUMERIC, false)},
                 descriptor.args());
     }
 
@@ -137,25 +138,25 @@ class QLFunctionDescriptorTest {
 
     @Test
     void returnType_Fixed() {
-        QLFunctionDescriptor descriptor = new QLFunctionDescriptor("len", QLFunctionSignature.signature()
+        QLFunctionDescriptor descriptor = descriptor("len")
                 .returning(TypeClassifier.NUMERIC)
                 .arg(TypeClassifier.STRING)
-                .as(args -> args.get(0).castAsStr().len()));
+                .as(args -> args.get(0).castAsStr().len());
 
         assertEquals(TypeClassifier.NUMERIC, descriptor.returnType());
     }
 
     @Test
     void equals_IgnoresReturnType() {
-        QLFunctionDescriptor str = new QLFunctionDescriptor("f", QLFunctionSignature.signature()
+        QLFunctionDescriptor str = descriptor("f")
                 .returning(TypeClassifier.STRING)
                 .arg(TypeClassifier.NUMERIC)
-                .as(args -> args.get(0).castAsStr()));
+                .as(args -> args.get(0).castAsStr());
 
-        QLFunctionDescriptor bool = new QLFunctionDescriptor("f", QLFunctionSignature.signature()
+        QLFunctionDescriptor bool = descriptor("f")
                 .returning(TypeClassifier.BOOLEAN)
                 .arg(TypeClassifier.NUMERIC)
-                .as(args -> args.get(0).castAsBool()));
+                .as(args -> args.get(0).castAsBool());
 
         assertEquals(str, bool);
         assertEquals(str.hashCode(), bool.hashCode());
@@ -163,22 +164,22 @@ class QLFunctionDescriptorTest {
 
     @Test
     void reflect_ProducesTheSameDescriptorAsAnExplicitSignature() {
-        QLFunctionDescriptor reflected = new QLFunctionDescriptor("scale", QLFunctionSignature.udf2(new ConstArgNumFn()));
+        QLFunctionDescriptor reflected = QLFunctionReflection.udf2("scale", new CovariantFn());
 
-        QLFunctionDescriptor explicit = new QLFunctionDescriptor("scale", QLFunctionSignature.signature()
+        QLFunctionDescriptor explicit = descriptor("scale")
                 .returning(TypeClassifier.NUMERIC)
                 .arg(TypeClassifier.NUMERIC)
-                .constArg(TypeClassifier.NUMERIC)
-                .as(args -> args.get(0).castAsDecimal()));
+                .arg(TypeClassifier.NUMERIC)
+                .as(args -> args.get(0).castAsDecimal());
 
         assertEquals(explicit, reflected);
         assertEquals(explicit.returnType(), reflected.returnType());
     }
 
-    public static class ConstArgNumFn implements Udf2<Number, Integer, Number> {
+    public static class CovariantFn implements Udf2<Number, Integer, Number> {
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
-        public NumExp<Number> call(Exp<Number> exp, @Constant Exp<Integer> scale) {
+        public NumExp<Number> call(Exp<Number> exp, Exp<Integer> scale) {
             return (NumExp) exp.castAsDecimal();
         }
     }

@@ -11,7 +11,6 @@ import org.dflib.TimeExp;
 import org.dflib.exp.ScalarExp;
 
 import java.lang.reflect.GenericArrayType;
-import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
@@ -35,14 +34,26 @@ public class QLFunctionDescriptor {
     final boolean varArgs;
     final Function<List<Exp<?>>, Exp<?>> fnExpProducer;
 
-    QLFunctionDescriptor(String name, QLFunctionSignature signature) {
-        signature.validate(name);
+    QLFunctionDescriptor(
+            String name,
+            TypeClassifier returnType,
+            List<Arg> args,
+            boolean varArgs,
+            Function<List<Exp<?>>, Exp<?>> fnExpProducer) {
+
+        if (returnType == null) {
+            throw new IllegalArgumentException("No return type defined for function: " + name);
+        }
+
+        if (fnExpProducer == null) {
+            throw new IllegalArgumentException("No expression producer defined for function: " + name);
+        }
 
         this.name = name;
-        this.returnType = signature.returnType();
-        this.args = signature.args();
-        this.varArgs = signature.isVarArgs();
-        this.fnExpProducer = signature.producer();
+        this.returnType = returnType;
+        this.args = args.toArray(new Arg[0]);
+        this.varArgs = varArgs;
+        this.fnExpProducer = fnExpProducer;
     }
 
     /**
@@ -347,11 +358,6 @@ public class QLFunctionDescriptor {
 
         public static Arg of(Exp<?> exp) {
             return new Arg(TypeClassifier.classify(exp), exp instanceof ScalarExp);
-        }
-
-        static Arg of(Parameter parameter) {
-            return new Arg(TypeClassifier.classify(parameter.getParameterizedType()),
-                    parameter.isAnnotationPresent(Constant.class));
         }
 
         /**

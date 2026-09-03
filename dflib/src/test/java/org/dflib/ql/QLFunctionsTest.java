@@ -9,6 +9,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 
+import static org.dflib.ql.DescriptorBuilder.descriptor;
 import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.ANY;
 import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.BOOLEAN;
 import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.DATE;
@@ -245,8 +246,8 @@ class QLFunctionsTest {
 
     private static QLFunctions.Builder twoReceivers(TypeClassifier a, TypeClassifier b) {
         return QLFunctions.builder().noDefaultFunctions()
-                .function("f", QLFunctionSignature.signature().returning(STRING).arg(a).as(args -> args.get(0).castAsStr()))
-                .function("f", QLFunctionSignature.signature().returning(STRING).arg(b).as(args -> args.get(0).castAsStr()));
+                .function(descriptor("f").returning(STRING).arg(a).as(args -> args.get(0).castAsStr()))
+                .function(descriptor("f").returning(STRING).arg(b).as(args -> args.get(0).castAsStr()));
     }
 
     @Test
@@ -268,9 +269,9 @@ class QLFunctionsTest {
     @Test
     void function_AnyArg_AmbiguityReportedAtItsOwnPosition() {
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
-                .function("f", QLFunctionSignature.signature()
+                .function(descriptor("f")
                         .returning(STRING).arg(BOOLEAN).arg(DATE).as(args -> args.get(0).castAsStr()))
-                .function("f", QLFunctionSignature.signature()
+                .function(descriptor("f")
                         .returning(STRING).arg(BOOLEAN).arg(STRING).as(args -> args.get(0).castAsStr()))
                 .build();
 
@@ -286,9 +287,9 @@ class QLFunctionsTest {
     @Test
     void function_AnyArg_AmbiguityIsPerArgument() {
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
-                .function("f", QLFunctionSignature.signature()
+                .function(descriptor("f")
                         .returning(STRING).arg(NUMERIC).arg(BOOLEAN).as(args -> args.get(0).castAsStr()))
-                .function("f", QLFunctionSignature.signature()
+                .function(descriptor("f")
                         .returning(STRING).arg(DATE).arg(BOOLEAN).as(args -> args.get(0).castAsStr()))
                 .build();
 
@@ -308,9 +309,9 @@ class QLFunctionsTest {
     @Test
     void function_AnyArg_TieAwayFromTheAnyPositionIsNotAmbiguous() {
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
-                .function("f", QLFunctionSignature.signature()
+                .function(descriptor("f")
                         .returning(STRING).arg(DATE).arg(STRING).arg(OBJECT).as(args -> args.get(0).castAsStr()))
-                .function("f", QLFunctionSignature.signature()
+                .function(descriptor("f")
                         .returning(STRING).arg(DATE).arg(OBJECT).arg(STRING).as(args -> args.get(0).castAsStr()))
                 .build();
 
@@ -322,7 +323,7 @@ class QLFunctionsTest {
     @Test
     void function_AnyArg_WildcardOverloadResolvesTheAmbiguity() {
         QLFunctions functions = twoReceivers(NUMERIC, DATE)
-                .function("f", QLFunctionSignature.signature()
+                .function(descriptor("f")
                         .returning(STRING).arg(OBJECT).as(args -> args.get(0).castAsStr()))
                 .build();
 
@@ -334,9 +335,9 @@ class QLFunctionsTest {
 
         // "shift(a, 1, 'x')": an ANY argument to a typed parameter costs more than any number of wildcard matches
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
-                .function("f", QLFunctionSignature.signature()
+                .function(descriptor("f")
                         .returning(STRING).arg(STRING).arg(STRING).as(args -> args.get(0).castAsStr()))
-                .function("f", QLFunctionSignature.signature()
+                .function(descriptor("f")
                         .returning(OBJECT).arg(OBJECT).arg(OBJECT).as(args -> args.get(0).castAsStr()))
                 .build();
 
@@ -352,9 +353,9 @@ class QLFunctionsTest {
     @Test
     void function_AnyArg_FixedArityWinsOverVarArgs() {
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
-                .function("f", QLFunctionSignature.signature()
+                .function(descriptor("f")
                         .returning(STRING).arg(NUMERIC).as(args -> args.get(0).castAsStr()))
-                .function("f", QLFunctionSignature.signature()
+                .function(descriptor("f")
                         .returning(STRING).varArgs().as(args -> args.get(0).castAsStr()))
                 .build();
 
@@ -367,9 +368,9 @@ class QLFunctionsTest {
     @Test
     void function_AnyArg_VarArgsAmbiguousOnALeadingParam() {
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
-                .function("f", QLFunctionSignature.signature()
+                .function(descriptor("f")
                         .returning(STRING).arg(NUMERIC).varArgs().as(args -> args.get(0).castAsStr()))
-                .function("f", QLFunctionSignature.signature()
+                .function(descriptor("f")
                         .returning(STRING).arg(DATE).varArgs().as(args -> args.get(0).castAsStr()))
                 .build();
 
@@ -471,14 +472,6 @@ class QLFunctionsTest {
     }
 
     @Test
-    void constantArg_OnVarArgsIsRejected() {
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> QLFunctions.builder().noDefaultFunctions().function("sum", new ConstVarArgsFunction())
-        );
-    }
-
-    @Test
     void isFn() {
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions().function("sum", new Int2SumFunction()).build();
 
@@ -524,7 +517,7 @@ class QLFunctionsTest {
     @Test
     void mayReturn_AnyReturningFunction() {
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
-                .function("first", QLFunctionSignature.signature()
+                .function(descriptor("first")
                         .returning(ANY)
                         .arg(OBJECT)
                         .as(args -> args.get(0).first()))
@@ -541,11 +534,11 @@ class QLFunctionsTest {
     void hasTypedReturn() {
         QLFunctions.Builder builder = QLFunctions.builder().noDefaultFunctions()
                 .function("sum", new Int2SumFunction())
-                .function("split", QLFunctionSignature.signature()
+                .function(descriptor("split")
                         .returning(OBJECT)
                         .arg(OBJECT)
                         .as(args -> args.get(0).list()))
-                .function("first", QLFunctionSignature.signature()
+                .function(descriptor("first")
                         .returning(ANY)
                         .arg(OBJECT)
                         .as(args -> args.get(0).first()));
@@ -602,7 +595,7 @@ class QLFunctionsTest {
     @Test
     void functionByName_TypedExpressionWithoutATypedInterface() {
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
-                .function("year", QLFunctionSignature.signature()
+                .function(descriptor("year")
                         .returning(NUMERIC)
                         .arg(DATE)
                         .as(args -> ((DateExp) args.get(0)).year()))
@@ -617,7 +610,7 @@ class QLFunctionsTest {
     @Test
     void signature_FourArgs() {
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
-                .function("between", QLFunctionSignature.signature()
+                .function(descriptor("between")
                         .returning(BOOLEAN)
                         .arg(NUMERIC)
                         .arg(NUMERIC)
@@ -639,11 +632,11 @@ class QLFunctionsTest {
     @Test
     void signature_ZeroArgOverloadBesideVarArgs() {
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
-                .function("concat", QLFunctionSignature.signature()
+                .function(descriptor("concat")
                         .returning(STRING)
                         .varArgs()
                         .as(args -> args.get(0).castAsStr()))
-                .function("concat", QLFunctionSignature.signature()
+                .function(descriptor("concat")
                         .returning(STRING)
                         .as(args -> Exp.$strVal("")))
                 .build();
@@ -656,7 +649,7 @@ class QLFunctionsTest {
     @Test
     void signature_VarArgsWithLeadingTypedParams() {
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
-                .function("vConcat", QLFunctionSignature.signature()
+                .function(descriptor("vConcat")
                         .returning(STRING)
                         .constArg(STRING)
                         .varArgs()
@@ -676,7 +669,7 @@ class QLFunctionsTest {
     @Test
     void signature_ConstArgNeedsNoAnnotation() {
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
-                .function("substr", QLFunctionSignature.signature()
+                .function(descriptor("substr")
                         .returning(STRING)
                         .arg(OBJECT)
                         .constArg(NUMERIC)
@@ -694,13 +687,13 @@ class QLFunctionsTest {
     @Test
     void signature_DuplicateShapeRejected() {
         QLFunctions.Builder builder = QLFunctions.builder().noDefaultFunctions()
-                .function("f", QLFunctionSignature.signature()
+                .function(descriptor("f")
                         .returning(STRING)
                         .arg(NUMERIC)
                         .as(args -> args.get(0).castAsStr()));
 
         assertThrows(IllegalArgumentException.class, () -> builder
-                .function("f", QLFunctionSignature.signature()
+                .function(descriptor("f")
                         .returning(BOOLEAN)
                         .arg(NUMERIC)
                         .as(args -> args.get(0).castAsBool())));
@@ -708,14 +701,14 @@ class QLFunctionsTest {
 
     @Test
     void signature_ProducerRequired() {
-        assertThrows(IllegalArgumentException.class, () -> QLFunctions.builder().noDefaultFunctions()
-                .function("f", QLFunctionSignature.signature().returning(STRING).arg(NUMERIC)));
+        assertThrows(IllegalArgumentException.class,
+                () -> descriptor("f").returning(STRING).arg(NUMERIC).as(null));
     }
 
     @Test
     void signature_ReturnTypeRequired() {
         assertThrows(IllegalArgumentException.class, () -> QLFunctions.builder().noDefaultFunctions()
-                .function("f", QLFunctionSignature.signature().arg(NUMERIC).as(args -> args.get(0))));
+                .function(descriptor("f").arg(NUMERIC).as(args -> args.get(0))));
     }
 
     private static class BoolFunction implements Udf1<Object, Boolean> {
@@ -746,10 +739,9 @@ class QLFunctionsTest {
         }
     }
 
-    private static class StrConstIntFunction implements Udf2<Object, Integer, String> {
-        @Override
-        public Exp<String> call(Exp<Object> exp, @Constant Exp<Integer> from) {
-            return exp.substr(from.reduce((Series<?>) null));
+    public static class StrConstIntFunction implements QLFunction {
+        public StrExp call(Exp<?> exp, int from) {
+            return exp.substr(from);
         }
     }
 
@@ -757,14 +749,6 @@ class QLFunctionsTest {
         @Override
         public Exp<String> call(Exp<Object> exp, Exp<Integer> from) {
             return exp.castAsStr();
-        }
-    }
-
-    private static class ConstVarArgsFunction implements UdfN<Number> {
-        @SuppressWarnings({"unchecked", "rawtypes"})
-        @Override
-        public NumExp<Number> call(@Constant Exp<?>... exps) {
-            return (NumExp) exps[0];
         }
     }
 

@@ -135,6 +135,22 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
+    public void objectParameter_IsAConstantArgOfAnyType() {
+
+        QLFunctions functions = registry("shift", new ObjectFillerFunction());
+
+        assertEquals("[OBJECT, const NUMERIC, const OBJECT]",
+                Arrays.toString(functions.descriptors().findFirst().orElseThrow().args()));
+
+        assertEquals($col("a").shift(1, "x"), call(functions, "shift", $col("a"), $intVal(1), $strVal("x")));
+        assertEquals($col("a").shift(1, 5), call(functions, "shift", $col("a"), $intVal(1), $intVal(5)));
+        assertEquals($col("a").shift(1, null), call(functions, "shift", $col("a"), $intVal(1), Exp.$val(null)));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> call(functions, "shift", $col("a"), $intVal(1), $col("b")));
+    }
+
+    @Test
     public void numberBoundedTypeVariable_IsANumericConstantArg() {
 
         QLFunctions functions = registry("shift", new ShiftFunction());
@@ -343,6 +359,14 @@ public class QLFunctionReflectionTest {
 
         public NumExp<?> call(NumExp<?> e, double q) {
             return e.quantile(q);
+        }
+    }
+
+    public static class ObjectFillerFunction implements QLFunction {
+
+        @SuppressWarnings("unchecked")
+        public <T> Exp<T> call(Exp<T> e, int offset, Object filler) {
+            return e.shift(offset, (T) filler);
         }
     }
 

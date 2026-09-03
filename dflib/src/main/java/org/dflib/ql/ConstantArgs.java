@@ -8,10 +8,8 @@ import java.math.BigInteger;
 
 /**
  * Reads the values of constant (scalar) argument expressions.
- *
- * @since 2.0.0
  */
-public class ConstantArgs {
+class ConstantArgs {
 
     private ConstantArgs() {
     }
@@ -21,7 +19,7 @@ public class ConstantArgs {
      *
      * @throws IllegalArgumentException if the expression is not a constant
      */
-    public static <T> T constantValue(Exp<T> exp) {
+    static <T> T constantValue(Exp<T> exp) {
         if (exp instanceof ScalarExp) {
             return exp.reduce((Series<?>) null);
         }

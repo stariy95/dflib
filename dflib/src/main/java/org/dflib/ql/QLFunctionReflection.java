@@ -20,78 +20,65 @@ import java.util.List;
 import java.util.function.Function;
 
 /**
- * A mutable description of a QL function that a {@link QLFunctionDescriptor} is built from. Reflected from a
- * {@code Udf} lambda or a {@link QLFunction} {@code call} overload, or assembled with the fluent methods.
+ * Builds function descriptors by reflecting on {@code Udf} lambdas and {@link QLFunction} classes.
  */
-class QLFunctionSignature {
+class QLFunctionReflection {
 
-    private TypeClassifier returnType;
-    private final List<Arg> args = new ArrayList<>();
-    private boolean varArgs;
-    private Function<List<Exp<?>>, Exp<?>> producer;
-    private Method method;
-
-    static QLFunctionSignature signature() {
-        return new QLFunctionSignature();
+    private QLFunctionReflection() {
     }
 
-    static QLFunctionSignature udf0(Udf0<?> function) {
-        return reflect(
+    static QLFunctionDescriptor udf0(String name, Udf0<?> function) {
+        return reflect(name,
                 callMethod(function), false,
                 exps -> function.call());
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
-    static QLFunctionSignature udf1(Udf1<?, ?> function) {
-        return reflect(
+    static QLFunctionDescriptor udf1(String name, Udf1<?, ?> function) {
+        return reflect(name,
                 callMethod(function, Exp.class), false,
                 exps -> function.call((Exp) exps.getFirst()));
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
-    static QLFunctionSignature udf2(Udf2<?, ?, ?> function) {
-        return reflect(
+    static QLFunctionDescriptor udf2(String name, Udf2<?, ?, ?> function) {
+        return reflect(name,
                 callMethod(function, Exp.class, Exp.class), false,
                 exps -> function.call((Exp) exps.getFirst(), (Exp) exps.get(1)));
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
-    static QLFunctionSignature udf3(Udf3<?, ?, ?, ?> function) {
-        return reflect(
+    static QLFunctionDescriptor udf3(String name, Udf3<?, ?, ?, ?> function) {
+        return reflect(name,
                 callMethod(function, Exp.class, Exp.class, Exp.class), false,
                 exps -> function.call((Exp) exps.getFirst(), (Exp) exps.get(1), (Exp) exps.get(2)));
     }
 
-    static QLFunctionSignature udfN(UdfN<?> function) {
-        return reflect(
+    static QLFunctionDescriptor udfN(String name, UdfN<?> function) {
+        return reflect(name,
                 callMethod(function, Exp[].class), true,
                 exps -> function.call(exps.toArray(new Exp[0])));
     }
 
-    static QLFunctionSignature reflect(Method method, boolean varArgs, Function<List<Exp<?>>, Exp<?>> producer) {
+    private static QLFunctionDescriptor reflect(
+            String name,
+            Method method,
+            boolean varArgs,
+            Function<List<Exp<?>>, Exp<?>> producer) {
 
-        QLFunctionSignature signature = signature()
-                .returning(TypeClassifier.classify(method.getGenericReturnType()))
-                .as(producer);
-
-        Parameter[] parameters = method.getParameters();
-
-        if (varArgs) {
-            for (Parameter p : parameters) {
-                if (p.isAnnotationPresent(Constant.class)) {
-                    throw new IllegalArgumentException(
-                            "Vararg functions declare no arguments, so none can be @Constant: " + method);
-                }
-            }
-
-            signature.varArgs();
-        } else {
-            for (Parameter p : parameters) {
-                signature.arg(Arg.of(p));
+        List<Arg> args = new ArrayList<>();
+        if (!varArgs) {
+            for (Type p : method.getGenericParameterTypes()) {
+                args.add(new Arg(TypeClassifier.classify(p), false));
             }
         }
 
-        return signature;
+        return new QLFunctionDescriptor(
+                name,
+                TypeClassifier.classify(method.getGenericReturnType()),
+                args,
+                varArgs,
+                producer);
     }
 
     /**
@@ -125,14 +112,14 @@ class QLFunctionSignature {
      * Orders overloads deterministically, as {@link Class#getDeclaredMethods()} order is unspecified and
      * registration order is the resolver's tie-break.
      */
-    private static final Comparator<QLFunctionSignature> OVERLOAD_ORDER = Comparator
-            .<QLFunctionSignature>comparingInt(s -> s.args.size())
-            .thenComparing(QLFunctionSignature::argTypeOrdinals, Arrays::compare)
-            .thenComparing(QLFunctionSignature::argConstancy, Arrays::compare)
-            .thenComparing(s -> s.varArgs)
-            .thenComparingInt(s -> s.returnType.ordinal());
+    private static final Comparator<QLFunctionDescriptor> OVERLOAD_ORDER = Comparator
+            .<QLFunctionDescriptor>comparingInt(d -> d.args().length)
+            .thenComparing(QLFunctionReflection::argTypeOrdinals, Arrays::compare)
+            .thenComparing(QLFunctionReflection::argConstancy, Arrays::compare)
+            .thenComparing(QLFunctionDescriptor::isVarArgs)
+            .thenComparingInt(d -> d.returnType().ordinal());
 
-    static List<QLFunctionSignature> reflectQLFunction(String name, QLFunction function) {
+    static List<QLFunctionDescriptor> qlFunction(String name, QLFunction function) {
 
         Class<?> type = function.getClass();
 
@@ -147,57 +134,47 @@ class QLFunctionSignature {
                     + type.getName());
         }
 
-        List<QLFunctionSignature> signatures = new ArrayList<>();
+        List<QLFunctionDescriptor> descriptors = new ArrayList<>();
         for (Method m : callMethods(type)) {
             if (Modifier.isPublic(m.getModifiers())) {
-                signatures.add(reflectCall(m));
+                descriptors.add(reflectCall(name, function, m));
             }
         }
 
-        if (signatures.isEmpty()) {
+        if (descriptors.isEmpty()) {
             throw new IllegalArgumentException(
                     "A QLFunction must declare at least one public 'call' method: " + type.getName());
         }
 
-        signatures.sort(OVERLOAD_ORDER);
-        for (QLFunctionSignature s : signatures) {
-            s.as(new CallProducer(name, function, s.method));
-        }
-
-        return signatures;
+        descriptors.sort(OVERLOAD_ORDER);
+        return descriptors;
     }
 
-    static QLFunctionSignature reflectCall(Method method) {
-
-        QLFunctionSignature signature = signature().returning(returnClassifier(method));
-        signature.method = method;
+    private static QLFunctionDescriptor reflectCall(String name, QLFunction function, Method method) {
 
         Parameter[] parameters = method.getParameters();
         boolean varArgs = method.isVarArgs();
         int declared = varArgs ? parameters.length - 1 : parameters.length;
 
+        List<Arg> args = new ArrayList<>(declared);
         for (int i = 0; i < declared; i++) {
-            signature.arg(callArg(method, parameters[i]));
+            args.add(callArg(method, parameters[i]));
         }
 
         if (varArgs) {
-            Parameter tail = parameters[parameters.length - 1];
-
-            if (tail.isAnnotationPresent(Constant.class)) {
-                throw new IllegalArgumentException(
-                        "A vararg parameter declares no argument, so it can not be @Constant: " + method);
-            }
-
-            Class<?> component = tail.getType().getComponentType();
+            Class<?> component = parameters[parameters.length - 1].getType().getComponentType();
             if (component == null || !Exp.class.isAssignableFrom(component)) {
                 throw new IllegalArgumentException(
                         "A vararg parameter of a QLFunction must be an Exp array: " + method);
             }
-
-            signature.varArgs();
         }
 
-        return signature;
+        return new QLFunctionDescriptor(
+                name,
+                returnClassifier(method),
+                args,
+                varArgs,
+                new CallProducer(name, function, method));
     }
 
     private static TypeClassifier returnClassifier(Method method) {
@@ -226,7 +203,7 @@ class QLFunctionSignature {
         Class<?> raw = parameter.getType();
 
         if (Exp.class.isAssignableFrom(raw)) {
-            return Arg.of(parameter);
+            return new Arg(TypeClassifier.classify(parameter.getParameterizedType()), false);
         }
 
         if (!CallProducer.CONSTANT_TYPES.contains(raw)) {
@@ -238,74 +215,11 @@ class QLFunctionSignature {
         return new Arg(TypeClassifier.classify(raw), true);
     }
 
-    private int[] argTypeOrdinals() {
-        return args.stream().mapToInt(a -> a.type().ordinal()).toArray();
+    private static int[] argTypeOrdinals(QLFunctionDescriptor d) {
+        return Arrays.stream(d.args()).mapToInt(a -> a.type().ordinal()).toArray();
     }
 
-    private int[] argConstancy() {
-        return args.stream().mapToInt(a -> a.constant() ? 1 : 0).toArray();
-    }
-
-    private QLFunctionSignature() {
-    }
-
-    QLFunctionSignature returning(TypeClassifier type) {
-        this.returnType = type;
-        return this;
-    }
-
-    QLFunctionSignature arg(TypeClassifier type) {
-        return arg(new Arg(type, false));
-    }
-
-    /**
-     * Appends a parameter that only accepts a constant (scalar) expression of the given type.
-     */
-    QLFunctionSignature constArg(TypeClassifier type) {
-        return arg(new Arg(type, true));
-    }
-
-    QLFunctionSignature arg(Arg arg) {
-        this.args.add(arg);
-        return this;
-    }
-
-    /**
-     * Marks the function as accepting an unconstrained number of trailing arguments after the declared ones.
-     */
-    QLFunctionSignature varArgs() {
-        this.varArgs = true;
-        return this;
-    }
-
-    QLFunctionSignature as(Function<List<Exp<?>>, Exp<?>> producer) {
-        this.producer = producer;
-        return this;
-    }
-
-    TypeClassifier returnType() {
-        return returnType;
-    }
-
-    Arg[] args() {
-        return args.toArray(new Arg[0]);
-    }
-
-    boolean isVarArgs() {
-        return varArgs;
-    }
-
-    Function<List<Exp<?>>, Exp<?>> producer() {
-        return producer;
-    }
-
-    void validate(String name) {
-        if (producer == null) {
-            throw new IllegalArgumentException("No expression producer defined for function: " + name);
-        }
-
-        if (returnType == null) {
-            throw new IllegalArgumentException("No return type defined for function: " + name);
-        }
+    private static int[] argConstancy(QLFunctionDescriptor d) {
+        return Arrays.stream(d.args()).mapToInt(a -> a.constant() ? 1 : 0).toArray();
     }
 }

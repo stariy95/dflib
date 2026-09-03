@@ -251,41 +251,38 @@ public class QLFunctions {
         }
 
         public Builder function(String name, Udf0<?> function) {
-            return function(name, QLFunctionSignature.udf0(function));
+            return function(QLFunctionReflection.udf0(name, function));
         }
 
         public Builder function(String name, Udf1<?, ?> function) {
-            return function(name, QLFunctionSignature.udf1(function));
+            return function(QLFunctionReflection.udf1(name, function));
         }
 
         public Builder function(String name, Udf2<?, ?, ?> function) {
-            return function(name, QLFunctionSignature.udf2(function));
+            return function(QLFunctionReflection.udf2(name, function));
         }
 
         public Builder function(String name, Udf3<?, ?, ?, ?> function) {
-            return function(name, QLFunctionSignature.udf3(function));
+            return function(QLFunctionReflection.udf3(name, function));
         }
 
         public Builder function(String name, UdfN<?> function) {
-            return function(name, QLFunctionSignature.udfN(function));
+            return function(QLFunctionReflection.udfN(name, function));
         }
 
         /**
-         * Registers every public {@code call} overload of a {@link QLFunction} class as a signature of the function.
+         * Registers every public {@code call} overload of a {@link QLFunction} class as an overload of the function.
          */
         public Builder function(String name, QLFunction function) {
-            for (QLFunctionSignature s : QLFunctionSignature.reflectQLFunction(name, function)) {
-                function(name, s);
+            for (QLFunctionDescriptor d : QLFunctionReflection.qlFunction(name, function)) {
+                function(d);
             }
 
             return this;
         }
 
-        Builder function(String name, QLFunctionSignature signature) {
-            return defineFunction(name, new QLFunctionDescriptor(name, signature));
-        }
-
-        private Builder defineFunction(String name, QLFunctionDescriptor descriptor) {
+        Builder function(QLFunctionDescriptor descriptor) {
+            String name = descriptor.name();
             boolean hasSameDescriptor = !functions.computeIfAbsent(name, n -> new LinkedHashSet<>()).add(descriptor);
             if (hasSameDescriptor) {
                 throw new IllegalArgumentException("Function " + name + "(" + Arrays.toString(descriptor.args()) + ") already defined");
@@ -318,8 +315,7 @@ public class QLFunctions {
                 DefaultQLFunctions.register(all);
             }
 
-            functions.forEach((name, descriptors)
-                    -> descriptors.forEach(d -> all.defineFunction(name, d)));
+            functions.values().forEach(descriptors -> descriptors.forEach(all::function));
             return new QLFunctions(all.functions);
         }
     }
