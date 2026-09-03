@@ -40,8 +40,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-// TODO: make back package-private
-public class ExpParserUtils {
+class ExpParserUtils {
 
     private static final BigInteger INT_MIN = BigInteger.valueOf(Integer.MIN_VALUE);
     private static final BigInteger INT_MAX = BigInteger.valueOf(Integer.MAX_VALUE);
@@ -499,111 +498,57 @@ public class ExpParserUtils {
         return source.next();
     }
 
-    // --- QL function registry dispatch ---
-    //
-    // The grammar resolves every call through a single untyped "fnCall" rule. The typed expression rules reach it
-    // through a left-edge, name-only predicate ("mayReturn") so that ANTLR can prune the prediction of a call site
-    // before the arguments are known, and then cast the result of the untyped call with "asX". The predicate is
-    // deliberately an over-approximation: it answers for a name, ignoring arity and argument types, so a name that
-    // has *some* overload returning X makes a call site of type X viable. The "asX" cast is the commit point that
-    // turns a wrong guess into a diagnosable error.
-    //
-    // Those predicates are also what keeps a call site unambiguous: without them the untyped alternative of
-    // "expression" and the hook of every typed rule that the name may return are all viable on the same tokens.
-    // See the "Function call dispatch" comment in Exp.g4.
+    // Function call dispatch. Every call goes through the untyped "fnCall" rule; the typed rules reach it through
+    // name-only predicates (ANTLR only hoists a predicate into prediction if it is reachable without consuming a
+    // token) and cast the result with "asX". A polymorphic name is assigned to a rule by the syntax around the call,
+    // see "continuation".
 
     private static QLFunctions functions() {
         return Environment.commonEnv().getQLFunctions();
     }
 
-    /**
-     * Returns true if any function is registered under this name. This is the predicate of the shared "fnCall" rule.
-     */
     public static boolean isFn(String fnName) {
         return functions().isFn(fnName);
     }
 
-    /**
-     * Returns true if a call by this name may produce an expression of the given type. This is the predicate of the
-     * "fnCall" hook of every typed expression rule.
-     */
     public static boolean mayReturn(String fnName, TypeClassifier type) {
         return functions().mayReturn(fnName, type);
     }
 
-    /**
-     * Returns true if some typed expression rule claims a call by this name, i.e. the name may return a numeric,
-     * string, boolean or temporal expression. A name that no typed rule claims - one returning a plain object, like
-     * "split", or one whose type is only known at eval time, like "first" - is resolved in the untyped expression
-     * position instead.
-     */
     public static boolean claimedByTyped(String fnName) {
         return functions().hasTypedReturn(fnName);
     }
 
-    /**
-     * Returns true if the return type of a call by this name is not decided by the name alone. Such a call can not be
-     * routed to a typed relation rule by its left-hand side, so the grammar handles it with the untyped
-     * "fnRelation".
-     */
     public static boolean isPolymorphicFn(String fnName) {
         return functions().isPolymorphicFn(fnName);
     }
 
-    // --- the syntax around a call ---
-    //
-    // A call by a name whose return type depends on its arguments is viable in more than one rule at once, and the
-    // rules must not all stay viable, or every such call site becomes an ambiguous decision that ANTLR re-simulates
-    // on every parse. Which rule it belongs to is decided by the syntax immediately around the call:
-    //
-    //   - an arithmetic or logical operator applied to its result, or a prefix "not" / unary minus applied to it,
-    //     can only be satisfied by a typed expression, so the call belongs to a typed rule ("TYPED");
-    //   - a comparison operator applied to its result is what "fnRelation" exists for - the typed relation rules
-    //     can not route the call by its name - so no typed rule may claim it ("COMPARISON");
-    //   - anything else - a comma, a closing parenthesis, the end of the input - constrains nothing ("NONE"): in
-    //     the untyped expression position the call is resolved untyped, and anywhere else the rule that asked for
-    //     it decides.
-    //
-    // This is read off the token stream during prediction, before the call has been parsed, so what is applied to
-    // the result of the call is found by scanning to the parenthesis that closes the call and past the grouping
-    // parentheses that wrap it.
-
     /**
-     * The call is followed by an operator that only a typed expression can be an operand of.
+     * The call is followed by an arithmetic or logical operator, or preceded by "not" or a unary minus.
      */
     public static final int CONTINUATION_TYPED = 1;
 
     /**
-     * The call is followed by a comparison, which is built by the "fnRelation" rule.
+     * The call is directly followed by a comparison, "between" or "in".
      */
     public static final int CONTINUATION_COMPARISON = 2;
 
-    /**
-     * Nothing is applied to the result of the call.
-     */
     public static final int CONTINUATION_NONE = 0;
 
     /**
-     * Classifies the syntax around the call whose name is the next token of the stream as one of the
+     * Classifies the syntax around the call whose name is {@code LT(1)} of the stream as one of the
      * {@code CONTINUATION_*} constants.
-     *
-     * @param input a token stream positioned at the name of a call, i.e. {@code LT(1)} is the name and
-     *              {@code LT(2)} the opening parenthesis
      */
     public static int continuation(TokenStream input) {
 
         Token before = tokenBeforeCall(input);
         if (before != null && (before.getType() == ExpParser.NOT || before.getType() == ExpParser.SUB)) {
-            // a prefix "not" or a unary minus. It binds tighter than a comparison, so it decides first:
-            // "- min(x) > 5" is a comparison of the negated call
             return CONTINUATION_TYPED;
         }
 
         int close = callCloseOffset(input);
 
-        // "fnRelation" matches a call at its left edge, so only a comparison that follows the call itself is its
-        // business: in "(min(x)) > 5" the comparison is of the parenthesized expression, and the call in it is free
-        // to be typed
+        // "(min(x)) > 5" is a comparison of the parenthesized expression, not of the call
         Token direct = input.LT(close + 1);
         if (direct != null && isComparison(direct.getType())) {
             return CONTINUATION_COMPARISON;
@@ -631,12 +576,7 @@ public class ExpParserUtils {
     }
 
     /**
-     * Returns the first token past the call whose name is the next token of the stream, and past the grouping
-     * parentheses the call is wrapped in: for {@code (min(x)) + 1} it is {@code +}, and for {@code foo(min(x)) + 1}
-     * - where the parenthesis before the call belongs to the enclosing call rather than to a group - it is the
-     * {@code )} of {@code foo}.
-     *
-     * @param input a token stream positioned at the name of a call
+     * Returns the first token past the call whose name is {@code LT(1)}, and past the grouping parentheses around it.
      */
     static Token tokenAfterCall(TokenStream input) {
         int close = callCloseOffset(input);
@@ -644,12 +584,11 @@ public class ExpParserUtils {
     }
 
     /**
-     * Returns the {@code LT} offset of the parenthesis that closes the call whose name is the next token of the
-     * stream, or of the end of the input if there is none.
+     * Returns the {@code LT} offset of the parenthesis closing the call whose name is {@code LT(1)}, or of EOF.
      */
     private static int callCloseOffset(TokenStream input) {
 
-        int k = 2; // LT(1) is the name, LT(2) is the opening parenthesis of the call
+        int k = 2;
         int depth = 0;
 
         while (true) {
@@ -661,8 +600,7 @@ public class ExpParserUtils {
             if (t.getType() == ExpParser.LP) {
                 depth++;
             } else if (t.getType() == ExpParser.RP && --depth <= 0) {
-                // "<=" rather than "==": the name may turn out not to be a call at all (an identifier is also a
-                // column reference), and the scan must still terminate on the first unbalanced parenthesis
+                // "<=": the name may not be a call at all, and the scan must stop at the first unbalanced ")"
                 return k;
             }
 
@@ -670,10 +608,6 @@ public class ExpParserUtils {
         }
     }
 
-    /**
-     * Returns the number of parentheses closing the groups the call is wrapped in, starting at the {@code LT} offset
-     * of the parenthesis that closes the call itself.
-     */
     private static int skippedGroupClosings(TokenStream input, int close) {
 
         int skipped = 0;
@@ -689,8 +623,7 @@ public class ExpParserUtils {
     }
 
     /**
-     * Returns the token preceding the call whose name is the next token of the stream, looking past the grouping
-     * parentheses the call is wrapped in: for {@code not (min(x))} it is {@code not}.
+     * Returns the token before the call whose name is {@code LT(1)}, skipping the grouping parentheses around it.
      */
     private static Token tokenBeforeCall(TokenStream input) {
         int i = input.LT(1).getTokenIndex() - groupingParens(input) - 1;
@@ -698,8 +631,7 @@ public class ExpParserUtils {
     }
 
     /**
-     * Returns the number of parentheses immediately preceding the call whose name is the next token of the stream
-     * that group the call rather than open an argument list of an enclosing call.
+     * Returns the number of parentheses before the call that group it, rather than open an enclosing call.
      */
     private static int groupingParens(TokenStream input) {
 
@@ -710,14 +642,11 @@ public class ExpParserUtils {
             i--;
         }
 
-        // the innermost of the run belongs to an enclosing call if it is preceded by a name
         return parens > 0 && i >= 0 && isCallName(input.get(i)) ? parens - 1 : parens;
     }
 
     /**
-     * Returns true if the token can be the name of a call, i.e. a following parenthesis opens an argument list
-     * rather than a group. Every function and column name is either an identifier or an alphabetic keyword; the
-     * keywords that are operators or literals are not names, and a parenthesis after them does open a group.
+     * Returns true if the token can be the name of a call, i.e. is not an operator or literal keyword.
      */
     private static boolean isCallName(Token token) {
         return switch (token.getType()) {
@@ -733,12 +662,8 @@ public class ExpParserUtils {
     }
 
     /**
-     * Resolves a function call against the registry and builds its expression. No return type is expected or
-     * enforced here: the call site casts the result with one of the {@code asXxx} methods.
-     * <p>
-     * A call that the registry can not resolve, and one whose arguments the producer rejects, are both reported as
-     * a {@link QLParserException} carrying the position of the call. Anything else would reach the caller as an
-     * "Unexpected exception during parsing" wrapper hiding the actual problem.
+     * Resolves a function call against the registry and builds its expression. Resolution and argument errors are
+     * reported as a positioned {@link QLParserException}.
      */
     public static Exp<?> fn(Token name, List<Exp<?>> args) {
         List<Arg> argDescriptors = args.stream()
@@ -756,10 +681,7 @@ public class ExpParserUtils {
     }
 
     /**
-     * Always throws. Called by the last alternative of the "expression" rule, which matches the shape of a call by a
-     * name that is not registered; without it such an input would be reported as a generic syntax error pointing at
-     * the opening parenthesis. Declared as returning an expression rather than as {@code void} so that the
-     * alternative can assign it, keeping the {@code break} the generated parser emits after the action reachable.
+     * Always throws. Declared as returning an expression so that the grammar action can assign it.
      */
     public static Exp<?> unknownFunction(Token name) {
         throw new QLParserException("Unknown function `" + name.getText() + "` at " + position(name));
@@ -838,12 +760,8 @@ public class ExpParserUtils {
         };
     }
 
-    // --- polymorphic relations ---
-    //
-    // A call whose return type depends on its arguments can not be routed to a typed relation rule by the parser, so
-    // "fnRelation" parses it untyped and dispatches here on the type of the expression it actually built. Each arm
-    // calls exactly the same factory as the corresponding typed relation rule, so the resulting expression is
-    // indistinguishable from a monomorphic one.
+    // "fnRelation" dispatch: builds the same expressions as the typed relation rules, from the type of the parsed
+    // left-hand side
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     public static Condition rel(Exp<?> a, Token op, Exp<?> b) {
@@ -858,11 +776,7 @@ public class ExpParserUtils {
         };
     }
 
-    /**
-     * A temporal "between" over two string literals goes to the {@code between(String, String)} overload of the
-     * receiver rather than through {@link #dateOperand(Exp)} and friends, as the typed relation rules do: the two
-     * build different expressions.
-     */
+    // string literals go to "between(String, String)", as in the typed rules: it builds a different expression
     @SuppressWarnings({"rawtypes", "unchecked"})
     public static Condition between(Exp<?> a, Exp<?> b, Exp<?> c, boolean negate) {
         String from = temporalStr(b);
@@ -889,9 +803,6 @@ public class ExpParserUtils {
         };
     }
 
-    /**
-     * Returns the value of a string literal, or null if the expression is anything else.
-     */
     private static String temporalStr(Exp<?> exp) {
         return exp instanceof StrScalarExp scalar ? scalar.reduce((Series<?>) null) : null;
     }
@@ -993,9 +904,7 @@ public class ExpParserUtils {
         throw operandMismatch(exp, "numeric");
     }
 
-    // The typed temporal relation rules accept an ISO-8601 string literal in place of a temporal expression, and so
-    // must the polymorphic one: each temporal operand is either an expression of the type or such a literal, which
-    // becomes the same typed scalar the "gt(String)" and friends of the receiver would build
+    // a temporal operand is an expression of the type or an ISO-8601 string literal, as in the typed rules
 
     private static TimeExp timeOperand(Exp<?> exp) {
         return switch (exp) {

@@ -5,8 +5,7 @@ import org.dflib.Exp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code endsWith(e, suffix)}: converts each value to a String and tests it for a constant suffix. Accepts a
- * receiver of any type.
+ * QL {@code endsWith(e, suffix)} function.
  *
  * @since 2.0.0
  */

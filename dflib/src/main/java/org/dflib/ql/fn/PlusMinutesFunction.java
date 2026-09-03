@@ -6,8 +6,7 @@ import org.dflib.TimeExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code plusMinutes(e, n)}: adds a constant number of minutes to a temporal expression, preserving the receiver
- * type. A {@code DateExp} receiver is rejected: a date has no time part.
+ * QL {@code plusMinutes(e, n)} function.
  *
  * @since 2.0.0
  */

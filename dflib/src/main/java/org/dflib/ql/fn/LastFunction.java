@@ -4,9 +4,7 @@ import org.dflib.Exp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code last(e)}: an aggregate returning the last value of a receiver of any type. The result carries its value
- * type only at eval time, so it implements none of the typed expression interfaces. The {@code Exp} API declares no
- * filtered overload.
+ * QL {@code last(e)} function.
  *
  * @since 2.0.0
  */

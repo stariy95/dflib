@@ -4,7 +4,7 @@ import org.dflib.NumExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code cumSum(e)}: a running total of a numeric expression. The {@code Exp} API declares no filtered overload.
+ * QL {@code cumSum(e)} function.
  *
  * @since 2.0.0
  */

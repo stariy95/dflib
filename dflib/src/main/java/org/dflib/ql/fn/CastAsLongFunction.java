@@ -5,7 +5,7 @@ import org.dflib.NumExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code castAsLong(e)}: converts an expression of any type to a long one.
+ * QL {@code castAsLong(e)} function.
  *
  * @since 2.0.0
  */

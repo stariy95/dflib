@@ -5,7 +5,7 @@ import org.dflib.NumExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code castAsDouble(e)}: converts an expression of any type to a double one.
+ * QL {@code castAsDouble(e)} function.
  *
  * @since 2.0.0
  */

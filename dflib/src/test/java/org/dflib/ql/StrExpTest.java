@@ -226,9 +226,6 @@ public class StrExpTest {
             "substr('example', 'a')",
             "substr('example', 2, null)",
             "substr('example', 2, -1)",
-
-            // "substr" reads its position arguments while building the expression, so they have to be constants.
-            // A column reference matches on type but has no value until eval
             "substr('example', b)",
             "substr(a, b)",
             "substr('example', int(b))",
@@ -251,8 +248,6 @@ public class StrExpTest {
                 arguments("split('a,b,c', ',', 2)", $strVal("a,b,c").split(",", 2)),
                 arguments("split(str(1), '|')", $str(1).split("|")),
                 arguments("split(trim(' a|b|c '), '|', 2)", $strVal(" a|b|c ").trim().split("|", 2)),
-
-                // an untyped column no longer needs a "str(..)" wrapper
                 arguments("split(a, ',')", $col("a").castAsStr().split(",")),
                 arguments("split(a, ',', 2)", $col("a").castAsStr().split(",", 2))
         );
@@ -290,12 +285,6 @@ public class StrExpTest {
     @ParameterizedTest
     @MethodSource
     public void aggregate_overAFunction(String text, Exp<?> expected) {
-
-        // "min"/"max" used to be grammar rules, and "min ( IDENTIFIER (" was token-viable for the numeric aggregate,
-        // which was the lower-numbered alternative. The predicate that would have ruled it out sat inside the
-        // numeric expression rule, past the tokens the decision consumes, so it was not hoisted into the prediction
-        // and only failed once the numeric aggregate had been committed to. Resolving the aggregate through the
-        // registry, from its actual argument, is what fixes this
         Exp<?> exp = parseExp(text);
         assertInstanceOf(StrExp.class, exp);
         assertEquals(expected, exp);

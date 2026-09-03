@@ -4,7 +4,7 @@ import org.dflib.NumExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code round(e)}: rounds a numeric expression to the nearest integer.
+ * QL {@code round(e)} function.
  *
  * @since 2.0.0
  */

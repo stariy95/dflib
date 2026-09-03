@@ -50,9 +50,6 @@ class QLFunctionDescriptorTest {
 
     @Test
     void returnType_NonParameterizedExpInterface() {
-
-        // DecimalExp and Condition take no type parameters of their own, so the value type has to be recovered from
-        // the "Exp<X>" they extend. Otherwise such a function classifies as OBJECT and is never found
         assertEquals(
                 QLFunctionDescriptor.TypeClassifier.NUMERIC,
                 new QLFunctionDescriptor("dec", QLFunctionSignature.udf1(new DecimalFn())).returnType());
@@ -64,8 +61,6 @@ class QLFunctionDescriptorTest {
 
     @Test
     void returnType_NestedGenerics() {
-
-        // only the expression layer is unwrapped: the value type of "Exp<List<String>>" is List, not String
         assertEquals(
                 QLFunctionDescriptor.TypeClassifier.OBJECT,
                 new QLFunctionDescriptor("list", QLFunctionSignature.udf1(new ListFn())).returnType());
@@ -73,9 +68,6 @@ class QLFunctionDescriptorTest {
 
     @Test
     void returnType_ArrayValueType() {
-
-        // "split(..)" and friends produce an array-valued expression. String[] is not a CharSequence, so it must
-        // classify as OBJECT rather than leaking into the STRING namespace
         assertEquals(
                 QLFunctionDescriptor.TypeClassifier.OBJECT,
                 new QLFunctionDescriptor("split", QLFunctionSignature.udf1(new ArrayFn())).returnType());
@@ -84,8 +76,7 @@ class QLFunctionDescriptorTest {
     @Test
     void constantArg_CovariantReturn() {
 
-        // a covariant return makes javac emit a bridge "call" with the same erased parameters. The bridge carries
-        // neither the generic types nor the parameter annotations, so picking it would silently drop @Constant
+        // the bridge "call" emitted for a covariant return carries no parameter annotations
         QLFunctionDescriptor descriptor = new QLFunctionDescriptor("scale", QLFunctionSignature.udf2(new ConstArgNumFn()));
 
         assertEquals(QLFunctionDescriptor.TypeClassifier.NUMERIC, descriptor.returnType());
@@ -109,10 +100,6 @@ class QLFunctionDescriptorTest {
 
     @Test
     void classifyExp_TypedExpWithoutATypedInterface() {
-
-        // "first(date(a))" is a FirstExp<LocalDate>, not a DateExp; "if(c, int(a), int(b))" is an IfExp<Integer>,
-        // not a NumExp. The value type is there, but it can only be recovered at eval time. Classifying such an
-        // expression as OBJECT would make "year(first(date(a)))" unresolvable
         assertEquals(TypeClassifier.ANY, TypeClassifier.classify($date("a").first()));
         assertEquals(TypeClassifier.ANY, TypeClassifier.classify($int("a").last()));
         assertEquals(TypeClassifier.ANY, TypeClassifier.classify(new IfNullExp<>($int("a"), $int("b"))));
@@ -121,8 +108,6 @@ class QLFunctionDescriptorTest {
 
     @Test
     void classifyExp_UntypedExp() {
-
-        // an expression with no static type at all is ANY, as it always was
         assertEquals(TypeClassifier.ANY, TypeClassifier.classify($col("a")));
         assertEquals(TypeClassifier.ANY, TypeClassifier.classify($col("a").first()));
         assertEquals(TypeClassifier.ANY, TypeClassifier.classify(new IfNullExp<>($col("a"), $col("b"))));
@@ -130,14 +115,9 @@ class QLFunctionDescriptorTest {
 
     @Test
     void classifyExp_ObjectValuedExp() {
-
-        // an expression whose value type is a genuine Object stays OBJECT: unlike ANY it must not be silently
-        // passed to a typed parameter
         assertEquals(TypeClassifier.OBJECT, TypeClassifier.classify($str("a").split(',')));
         assertEquals(TypeClassifier.OBJECT, TypeClassifier.classify($col("a").list()));
         assertEquals(TypeClassifier.OBJECT, TypeClassifier.classify($col("a").set()));
-
-        // ... and so does a scalar of an unrecognized type
         assertEquals(TypeClassifier.OBJECT, TypeClassifier.classify(Exp.$val(new Object())));
         assertEquals(TypeClassifier.OBJECT, TypeClassifier.classify(Exp.$val(null)));
     }
@@ -167,9 +147,6 @@ class QLFunctionDescriptorTest {
 
     @Test
     void equals_IgnoresReturnType() {
-
-        // resolution is driven by name + args, so two descriptors with the same argument shape are unresolvable
-        // whatever they return. Equality reflects that, turning such a pair into a build-time error
         QLFunctionDescriptor str = new QLFunctionDescriptor("f", QLFunctionSignature.signature()
                 .returning(TypeClassifier.STRING)
                 .arg(TypeClassifier.NUMERIC)
@@ -186,8 +163,6 @@ class QLFunctionDescriptorTest {
 
     @Test
     void reflect_ProducesTheSameDescriptorAsAnExplicitSignature() {
-
-        // the reflective Udf path is implemented on top of the explicit one
         QLFunctionDescriptor reflected = new QLFunctionDescriptor("scale", QLFunctionSignature.udf2(new ConstArgNumFn()));
 
         QLFunctionDescriptor explicit = new QLFunctionDescriptor("scale", QLFunctionSignature.signature()

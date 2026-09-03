@@ -1,61 +1,10 @@
 grammar Exp;
 
-// *** How function calls are parsed ***
-//
-// Built-in functions are not rules of this grammar. They are entries of the "QLFunctions" registry, one "QLFunction"
-// class per name in "org.dflib.ql.fn", each declaring one typed "call" overload per receiver type and arity. The
-// registry is reachable from the parser through "ExpParserUtils" and is replaceable via
-// "Environment.setQLFunctions(..)". Every call by a registered name - built-in or custom - is matched by the single
-// "fnCall" rule, which hands the name and the parsed arguments to the registry and gets an "Exp" back. Adding a
-// function to the language is a registry entry, not a grammar change; a call by an unregistered name is reported by
-// the last alternative of "expression" as a missing function rather than as a syntax error.
-//
-// *** Why the typed rules still have a "fnCall" hook, and why it is guarded ***
-//
-// The result of a call is used in typed positions - "min(x) + 1" needs a NumExp - so every typed expression rule
-// ("numExp", "strExp", "boolExp", "timeExp", "dateExp", "dateTimeExp", "offsetDateTimeExp") has its own "fnCall"
-// alternative that casts the result to the type the rule produces. These alternatives are token-identical to the
-// untyped one in "expression", so without help ANTLR would see an ambiguity and resolve it by taking the
-// lowest-numbered alternative, mis-dispatching every call that belongs to another rule.
-//
-// The only tool that can prune them is a semantic predicate, and ANTLR hoists a predicate into prediction ONLY when
-// it is reachable from the start of the decision without consuming a token. A predicate placed after "name (" - let
-// alone after the arguments - is invisible to prediction and is only checked once the parser has already committed,
-// where it throws "FailedPredicateException" with no fall-through to another alternative. This is why each typed
-// "fnCall" hook carries a left-edge "typedCall(TYPE)" predicate that reads the function name straight off the token
-// stream, and why the predicates over-approximate (name only, no arity or argument types) - the "asXxx(..)" cast at
-// the call site is what turns a wrong guess into a positioned error message.
-//
-// *** Names whose return type depends on the arguments ***
-//
-// A name with a fixed return type is assigned to a rule by the name alone: "abs" is claimed by "numExp", is not
-// matched by the untyped alternative, and there is no ambiguity to resolve. A polymorphic name ("shift", "min",
-// "plusDays", ... - anything returning the type of one of its arguments, or with overloads of different types) can
-// not be assigned that way, so it is assigned by the syntax around the call, computed once per call site by
-// "ExpParserUtils.continuation(..)":
-//
-//   - a bare call, or a call in an argument position: untyped, i.e. the "fnCall" alternative of "expression";
-//   - an arithmetic or logical operator applied to the result, or a prefix "not" / unary minus in front of the call:
-//     the typed hook, since the operator demands a type;
-//   - a comparison, "between" or "in" directly after the call: "fnRelation", the single untyped relation rule that
-//     dispatches on the expression the call produced. Note "directly": in "(min(x)) > 5" the comparison belongs to
-//     the parenthesized expression, and the call inside it is free to be typed.
-//
-// *** What stays in the grammar ***
-//
-// Constructs that are not calls of an expression to an expression, and so can not be described by a registry
-// signature: the 13 column references (they take a column id - a name or an index - not an expression), "array(e,
-// className)" (its return type is computed from a class name known only at parse time), the "?" parameter
-// validators (the parameter source is a stateful cursor - never design a try/fail/retry dispatch over it),
-// operators, literals, "as", "asc" / "desc" and "in" lists.
-//
-// *** Warning ***
-//
-// A new grammar rule that takes a TYPED expression as an argument and has sibling alternatives told apart only by
-// that argument's type will be ambiguous for registry calls: at the decision point the argument is just
-// "IDENTIFIER (", identical in every alternative, and its type is not known until it is parsed. Either give the
-// alternatives distinct tokens, or take an untyped "expression" and dispatch on the parsed argument in Java (as
-// "fnRelation" does).
+// Functions are not grammar rules: every call goes through "fnCall" and is resolved by the "QLFunctions" registry.
+// The typed rules reach "fnCall" via left-edge predicates, as ANTLR only hoists a predicate into prediction if it is
+// reachable without consuming a token, and cast the result. A polymorphic name is assigned to a rule by the syntax
+// around the call ("ExpParserUtils.continuation"). Only constructs that are not expression-to-expression calls
+// (column references, "array", parameters, operators, literals) remain rules.
 
 @header {
 import java.math.BigInteger;
@@ -74,8 +23,7 @@ import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
 import static org.dflib.ql.antlr4.ExpParserUtils.*;
 }
 
-// scoped to the parser: an unscoped "members" action is copied into the lexer as well, and the function call
-// dispatch below reads the token stream, which the lexer does not have
+// parser-scoped, as the predicates below read the token stream
 @parser::members {
 // global state of the parser
 PositionalParamSource paramSource;
@@ -84,39 +32,21 @@ public void setParameters(Object... params) {
     this.paramSource = new PositionalParamSource(params);
 }
 
-// *** Function call dispatch ***
-//
-// A call by a registered name is reachable from more than one rule at once: the untyped "fnCall" alternative of the
-// "expression" rule, the "fnCall" hook of whichever typed rule the name may return, and "fnRelation". These
-// alternatives are token-identical and more than one of them completes, which is a true ambiguity: ANTLR resolves
-// it in favor of the lowest-numbered alternative, but it never caches an ambiguous full-context decision, so the
-// prediction is re-simulated on every parse of every such call site. The predicates below keep exactly one of them
-// viable.
-//
-// A name with a fixed return type is assigned to a rule by the name alone: a name that a typed rule claims is not
-// matched by the untyped alternative, and vice versa. A name whose return type depends on its arguments is assigned
-// by the syntax around the call - see "continuation" in ExpParserUtils.
-
-// Cached per call site: a predicate is evaluated once for every alternative that hoists it and once more when the
-// parser commits, and a parser instance only ever parses one input
+// call site continuations, cached per call site as predicates are evaluated more than once
 private final java.util.Map<Integer, Integer> continuations = new java.util.HashMap<>();
 
 /**
- * True if the call at the current position must be resolved by the untyped "fnCall" alternative of "expression".
+ * True if the call at the current position is resolved by the untyped "fnCall" alternative of "expression".
  */
 boolean untypedCall() {
     String name = _input.LT(1).getText();
-    // a name no typed rule claims is always resolved here. A polymorphic one only when nothing is applied to the
-    // result of the call: an operator makes it a typed expression, a comparison makes it "fnRelation"
     return isFn(name)
         && (!claimedByTyped(name)
             || (isPolymorphicFn(name) && continuation() == ExpParserUtils.CONTINUATION_NONE));
 }
 
 /**
- * True if the call at the current position may be resolved by the typed expression rule that produces the given
- * type. Like "mayReturn" itself this over-approximates - it ignores the arity and the argument types - and the
- * "asXxx" cast at the call site is what turns a wrong guess into a diagnosable error.
+ * True if the call at the current position may be resolved by the typed rule producing the given type.
  */
 boolean typedCall(TypeClassifier type) {
     String name = _input.LT(1).getText();
@@ -128,13 +58,8 @@ boolean typedCall(TypeClassifier type) {
         return true;
     }
 
-    // Which other rule this hook competes with depends on where it was reached from, and "_ctx" is the context of
-    // the rule that owns the decision being predicted - not of the rule the predicate was hoisted from.
-    //
-    // In "expression" the competitor is the untyped alternative, and only an operator applied to the result of the
-    // call can decide in favor of a type. Anywhere else - an argument declared as a typed expression, the
-    // right-hand side of a typed relation, an operand of an operator - the typed rule was reached because the
-    // surrounding syntax demands that very type, and the only competitor is "fnRelation", which owns comparisons.
+    // "_ctx" is the rule owning the decision: in "expression" the competitor is the untyped alternative, anywhere
+    // else the surrounding syntax demands the type and the only competitor is "fnRelation"
     return _ctx instanceof ExpressionContext
         ? continuation() == ExpParserUtils.CONTINUATION_TYPED
         : continuation() != ExpParserUtils.CONTINUATION_COMPARISON;
@@ -194,12 +119,8 @@ sorterArray returns [Sorter[] sorters]
  * An expression represents a single value or a combination of values, operators, and functions.
  */
 expression returns [Exp<?> exp]
-    // parenthesized expressions come first: a typed rule's own "'(' X ')'" alternative would otherwise claim the
-    // input and then fail on a body of a different type, e.g. "(min(x))"
+    // parenthesized expressions come first, or a typed rule's "'(' X ')'" would claim "(min(x))" and fail
     : '(' expression ')' { $exp = $expression.exp; }
-    // an untyped function call. Nothing here constrains its return type, so it is resolved by name and arguments
-    // alone. The predicate keeps this alternative and the "fnCall" hooks of the typed rules below mutually
-    // exclusive: a call that some typed rule claims is not matched here
     | { untypedCall() }? fnCall { $exp = $fnCall.exp; }
     | PARAMETER { $exp = val(paramSource.next()); }
     | boolExp { $exp = $boolExp.exp; }
@@ -209,17 +130,14 @@ expression returns [Exp<?> exp]
     | genericExp { $exp = $genericExp.exp; }
     | array { $exp = $array.exp; }
     | NULL { $exp = val(null); }
-    // last: the shape of a call by an unregistered name. Reachable only when "fnCall" was pruned by its predicate,
-    // and exists to report a missing function rather than a syntax error at the opening parenthesis
+    // a call by an unregistered name, reported as such rather than as a syntax error
     | { !isFn(_input.LT(1).getText()) }? IDENTIFIER '(' (expression (',' expression)*)? ')' {
         $exp = unknownFunction($IDENTIFIER);
     }
     ;
 
 /**
- * A call of a function from the QL function registry, resolved by name and argument types with no expectation about
- * its return type. This is the single place where a registered function is turned into an expression; the typed
- * expression rules reach it through a name-only predicate and cast the result.
+ * A call of a function from the QL function registry, resolved by name and argument types.
  */
 fnCall returns [Exp<?> exp]
     : { isFn(_input.LT(1).getText()) }? IDENTIFIER '(' (args+=expression (',' args+=expression)*)? ')' {
@@ -255,8 +173,7 @@ boolExp returns [Condition exp]
     : boolScalar { $exp = Exp.\$boolVal($boolScalar.value); }
     | PARAMETER { $exp = boolParam(paramSource); }
     | boolColumn { $exp = $boolColumn.exp; }
-    // "relation" must come before the function hook: a call used as the left-hand side of a comparison is matched by
-    // both, and only "relation" can also consume the operator and the right-hand side
+    // "relation" must come before the function hook, as only it can consume a comparison of a call
     | relation { $exp = $relation.exp; }
     | { typedCall(TypeClassifier.BOOLEAN) }? fnCall { $exp = asCondition($fnCall.exp, $fnCall.start); }
     | NOT boolExp { $exp = Exp.not($boolExp.exp); }
@@ -648,10 +565,8 @@ relation returns [Condition exp]
     ;
 
 /**
- * A relational expression whose left-hand side is a function call whose return type depends on its arguments, and so
- * can not be routed to one of the typed relation rules by its name. The right-hand side is parsed untyped and the
- * comparison is built by dispatching on the type of the expression the call produced, using the same factories the
- * typed rules use.
+ * A relational expression whose left-hand side is a call of a polymorphic function. The comparison is built by
+ * dispatching on the type of the expression the call produced.
  *
  * Parameters:
  *  - The left-hand side function call.
@@ -882,8 +797,6 @@ array returns [Exp<?> exp]
 
 /**
  * Rule that lets the keywords of the grammar be used where an identifier is expected, e.g. as a column name.
- * It lists the tokens only, so a name added to the function registry does not belong here - a registered name is
- * lexed as an IDENTIFIER to begin with.
  */
 //@ doc:inline
 fnName returns [String id]

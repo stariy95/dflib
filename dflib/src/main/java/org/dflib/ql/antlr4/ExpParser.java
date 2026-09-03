@@ -151,39 +151,21 @@ public class ExpParser extends Parser {
 	    this.paramSource = new PositionalParamSource(params);
 	}
 
-	// *** Function call dispatch ***
-	//
-	// A call by a registered name is reachable from more than one rule at once: the untyped "fnCall" alternative of the
-	// "expression" rule, the "fnCall" hook of whichever typed rule the name may return, and "fnRelation". These
-	// alternatives are token-identical and more than one of them completes, which is a true ambiguity: ANTLR resolves
-	// it in favor of the lowest-numbered alternative, but it never caches an ambiguous full-context decision, so the
-	// prediction is re-simulated on every parse of every such call site. The predicates below keep exactly one of them
-	// viable.
-	//
-	// A name with a fixed return type is assigned to a rule by the name alone: a name that a typed rule claims is not
-	// matched by the untyped alternative, and vice versa. A name whose return type depends on its arguments is assigned
-	// by the syntax around the call - see "continuation" in ExpParserUtils.
-
-	// Cached per call site: a predicate is evaluated once for every alternative that hoists it and once more when the
-	// parser commits, and a parser instance only ever parses one input
+	// call site continuations, cached per call site as predicates are evaluated more than once
 	private final java.util.Map<Integer, Integer> continuations = new java.util.HashMap<>();
 
 	/**
-	 * True if the call at the current position must be resolved by the untyped "fnCall" alternative of "expression".
+	 * True if the call at the current position is resolved by the untyped "fnCall" alternative of "expression".
 	 */
 	boolean untypedCall() {
 	    String name = _input.LT(1).getText();
-	    // a name no typed rule claims is always resolved here. A polymorphic one only when nothing is applied to the
-	    // result of the call: an operator makes it a typed expression, a comparison makes it "fnRelation"
 	    return isFn(name)
 	        && (!claimedByTyped(name)
 	            || (isPolymorphicFn(name) && continuation() == ExpParserUtils.CONTINUATION_NONE));
 	}
 
 	/**
-	 * True if the call at the current position may be resolved by the typed expression rule that produces the given
-	 * type. Like "mayReturn" itself this over-approximates - it ignores the arity and the argument types - and the
-	 * "asXxx" cast at the call site is what turns a wrong guess into a diagnosable error.
+	 * True if the call at the current position may be resolved by the typed rule producing the given type.
 	 */
 	boolean typedCall(TypeClassifier type) {
 	    String name = _input.LT(1).getText();
@@ -195,13 +177,8 @@ public class ExpParser extends Parser {
 	        return true;
 	    }
 
-	    // Which other rule this hook competes with depends on where it was reached from, and "_ctx" is the context of
-	    // the rule that owns the decision being predicted - not of the rule the predicate was hoisted from.
-	    //
-	    // In "expression" the competitor is the untyped alternative, and only an operator applied to the result of the
-	    // call can decide in favor of a type. Anywhere else - an argument declared as a typed expression, the
-	    // right-hand side of a typed relation, an operand of an operator - the typed rule was reached because the
-	    // surrounding syntax demands that very type, and the only competitor is "fnRelation", which owns comparisons.
+	    // "_ctx" is the rule owning the decision: in "expression" the competitor is the untyped alternative, anywhere
+	    // else the surrounding syntax demands the type and the only competitor is "fnRelation"
 	    return _ctx instanceof ExpressionContext
 	        ? continuation() == ExpParserUtils.CONTINUATION_TYPED
 	        : continuation() != ExpParserUtils.CONTINUATION_COMPARISON;

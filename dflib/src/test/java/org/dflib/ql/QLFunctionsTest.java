@@ -31,9 +31,6 @@ class QLFunctionsTest {
 
     @Test
     void mayReturn_ScopedByReturnType() {
-
-        // the grammar picks the expression rule to parse a call with by asking this predicate about the name
-        // alone, so it must answer only for functions of the type being asked about
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("sum", new Int2SumFunction())
                 .function("trim", new ObjectArgFunction())
@@ -52,7 +49,6 @@ class QLFunctionsTest {
         assertTrue(functions.mayReturn("isTrue", BOOLEAN));
         assertFalse(functions.mayReturn("isTrue", OBJECT));
 
-        // an array-valued function has no dedicated expression type, so it is reachable only as an OBJECT one
         assertTrue(functions.mayReturn("split", OBJECT));
         assertFalse(functions.mayReturn("split", STRING));
 
@@ -63,9 +59,6 @@ class QLFunctionsTest {
 
     @Test
     void mayReturn_TemporalTypesAreDistinct() {
-
-        // LocalDateTime and OffsetDateTime are separate expression types in the grammar, and must not share a
-        // classifier - otherwise a function of one would be looked up in the rule of the other
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("asDate", new DateFunction())
                 .function("asOffsetDateTime", new OffsetDateTimeFunction())
@@ -130,7 +123,6 @@ class QLFunctionsTest {
                 .function("substr", new StrConstIntFunction())
                 .build();
 
-        // a plain argument renders as the bare type name, a constant one is called out
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
                 () -> functions.function("substr", List.of(arg(STRING), constant(STRING)))
@@ -144,22 +136,18 @@ class QLFunctionsTest {
                 .function("sum", new IntNSumFunction())
                 .build();
 
-        // match with 2 args
         QLFunctionDescriptor result2 = functions.function("sum", List.of(arg(NUMERIC), arg(NUMERIC)));
         assertNotNull(result2);
         assertTrue(result2.isVarArgs());
 
-        // match with 3 args
         QLFunctionDescriptor result3 = functions.function("sum", List.of(arg(NUMERIC), arg(NUMERIC), arg(NUMERIC)));
         assertNotNull(result3);
         assertTrue(result3.isVarArgs());
 
-        // match with 1 arg
         QLFunctionDescriptor result1 = functions.function("sum", List.of(arg(NUMERIC)));
         assertNotNull(result1);
         assertTrue(result1.isVarArgs());
 
-        // match with 0 args
         QLFunctionDescriptor result0 = functions.function("sum", List.of());
         assertNotNull(result0);
         assertTrue(result0.isVarArgs());
@@ -172,13 +160,11 @@ class QLFunctionsTest {
                 .function("sum", new IntNSumFunction())
                 .build();
 
-        // 2-arg call should prefer the fixed-arity Udf2
         QLFunctionDescriptor result2 = functions.function("sum", List.of(arg(NUMERIC), arg(NUMERIC)));
         assertNotNull(result2);
         assertFalse(result2.isVarArgs());
         assertEquals(2, result2.args().length);
 
-        // 3-arg call should fall back to varargs
         QLFunctionDescriptor result3 = functions.function("sum", List.of(arg(NUMERIC), arg(NUMERIC), arg(NUMERIC)));
         assertNotNull(result3);
         assertTrue(result3.isVarArgs());
@@ -190,8 +176,6 @@ class QLFunctionsTest {
                 .function("sum", new Int2SumFunction())
                 .build();
 
-        // ANY is the classification of an argument whose type is only known at eval time. It must be accepted by a
-        // parameter of any declared type
         QLFunctionDescriptor result = functions.function("sum", List.of(arg(ANY), arg(ANY)));
 
         assertNotNull(result);
@@ -204,8 +188,6 @@ class QLFunctionsTest {
                 .function("sum", new Int2SumFunction())
                 .build();
 
-        // unlike ANY, OBJECT is a deliberately Object-typed argument (a null literal, most notably), and must not
-        // be silently passed to a numeric parameter
         List<Arg> argTypes = List.of(arg(NUMERIC), arg(OBJECT));
 
         assertThrows(
@@ -216,8 +198,6 @@ class QLFunctionsTest {
 
     @Test
     void function_ExactMatchPreferredOverWildcard() {
-
-        // the wildcard overload is registered first, so specificity rather than registration order has to decide
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("f", new ObjectArgFunction())
                 .function("f", new StrArgFunction())
@@ -235,8 +215,6 @@ class QLFunctionsTest {
                 .function("f", new ObjectArgFunction())
                 .build();
 
-        // an ANY argument matches both overloads, but only the one declaring OBJECT is written to handle an
-        // argument of any type, so it is the more specific match
         QLFunctionDescriptor result = functions.function("f", List.of(arg(ANY)));
 
         assertArrayEquals(new Arg[]{arg(OBJECT)}, result.args());
@@ -244,9 +222,6 @@ class QLFunctionsTest {
 
     @Test
     void function_EquallySpecific_FirstRegisteredWins() {
-
-        // neither overload is more specific than the other: each matches one argument exactly and the other via a
-        // wildcard. The tie must resolve to whichever was registered first
         List<Arg> argTypes = List.of(arg(STRING), arg(STRING));
 
         QLFunctions strFirst = QLFunctions.builder().noDefaultFunctions()
@@ -268,11 +243,6 @@ class QLFunctionsTest {
                 objFirst.function("f", argTypes).args());
     }
 
-    // --- ambiguity caused by an argument whose type is only known at eval time ---
-
-    /**
-     * Two overloads that differ only in the type of one parameter, e.g. "avg(NumExp)" and "avg(DateExp)".
-     */
     private static QLFunctions.Builder twoReceivers(TypeClassifier a, TypeClassifier b) {
         return QLFunctions.builder().noDefaultFunctions()
                 .function("f", QLFunctionSignature.signature().returning(STRING).arg(a).as(args -> args.get(0).castAsStr()))
@@ -281,9 +251,6 @@ class QLFunctionsTest {
 
     @Test
     void function_AnyArg_AmbiguousAmongTypedOverloads() {
-
-        // an untyped argument matches both overloads at the same cost, so registration order would decide which
-        // receiver type the call is compiled for. That is a coin toss over the user's data, not a resolution
         QLFunctions functions = twoReceivers(NUMERIC, DATE).build();
 
         assertNotNull(functions.function("f", List.of(arg(NUMERIC))));
@@ -300,9 +267,6 @@ class QLFunctionsTest {
 
     @Test
     void function_AnyArg_AmbiguityReportedAtItsOwnPosition() {
-
-        // the ambiguous position is not necessarily the first one, and the hint names one of the types actually
-        // declared there
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("f", QLFunctionSignature.signature()
                         .returning(STRING).arg(BOOLEAN).arg(DATE).as(args -> args.get(0).castAsStr()))
@@ -321,8 +285,6 @@ class QLFunctionsTest {
 
     @Test
     void function_AnyArg_AmbiguityIsPerArgument() {
-
-        // only the untyped argument is ambiguous - the same overloads resolve fine as soon as its type is known
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("f", QLFunctionSignature.signature()
                         .returning(STRING).arg(NUMERIC).arg(BOOLEAN).as(args -> args.get(0).castAsStr()))
@@ -345,9 +307,6 @@ class QLFunctionsTest {
 
     @Test
     void function_AnyArg_TieAwayFromTheAnyPositionIsNotAmbiguous() {
-
-        // the two overloads tie, but not because of the untyped argument: they agree on its declared type and
-        // differ only where the caller did provide a type. Registration order remains the right answer
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("f", QLFunctionSignature.signature()
                         .returning(STRING).arg(DATE).arg(STRING).arg(OBJECT).as(args -> args.get(0).castAsStr()))
@@ -362,9 +321,6 @@ class QLFunctionsTest {
 
     @Test
     void function_AnyArg_WildcardOverloadResolvesTheAmbiguity() {
-
-        // "shift(a, 2)": an overload written to accept an argument of any type is strictly the better match for an
-        // untyped argument, so it wins outright and there is nothing to be ambiguous about
         QLFunctions functions = twoReceivers(NUMERIC, DATE)
                 .function("f", QLFunctionSignature.signature()
                         .returning(STRING).arg(OBJECT).as(args -> args.get(0).castAsStr()))
@@ -376,10 +332,7 @@ class QLFunctionsTest {
     @Test
     void function_AnyArg_WildcardOverloadWinsATie() {
 
-        // "shift(a, 1, 'x')": the typed overload matches the second argument exactly but can only take the untyped
-        // first one on trust, while the wildcard overload takes both as wildcards. Passing an untyped argument to a
-        // typed parameter is the costlier match regardless of how many of the other arguments match exactly - only
-        // the wildcard overload is written to accept a receiver of any type, and the typed one would reject it
+        // "shift(a, 1, 'x')": an ANY argument to a typed parameter costs more than any number of wildcard matches
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("f", QLFunctionSignature.signature()
                         .returning(STRING).arg(STRING).arg(STRING).as(args -> args.get(0).castAsStr()))
@@ -391,7 +344,6 @@ class QLFunctionsTest {
                 new Arg[]{arg(OBJECT), arg(OBJECT)},
                 functions.function("f", List.of(arg(ANY), arg(STRING))).args());
 
-        // a typed argument in that position still picks the typed overload
         assertArrayEquals(
                 new Arg[]{arg(STRING), arg(STRING)},
                 functions.function("f", List.of(arg(STRING), arg(STRING))).args());
@@ -399,8 +351,6 @@ class QLFunctionsTest {
 
     @Test
     void function_AnyArg_FixedArityWinsOverVarArgs() {
-
-        // a vararg overload never ties with a fixed-arity one, so an untyped argument can not make them ambiguous
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("f", QLFunctionSignature.signature()
                         .returning(STRING).arg(NUMERIC).as(args -> args.get(0).castAsStr()))
@@ -416,9 +366,6 @@ class QLFunctionsTest {
 
     @Test
     void function_AnyArg_VarArgsAmbiguousOnALeadingParam() {
-
-        // vararg overloads are compared by their leading typed parameters only. The first argument is ambiguous;
-        // the second one is untyped too, but lands past everything either overload declares
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("f", QLFunctionSignature.signature()
                         .returning(STRING).arg(NUMERIC).varArgs().as(args -> args.get(0).castAsStr()))
@@ -437,9 +384,6 @@ class QLFunctionsTest {
 
     @Test
     void function_AnyArg_NotFoundStillReportsNotFound() {
-
-        // an ambiguity is only possible among matching overloads. When none match, the message stays the one the
-        // parser reports for an unknown call
         QLFunctions functions = twoReceivers(NUMERIC, DATE).build();
 
         IllegalArgumentException e = assertThrows(
@@ -467,7 +411,6 @@ class QLFunctionsTest {
                 .function("substr", new StrConstIntFunction())
                 .build();
 
-        // a column reference is a numeric expression, so it matches on type, but its value is not known until eval
         List<Arg> argTypes = List.of(arg(STRING), arg(NUMERIC));
 
         IllegalArgumentException exception = assertThrows(
@@ -483,7 +426,6 @@ class QLFunctionsTest {
                 .function("substr", new StrConstIntFunction())
                 .build();
 
-        // ANY is compatible with any parameter type, but it is by definition not a constant
         assertThrows(
                 IllegalArgumentException.class,
                 () -> functions.function("substr", List.of(arg(STRING), arg(ANY)))
@@ -496,7 +438,6 @@ class QLFunctionsTest {
                 .function("sum", new Int2SumFunction())
                 .build();
 
-        // passing a literal to an unconstrained parameter stays legal - this is what "abs(-5)" does
         QLFunctionDescriptor result = functions.function("sum", List.of(constant(NUMERIC), constant(NUMERIC)));
 
         assertNotNull(result);
@@ -504,8 +445,6 @@ class QLFunctionsTest {
 
     @Test
     void function_ConstancyDistinguishesOverloads() {
-
-        // the same signature with a different constancy is a different function, and both must register
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("substr", new StrConstIntFunction())
                 .function("substr", new StrIntFunction())
@@ -533,15 +472,11 @@ class QLFunctionsTest {
 
     @Test
     void constantArg_OnVarArgsIsRejected() {
-
-        // varargs declare no individual arguments, so a constant marker on them would be silently dropped
         assertThrows(
                 IllegalArgumentException.class,
                 () -> QLFunctions.builder().noDefaultFunctions().function("sum", new ConstVarArgsFunction())
         );
     }
-
-    // --- single-hook resolution API (name -> descriptor, no return type filter) ---
 
     @Test
     void isFn() {
@@ -566,8 +501,6 @@ class QLFunctionsTest {
 
     @Test
     void mayReturn_OverloadsWithDifferentReturnTypes() {
-
-        // "mayReturn" is a per-name over-approximation: it must answer for the union of the name's overloads
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("f", new ObjectArgFunction())
                 .function("f", new Int2SumFunction())
@@ -580,9 +513,6 @@ class QLFunctionsTest {
 
     @Test
     void mayReturn_OverloadPerReceiver() {
-
-        // "shift" returns the type of its receiver, which it expresses as one overload per receiver type: the name
-        // may return every one of them, and the untyped receiver overload adds ANY
         QLFunctions functions = IdentityFunctions.identity(
                 QLFunctions.builder().noDefaultFunctions(), "shift", constant(NUMERIC)).build();
 
@@ -593,9 +523,6 @@ class QLFunctionsTest {
 
     @Test
     void mayReturn_AnyReturningFunction() {
-
-        // "first"/"if"/"ifNull" produce expressions that implement no typed interface, so no typed rule may claim
-        // them. They stay reachable from the untyped expression position, which never asks "mayReturn"
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("first", QLFunctionSignature.signature()
                         .returning(ANY)
@@ -612,9 +539,6 @@ class QLFunctionsTest {
 
     @Test
     void hasTypedReturn() {
-
-        // the question the grammar asks to decide whether a call site belongs to a typed rule or to the untyped
-        // expression position: it is the union of "mayReturn" over the types that have a rule of their own
         QLFunctions.Builder builder = QLFunctions.builder().noDefaultFunctions()
                 .function("sum", new Int2SumFunction())
                 .function("split", QLFunctionSignature.signature()
@@ -628,11 +552,7 @@ class QLFunctionsTest {
         QLFunctions functions = IdentityFunctions.identity(builder, "shift", constant(NUMERIC)).build();
 
         assertTrue(functions.hasTypedReturn("sum"));
-
-        // a polymorphic function has an overload per receiver type, so every typed rule claims it
         assertTrue(functions.hasTypedReturn("shift"));
-
-        // neither a plain object nor a type known only at eval time has a rule of its own
         assertFalse(functions.hasTypedReturn("split"));
         assertFalse(functions.hasTypedReturn("first"));
 
@@ -642,15 +562,11 @@ class QLFunctionsTest {
     @Test
     void isPolymorphicFn() {
         QLFunctions.Builder builder = QLFunctions.builder().noDefaultFunctions()
-                // a single fixed return type
                 .function("trim", new ObjectArgFunction())
-                // two overloads, same fixed return type
                 .function("sum", new Int2SumFunction())
                 .function("sum", new Int3SumFunction())
-                // two overloads with different fixed return types
                 .function("f", new ObjectArgFunction())
                 .function("f", new Int2SumFunction());
-        // returns the type of its argument: one overload per receiver type
         QLFunctions functions = IdentityFunctions.identity(builder, "shift").build();
 
         assertFalse(functions.isPolymorphicFn("trim"));
@@ -685,9 +601,6 @@ class QLFunctionsTest {
 
     @Test
     void functionByName_TypedExpressionWithoutATypedInterface() {
-
-        // "year(first(date(a)))": the argument is a FirstExp<LocalDate>, which implements no typed Exp interface.
-        // It classifies as ANY and so must still be passable to a DATE parameter
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("year", QLFunctionSignature.signature()
                         .returning(NUMERIC)
@@ -701,12 +614,8 @@ class QLFunctionsTest {
         assertEquals(NUMERIC, descriptor.returnType());
     }
 
-    // --- explicit signature registration ---
-
     @Test
     void signature_FourArgs() {
-
-        // reflection tops out at Udf3. An explicit signature has no arity ceiling
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("between", QLFunctionSignature.signature()
                         .returning(BOOLEAN)
@@ -729,9 +638,6 @@ class QLFunctionsTest {
 
     @Test
     void signature_ZeroArgOverloadBesideVarArgs() {
-
-        // "concat()" is a zero-arity overload registered next to the varargs one. Fixed arity is preferred, so the
-        // empty call resolves to it rather than to a zero-length vararg list
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("concat", QLFunctionSignature.signature()
                         .returning(STRING)
@@ -749,9 +655,6 @@ class QLFunctionsTest {
 
     @Test
     void signature_VarArgsWithLeadingTypedParams() {
-
-        // declared args of a vararg function are leading typed parameters: they have to be present and to match,
-        // everything past them is unconstrained
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("vConcat", QLFunctionSignature.signature()
                         .returning(STRING)
@@ -763,22 +666,15 @@ class QLFunctionsTest {
         assertNotNull(functions.function("vConcat", List.of(constant(STRING), arg(NUMERIC), arg(DATE))));
         assertNotNull(functions.function("vConcat", List.of(constant(STRING))));
 
-        // the leading parameter is missing
         assertThrows(IllegalArgumentException.class, () -> functions.function("vConcat", List.of()));
-
-        // ... or is not a constant
         assertThrows(IllegalArgumentException.class,
                 () -> functions.function("vConcat", List.of(arg(STRING), arg(STRING))));
-
-        // ... or is of the wrong type
         assertThrows(IllegalArgumentException.class,
                 () -> functions.function("vConcat", List.of(constant(NUMERIC), arg(STRING))));
     }
 
     @Test
     void signature_ConstArgNeedsNoAnnotation() {
-
-        // the explicit path declares constancy directly, without a @Constant annotation to reflect on
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("substr", QLFunctionSignature.signature()
                         .returning(STRING)
@@ -797,9 +693,6 @@ class QLFunctionsTest {
 
     @Test
     void signature_DuplicateShapeRejected() {
-
-        // the return type is not part of a descriptor's identity: two overloads with the same argument shape are
-        // unresolvable regardless of what they return, and must fail at build time
         QLFunctions.Builder builder = QLFunctions.builder().noDefaultFunctions()
                 .function("f", QLFunctionSignature.signature()
                         .returning(STRING)
@@ -860,9 +753,6 @@ class QLFunctionsTest {
         }
     }
 
-    /**
-     * Same erased signature as {@link StrConstIntFunction}, but taking any expression as the second argument.
-     */
     private static class StrIntFunction implements Udf2<Object, Integer, String> {
         @Override
         public Exp<String> call(Exp<Object> exp, Exp<Integer> from) {

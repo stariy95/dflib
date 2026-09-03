@@ -21,14 +21,7 @@ import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.NUMERIC;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * The type of a call to a function that returns the type of one of its arguments is not known from its name, so such
- * a call can not be routed to one of the typed relation rules. The grammar handles it with a single untyped
- * "fnRelation" that dispatches on the expression the call produced. The built-in polymorphic names are covered by
- * {@link PolymorphicBuiltinTest}; this test exercises the rule in isolation, against a registry with one function
- * of a known shape, so that a failure points at the rule rather than at a built-in's signature.
- * <p>
- * That stand-in is registered by {@link IdentityFunctions}: one fixed-return overload per receiver type, the way
- * every built-in is written.
+ * The "fnRelation" grammar rule: a comparison whose left-hand side is a call of a polymorphic function.
  */
 public class FnRelationTest {
 
@@ -38,7 +31,6 @@ public class FnRelationTest {
     public void setUpFunctions() {
         this.originalFunctions = Environment.commonEnv().getQLFunctions();
 
-        // "f" returns its first argument unchanged, which makes the type of a call to it depend on the call site
         QLFunctions.Builder builder = QLFunctions.builder();
         identity(builder, "f");
         identity(builder, "f", new Arg(NUMERIC, true));
@@ -59,9 +51,6 @@ public class FnRelationTest {
 
     @Test
     public void comparison_DateTimeAgainstParameter() {
-
-        // the right-hand side is a parameter, so nothing but the left-hand side can decide the type of the
-        // comparison. This is the case the untyped relation exists for
         LocalDateTime dt = LocalDateTime.of(2024, 1, 2, 3, 4, 5);
         assertEquals($dateTime("a").gt($dateTimeVal(dt)), Exp.parseExp("f(dateTime(a), 1) > ?", dt));
     }
@@ -73,9 +62,6 @@ public class FnRelationTest {
 
     @Test
     public void comparison_TemporalStringLiteral() {
-
-        // a typed temporal relation accepts an ISO-8601 string literal in place of a temporal expression, and so
-        // must the untyped one
         assertEquals($date("a").gt("2024-01-01"), Exp.parseExp("f(date(a)) > '2024-01-01'"));
     }
 

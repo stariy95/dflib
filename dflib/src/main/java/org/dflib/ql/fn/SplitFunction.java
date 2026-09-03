@@ -4,9 +4,7 @@ import org.dflib.Exp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code split(e, regex)} and {@code split(e, regex, limit)}: splits each value converted to a String into an
- * array of Strings. Accepts a receiver of any type. The result is a {@code String[]}-valued expression with no
- * dedicated type of its own.
+ * QL {@code split(e, regex)} and {@code split(e, regex, limit)} functions.
  *
  * @since 2.0.0
  */

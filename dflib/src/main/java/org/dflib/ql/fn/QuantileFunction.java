@@ -8,10 +8,7 @@ import org.dflib.TimeExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code quantile(e, q)} and {@code quantile(e, q, filter)}: an aggregate returning the value at a constant
- * quantile of the receiver, optionally over the rows matching a boolean expression. The result is of the receiver's
- * own type. Strings have no quantile, and an {@code OffsetDateTimeExp} receiver declares no aggregates, so neither
- * is a valid receiver.
+ * QL {@code quantile(e, q)} and {@code quantile(e, q, filter)} functions.
  *
  * @since 2.0.0
  */

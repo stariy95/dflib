@@ -4,7 +4,7 @@ import org.dflib.NumExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code abs(e)}: the absolute value of a numeric expression.
+ * QL {@code abs(e)} function.
  *
  * @since 2.0.0
  */

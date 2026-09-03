@@ -7,7 +7,7 @@ import org.dflib.ql.QLFunction;
 import java.math.BigInteger;
 
 /**
- * QL {@code castAsBigint(e)}: converts an expression of any type to a BigInteger one.
+ * QL {@code castAsBigint(e)} function.
  *
  * @since 2.0.0
  */

@@ -5,8 +5,7 @@ import org.dflib.Exp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code matches(e, regex)}: converts each value to a String and tests it against a constant pattern. Accepts a
- * receiver of any type.
+ * QL {@code matches(e, regex)} function.
  *
  * @since 2.0.0
  */

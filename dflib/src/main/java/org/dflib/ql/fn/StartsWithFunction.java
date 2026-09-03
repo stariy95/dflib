@@ -5,8 +5,7 @@ import org.dflib.Exp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code startsWith(e, prefix)}: converts each value to a String and tests it for a constant prefix. Accepts a
- * receiver of any type.
+ * QL {@code startsWith(e, prefix)} function.
  *
  * @since 2.0.0
  */

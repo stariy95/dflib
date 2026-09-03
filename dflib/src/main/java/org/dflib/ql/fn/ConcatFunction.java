@@ -5,7 +5,7 @@ import org.dflib.StrExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code concat(..)}: String concatenation of any mix of expressions of any type, including none.
+ * QL {@code concat(..)} function.
  *
  * @since 2.0.0
  */

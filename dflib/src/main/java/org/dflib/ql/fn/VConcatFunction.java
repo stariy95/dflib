@@ -5,13 +5,9 @@ import org.dflib.Exp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code vConcat(e, delimiter)} and its filtered, prefixed and suffixed forms: an aggregate concatenating the
- * values of a receiver of any type into a single String.
- * <p>
- * Every arity delegates to the four-argument {@code Exp.vConcat}, defaulting the filter to null and the prefix and
- * the suffix to an empty String, as the grammar has always done. The one- and two-argument {@code Exp} API
- * overloads build a different expression. The result is a plain String-valued expression rather than a
- * {@code StrExp}.
+ * QL {@code vConcat(e, delimiter)}, {@code vConcat(e, filter, delimiter)}, {@code vConcat(e, delimiter, prefix,
+ * suffix)} and {@code vConcat(e, filter, delimiter, prefix, suffix)} functions. Every arity delegates to the
+ * four-argument {@code Exp.vConcat}, with a null filter and an empty prefix and suffix.
  *
  * @since 2.0.0
  */

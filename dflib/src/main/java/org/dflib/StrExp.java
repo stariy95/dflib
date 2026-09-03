@@ -71,9 +71,7 @@ public interface StrExp extends Exp<String> {
      */
     @Override
     default NumExp<BigInteger> castAsBigint() {
-        // Need to do an extra decimal conversion, so that we can properly cast any number format.
-        // Without this override, the Exp default would delegate to "castAsStr().castAsBigint()", and
-        // StrExp.castAsStr() returns "this", so the call would recurse forever.
+        // the Exp default would recurse forever, as it goes through "castAsStr()", which is "this" here
         return castAsDecimal().castAsBigint();
     }
 

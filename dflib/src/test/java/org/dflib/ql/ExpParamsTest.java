@@ -46,9 +46,6 @@ public class ExpParamsTest {
                         new Object[]{"abc"},
                         $strVal("abc")
                 ),
-
-                // a parenthesized parameter is an untyped expression: the parenthesized alternative of "expression"
-                // comes before the typed rules, so the parameter is no longer validated as a boolean
                 arguments(
                         "(?)",
                         new Object[]{1},

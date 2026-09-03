@@ -16,12 +16,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Built-in QL functions are resolved through the same registry as the custom ones, so a registry installed via
- * {@link Environment#setQLFunctions(QLFunctions)} that does not contain them takes them out of the language. To keep
- * adding a function from silently removing 100 of them, {@link QLFunctions#builder()} starts with the built-ins
- * already registered.
- */
 public class CustomFunctionTest {
 
     private QLFunctions originalFunctions;
@@ -44,8 +38,6 @@ public class CustomFunctionTest {
                 .build());
 
         assertEquals(new TwiceFunction().call($int("a").abs()), parseExp("twice(abs(int(a)))"));
-
-        // the built-ins are still there, both as an argument of the custom function above and on their own
         assertEquals($int("a").abs(), parseExp("abs(int(a))"));
         assertEquals($col("a").castAsBool(), parseExp("castAsBool(a)"));
         assertEquals($int("a").sum(), parseExp("sum(int(a))"));
@@ -73,14 +65,12 @@ public class CustomFunctionTest {
     @Test
     public void customFunction_CollidingWithABuiltIn() {
 
-        // "trim" is a built-in of a single untyped argument. A same-shaped custom function would be unresolvable, so
-        // the collision is an error - reported when the registry is built, as that is when the built-ins are added
+        // reported at build time, as that is when the built-ins are added
         QLFunctions.Builder builder = QLFunctions.builder().function("trim", new TrimFunction());
 
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class, builder::build);
         assertTrue(e.getMessage().contains("already defined"), e.getMessage());
 
-        // ... and is not an error for a registry that does not include the built-ins
         assertTrue(QLFunctions.builder()
                 .noDefaultFunctions()
                 .function("trim", new TrimFunction())

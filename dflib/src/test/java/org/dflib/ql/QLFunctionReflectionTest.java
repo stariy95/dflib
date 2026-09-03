@@ -33,10 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests the reflective registration of a {@link QLFunction}: one descriptor per public {@code call} overload
- * declared in the class, and a {@link CallProducer} that checks and unwraps the arguments before invoking it. A
- * function that accepts a receiver of any type declares {@code Exp<?>} and converts it itself, see
- * {@link #publicClassInAnotherPackage_IsInvokable()}.
+ * Reflective registration of a {@link QLFunction}.
  */
 public class QLFunctionReflectionTest {
 
@@ -56,9 +53,6 @@ public class QLFunctionReflectionTest {
         return QLFunctions.builder().noDefaultFunctions().function(name, function).build();
     }
 
-    /**
-     * Resolves and produces a call the way {@code ExpParserUtils.fn} does.
-     */
     private static Exp<?> call(QLFunctions functions, String name, Exp<?>... args) {
         List<Exp<?>> exps = Arrays.asList(args);
         List<Arg> descriptors = exps.stream().map(Arg::of).toList();
@@ -71,8 +65,6 @@ public class QLFunctionReflectionTest {
                 .toList();
     }
 
-    // 1. one descriptor per overload, resolved by argument type
-
     @Test
     public void overloads_ResolveByArgumentType() {
 
@@ -84,7 +76,6 @@ public class QLFunctionReflectionTest {
         assertEquals($str("a").min(), call(functions, "min", $str("a")));
         assertEquals($date("a").min(), call(functions, "min", $date("a")));
 
-        // the declared return of each overload is what the parser records for the call
         assertTrue(functions.mayReturn("min", TypeClassifier.NUMERIC));
         assertTrue(functions.mayReturn("min", TypeClassifier.STRING));
         assertTrue(functions.mayReturn("min", TypeClassifier.DATE));
@@ -92,8 +83,6 @@ public class QLFunctionReflectionTest {
         assertFalse(functions.mayReturn("min", TypeClassifier.OBJECT));
         assertTrue(functions.isPolymorphicFn("min"));
     }
-
-    // 2. non-Exp parameters are implicit constant arguments
 
     @Test
     public void intParameter_IsAConstantArg() {
@@ -122,7 +111,6 @@ public class QLFunctionReflectionTest {
 
         QLFunctions functions = registry("plusDays", new PlusDaysFunction());
 
-        // a constant parameter does not resolve against a non-constant argument at all
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> call(functions, "plusDays", $date("a"), $int("b")));
         assertEquals("Function plusDays([DATE, NUMERIC]) not found", e.getMessage());
@@ -134,8 +122,6 @@ public class QLFunctionReflectionTest {
         QLFunctions functions = registry("quantile", new QuantileFunction());
 
         assertEquals($int("a").quantile(0.5), call(functions, "quantile", $int("a"), $doubleVal(0.5)));
-
-        // an integer literal widens to the declared double
         assertEquals($int("a").quantile(1.0), call(functions, "quantile", $int("a"), $intVal(1)));
     }
 
@@ -148,8 +134,6 @@ public class QLFunctionReflectionTest {
                 call(functions, "castAsDate", $col("a"), $strVal("yyyy-MM-dd")));
     }
 
-    // 3. a type variable bounded by Number
-
     @Test
     public void numberBoundedTypeVariable_IsANumericConstantArg() {
 
@@ -160,8 +144,6 @@ public class QLFunctionReflectionTest {
 
         assertEquals($int("a").shift(2, 0), call(functions, "shift", $int("a"), $intVal(2), $intVal(0)));
     }
-
-    // 4. "<T> Exp<T>" is an OBJECT return
 
     @Test
     public void genericExpReturn_IsObject() {
@@ -180,8 +162,6 @@ public class QLFunctionReflectionTest {
         assertEquals($col("a").first(), call(functions, "first", $col("a")));
     }
 
-    // 5. varargs
-
     @Test
     public void varArgs() {
 
@@ -189,7 +169,6 @@ public class QLFunctionReflectionTest {
 
         assertEquals(2, functions.descriptors().count());
 
-        // a fixed arity overload is preferred over the vararg one
         assertEquals(Exp.concat(), call(functions, "concat"));
 
         assertEquals(Exp.concat($str("a")), call(functions, "concat", $str("a")));
@@ -197,20 +176,15 @@ public class QLFunctionReflectionTest {
                 call(functions, "concat", $str("a"), $col("b"), $intVal(1)));
     }
 
-    // 6. a typed parameter checked by the producer
-
     @Test
     public void typedParameter_RejectsAnUntypedArgAtProduceTime() {
 
         QLFunctions functions = registry("not", new NotFunction());
 
-        // BOOLEAN accepts an argument whose type is only known at eval time, and the producer is where it fails
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> call(functions, "not", $col("a")));
         assertEquals("not() expects argument 1 to be BOOLEAN, got: " + $col("a").toQL(), e.getMessage());
     }
-
-    // 7. - 12. registration errors
 
     @Test
     public void bareTypedExpReturn_Rejected() {
@@ -250,7 +224,6 @@ public class QLFunctionReflectionTest {
 
         QLFunctions.Builder builder = QLFunctions.builder().noDefaultFunctions();
 
-        // such a class is ambiguous at the registration call site as well, hence the cast
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> builder.function("bad", (QLFunction) new AlsoAUdfFunction()));
         assertTrue(e.getMessage().contains("must not also implement Udf0..UdfN"), e.getMessage());
@@ -281,20 +254,13 @@ public class QLFunctionReflectionTest {
 
         QLFunctions.Builder builder = QLFunctions.builder().noDefaultFunctions();
 
-        // distinct erasures, so javac accepts them, but the same argument classifier tuple, so the parser could
-        // never tell them apart
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> builder.function("dup", new SameShapeFunction()));
         assertEquals("Function dup([NUMERIC]) already defined", e.getMessage());
     }
 
-    // 13. deterministic overload order
-
     @Test
     public void overloadOrder_IsDeterministic() {
-
-        // registration order is the resolver's tie-break among equally specific overloads, and
-        // Class.getDeclaredMethods() order is unspecified
         assertEquals(
                 List.of("NUMERIC [NUMERIC]", "STRING [STRING]", "DATE [DATE]"),
                 shapes(registry("min", new MinFunction())));
@@ -310,20 +276,14 @@ public class QLFunctionReflectionTest {
                 shapes(registry("mixed", new MixedArityFunction())));
     }
 
-    // 14. an error thrown by the function body reaches the parser unwrapped
-
     @Test
     public void bodyException_IsUnwrappedAndPositioned() {
 
         Environment.setQLFunctions(QLFunctions.builder().function("boom", new BoomFunction()).build());
 
         QLParserException e = assertThrows(QLParserException.class, () -> parseExp("1 + boom(int(a))"));
-
-        // an InvocationTargetException that is not unwrapped would surface as "Unexpected exception during parsing"
         assertEquals("1:4 boom() does not like " + $int("a").toQL(), e.getMessage());
     }
-
-    // 15. a public class in another package needs no setAccessible
 
     @Test
     public void publicClassInAnotherPackage_IsInvokable() {
@@ -337,8 +297,6 @@ public class QLFunctionReflectionTest {
         assertEquals(Exp.concat($str("a"), $str("b"), $str("c")),
                 call(functions, "other", $str("a"), $str("b"), $str("c")));
     }
-
-    // fixtures
 
     public static class MinFunction implements QLFunction {
 

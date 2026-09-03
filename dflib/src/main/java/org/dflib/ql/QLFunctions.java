@@ -28,27 +28,15 @@ import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.NO_MATCH;
 import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.WILDCARD;
 
 /**
+ * A registry of functions recognized by the QL parser.
+ *
  * @since 2.0.0
  */
 public class QLFunctions {
 
     private final Map<String, SequencedSet<QLFunctionDescriptor>> functions;
-
-    /**
-     * Precomputed union of the return types of the overloads of each name, so that the parser can ask "may this
-     * name return T?" in O(1) on every call site it considers.
-     */
     private final Map<String, EnumSet<TypeClassifier>> returnTypes;
-
-    /**
-     * Names whose overloads disagree on their return type, precomputed for the same reason.
-     */
     private final Set<String> polymorphicFunctions;
-
-    /**
-     * Names that may return one of the {@link TypeClassifier#isTyped() typed} classifiers, precomputed so that the
-     * parser can ask in O(1) whether a typed expression rule claims a call site.
-     */
     private final Set<String> typedReturnFunctions;
 
     private QLFunctions(Map<String, SequencedSet<QLFunctionDescriptor>> functions) {
@@ -77,9 +65,8 @@ public class QLFunctions {
     }
 
     /**
-     * Starts a builder of a function registry. The registry it builds includes all the built-in QL functions, so
-     * that a custom function can be added to the language without taking anything away from it. Call
-     * {@link Builder#noDefaultFunctions()} to build a registry of the explicitly registered functions only.
+     * Starts a builder of a registry that includes the built-in functions, unless
+     * {@link Builder#noDefaultFunctions()} is called.
      */
     public static Builder builder() {
         return new Builder();
@@ -93,9 +80,7 @@ public class QLFunctions {
     }
 
     /**
-     * Returns true if a call to a function with this name may produce an expression of the given type. This is an
-     * over-approximation that ignores the arguments: it is meant for the parser to decide which expression rule a
-     * call can be parsed by, before the arguments are known.
+     * Returns true if some overload of the function may produce an expression of the given type.
      */
     public boolean mayReturn(String fnName, TypeClassifier type) {
         EnumSet<TypeClassifier> types = returnTypes.get(fnName);
@@ -103,27 +88,23 @@ public class QLFunctions {
     }
 
     /**
-     * Returns true if a call to this name may produce an expression of one of the types the grammar has a dedicated
-     * rule for. Such a name is claimed by that rule, and - unless it is also
-     * {@link #isPolymorphicFn(String) polymorphic} - is not resolved through the untyped expression position at all.
+     * Returns true if some overload of the function returns one of the types the grammar has a dedicated rule for.
      */
     public boolean hasTypedReturn(String fnName) {
         return typedReturnFunctions.contains(fnName);
     }
 
     /**
-     * Returns true if the return type of a call to this name is not determined by the name alone, i.e. different
-     * overloads of it return different types.
+     * Returns true if the overloads of the function return different types.
      */
     public boolean isPolymorphicFn(String fnName) {
         return polymorphicFunctions.contains(fnName);
     }
 
     /**
-     * Resolves a function by its name and actual argument types. Overloads are ranked by preferring a fixed arity
-     * over varargs, then by the most specific argument match, and finally by registration order. A tie that is only
-     * a tie because an argument type is unknown until eval time is reported as ambiguous rather than resolved
-     * arbitrarily.
+     * Resolves a function by its name and argument types, preferring a fixed arity over varargs, then the most
+     * specific argument match, then the registration order. A tie caused by an argument whose type is only known
+     * at eval time is reported as ambiguous.
      */
     public QLFunctionDescriptor function(String name, List<Arg> args) {
 
@@ -132,8 +113,6 @@ public class QLFunctions {
             throw notFound(name, args);
         }
 
-        // collect every candidate that is equally good, as such a tie may be an unresolvable ambiguity rather than
-        // a registration-order question
         List<QLFunctionDescriptor> best = new ArrayList<>(2);
         MatchCost bestCost = null;
 
@@ -162,17 +141,12 @@ public class QLFunctions {
             checkAmbiguity(name, args, best);
         }
 
-        // an ambiguity the argument types can not explain is resolved in favor of the overload registered first
         return best.getFirst();
     }
 
     /**
-     * How well a list of arguments fits a descriptor, lower being more specific. Compared in the order of the
-     * components: a fixed arity beats varargs; then the fewer arguments passed to a typed parameter with their type
-     * only known at eval time the better, as such an argument may still be rejected by the producer; and only then
-     * the fewer arguments passed to an OBJECT parameter the better. The order of the last two is what makes an
-     * overload written to accept any type win over one that would only pass a typed check at eval time, however
-     * many of the other arguments the typed one matches exactly.
+     * How well the arguments fit a descriptor, lower being better: a fixed arity beats varargs, then fewer
+     * eval-time coercions, then fewer wildcard matches.
      */
     private record MatchCost(boolean varArgs, int coercions, int wildcards) implements Comparable<MatchCost> {
 
@@ -181,16 +155,11 @@ public class QLFunctions {
                 .thenComparingInt(MatchCost::coercions)
                 .thenComparingInt(MatchCost::wildcards);
 
-        /**
-         * Returns the cost of passing the arguments to the descriptor, or null if they can not be passed at all.
-         */
         static MatchCost of(QLFunctionDescriptor descriptor, List<Arg> args) {
 
             int declared = descriptor.args().length;
 
             if (descriptor.isVarArgs()) {
-                // declared args of a vararg function are its leading typed parameters, and must all be present.
-                // Anything past them is unconstrained
                 if (args.size() < declared) {
                     return null;
                 }
@@ -227,10 +196,7 @@ public class QLFunctions {
     }
 
     /**
-     * Throws if equally specific candidates disagree on the declared type of a parameter whose actual argument is
-     * {@link TypeClassifier#ANY}. Such an argument matches every one of them at the same cost, so the choice would
-     * come down to registration order - silently picking one overload for an expression whose type is only known at
-     * eval time. The caller has to say which one it means.
+     * Throws if equally good candidates disagree on the declared type of a parameter whose argument is ANY.
      */
     private static void checkAmbiguity(String name, List<Arg> args, List<QLFunctionDescriptor> candidates) {
 
@@ -243,7 +209,6 @@ public class QLFunctions {
 
             EnumSet<TypeClassifier> declared = EnumSet.noneOf(TypeClassifier.class);
             for (QLFunctionDescriptor d : candidates) {
-                // a vararg candidate may declare fewer parameters than the call passes
                 if (i < d.args().length) {
                     declared.add(d.args()[i].type());
                 }
@@ -257,10 +222,6 @@ public class QLFunctions {
         }
     }
 
-    /**
-     * The cast a caller would wrap an untyped argument in to pick one of the ambiguous overloads. Names one of the
-     * declared types, so the hint is a call the user can paste.
-     */
     private static String castHint(String name, EnumSet<TypeClassifier> declared) {
 
         for (TypeClassifier t : declared) {
@@ -272,18 +233,13 @@ public class QLFunctions {
         return "Cast it to one of them.";
     }
 
-    /**
-     * Returns all registered descriptors.
-     */
     Stream<QLFunctionDescriptor> descriptors() {
         return functions.values().stream().flatMap(Collection::stream);
     }
 
     /**
-     * A builder of a function registry. Unless {@link #noDefaultFunctions()} is called, the registry it builds
-     * includes all the built-in QL functions in addition to the explicitly registered ones. A function whose name
-     * and argument types are the same as those of another function - a built-in one included - can not be resolved
-     * by the parser, so registering one is an error reported from {@link #build()}.
+     * A builder of a function registry. Registering a function with the same name and argument types as another
+     * one, a built-in included, is an error reported from {@link #build()}.
      */
     public static class Builder {
 
@@ -315,10 +271,7 @@ public class QLFunctions {
         }
 
         /**
-         * Registers a function implemented as a class of typed {@code call} overloads. Every public {@code call}
-         * method declared in the class becomes one signature of the function, so a single call registers a whole
-         * overload set - one per receiver type and arity. See {@link QLFunction} for the rules such a class must
-         * follow; violating any of them is reported from here.
+         * Registers every public {@code call} overload of a {@link QLFunction} class as a signature of the function.
          */
         public Builder function(String name, QLFunction function) {
             for (QLFunctionSignature s : QLFunctionSignature.reflectQLFunction(name, function)) {
@@ -328,10 +281,6 @@ public class QLFunctions {
             return this;
         }
 
-        /**
-         * Registers a function described by an explicit signature. Package-private for now: this is how the
-         * registry's tests declare functions of an arbitrary shape.
-         */
         Builder function(String name, QLFunctionSignature signature) {
             return defineFunction(name, new QLFunctionDescriptor(name, signature));
         }
@@ -346,8 +295,7 @@ public class QLFunctions {
         }
 
         /**
-         * Includes the built-in QL functions in the registry being built. They are included by default, so this call
-         * only has an effect after {@link #noDefaultFunctions()}.
+         * Includes the built-in functions in the registry. This is the default.
          */
         public Builder defaultFunctions() {
             this.defaultFunctions = true;
@@ -355,10 +303,7 @@ public class QLFunctions {
         }
 
         /**
-         * Excludes the built-in QL functions from the registry being built. The result is a registry of the
-         * explicitly registered functions only, which replaces - rather than extends - the QL function vocabulary.
-         * Note that the grammar rules that are not function calls (column references, operators, literals,
-         * {@code array(..)}) are unaffected by the registry and remain available.
+         * Excludes the built-in functions from the registry, leaving only the explicitly registered ones.
          */
         public Builder noDefaultFunctions() {
             this.defaultFunctions = false;
@@ -367,9 +312,7 @@ public class QLFunctions {
 
         public QLFunctions build() {
 
-            // built-ins go in first, so that among equally specific overloads they are preferred, matching the
-            // order they are declared in. A side effect is that a custom function colliding with a built-in one is
-            // reported here rather than at registration time
+            // built-ins go first, so that they win ties with custom functions
             Builder all = new Builder().noDefaultFunctions();
             if (defaultFunctions) {
                 DefaultQLFunctions.register(all);

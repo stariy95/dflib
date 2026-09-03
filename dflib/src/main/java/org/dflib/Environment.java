@@ -125,11 +125,9 @@ public class Environment {
     }
 
     /**
-     * Sets the registry of functions recognized by the QL parser. As {@link QLFunctions#builder()} starts with the
-     * built-in functions already registered, adding a custom function to the language is
+     * Sets the registry of functions recognized by the QL parser, e.g.
      * {@code setQLFunctions(QLFunctions.builder().function("myFn", udf).build())}.
      *
-     * @param qlFunctions new QL functions to set to the current environment
      * @since 2.0.0
      */
     public static void setQLFunctions(QLFunctions qlFunctions) {
@@ -187,6 +185,9 @@ public class Environment {
         return lazyHttpClient.get();
     }
 
+    /**
+     * @since 2.0.0
+     */
     public QLFunctions getQLFunctions() {
         return qlFunctions;
     }

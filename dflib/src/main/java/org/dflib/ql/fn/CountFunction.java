@@ -6,8 +6,7 @@ import org.dflib.NumExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code count()} and {@code count(filter)}: an aggregate counting the rows of the input, optionally only those
- * matching a boolean expression. Takes no receiver.
+ * QL {@code count()} and {@code count(filter)} functions.
  *
  * @since 2.0.0
  */

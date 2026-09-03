@@ -51,16 +51,6 @@ class DefaultQLFunctionsTest {
         return FUNCTIONS.descriptors().map(d -> arguments(label(d), d));
     }
 
-    /**
-     * The honesty invariant: a descriptor must not promise a return type its producer does not deliver. The parser
-     * casts a call result to whatever type the expression rule it was parsed by requires, so a descriptor whose
-     * producer returns something else is a ClassCastException inside generated code.
-     * <p>
-     * Every descriptor is exercised with a single argument list - the one it declares. A built-in that accepts
-     * several receiver types declares one {@code call} overload, and so one descriptor, per receiver, so no producer
-     * dispatches on its receiver any more and there is no second argument list to try. That the descriptor really is
-     * the one these arguments resolve to is {@link #isResolvableByItsOwnSignature}.
-     */
     @ParameterizedTest(name = "{0}")
     @MethodSource("defaultDescriptors")
     void returnTypeIsHonest(String label, QLFunctionDescriptor descriptor) {
@@ -77,11 +67,7 @@ class DefaultQLFunctionsTest {
         TypeClassifier actual = TypeClassifier.classify(result);
 
         if (declared == TypeClassifier.ANY || declared == TypeClassifier.OBJECT) {
-            // An untyped declaration is not a cast site: such a call is only reachable from the untyped
-            // "expression" position, which accepts any Exp. ANY and OBJECT are interchangeable there - both mean
-            // "no typed rule claims this call" - and which of the two a result classifies as depends on the
-            // argument (e.g. "first(date(a))" is ANY while "first(list(a))" is OBJECT). What must not happen is a
-            // typed result under an untyped declaration, since a typed rule would then never see it
+            // an untyped declaration must not produce a typed result, as a typed rule would never see it
             assertTrue(actual == TypeClassifier.ANY || actual == TypeClassifier.OBJECT,
                     () -> label + " is declared untyped but produces a " + actual + ": "
                             + result.getClass().getName());
@@ -92,9 +78,6 @@ class DefaultQLFunctionsTest {
         }
     }
 
-    /**
-     * Every default descriptor must be reachable through the registry with the very arguments it declares.
-     */
     @ParameterizedTest(name = "{0}")
     @MethodSource("defaultDescriptors")
     void isResolvableByItsOwnSignature(String label, QLFunctionDescriptor descriptor) {
@@ -126,12 +109,7 @@ class DefaultQLFunctionsTest {
 
         assertEquals(60, names.size());
 
-        // 60 names, 158 descriptors. 28 names have exactly one; the rest are overload sets, most of them one
-        // overload per receiver type: "year"/"month"/"day" and "hour".."millisecond" have 3 each (21), the 9
-        // "plusX" have 3 each (27), "min" and "max" have 5 receivers x {unfiltered, filtered} (20), "avg" and
-        // "median" 4 x 2 (16) and "quantile" 4 x 2 (8). "shift" has 8 receivers - the 7 typed ones plus an untyped
-        // one - x {no filler, filler} (16). The remaining 22 are arity overloads: "substr", "split", "count",
-        // "sum", "first" and the 4 temporal casts have 2 each; "vConcat" has 4
+        // 60 names, 158 descriptors
         assertEquals(158, FUNCTIONS.descriptors().count());
     }
 
@@ -143,15 +121,8 @@ class DefaultQLFunctionsTest {
         assertFalse(FUNCTIONS.isFn("noSuchFunction"));
     }
 
-    /**
-     * The grammar routes a call site by this, so it has to stay true for every name that can produce more than one
-     * type. A name with one typed {@code call} overload per receiver qualifies through the second half of the rule -
-     * its overloads disagree on their fixed return - rather than by returning the type of an argument.
-     */
     @Test
     void isPolymorphicFn() {
-
-        // returns the receiver type: one overload per receiver, each with its own fixed return
         assertTrue(FUNCTIONS.isPolymorphicFn("min"));
         assertTrue(FUNCTIONS.isPolymorphicFn("max"));
         assertTrue(FUNCTIONS.isPolymorphicFn("avg"));
@@ -160,7 +131,6 @@ class DefaultQLFunctionsTest {
         assertTrue(FUNCTIONS.isPolymorphicFn("plusDays"));
         assertTrue(FUNCTIONS.isPolymorphicFn("shift"));
 
-        // fixed return types, single-alternative call sites
         assertFalse(FUNCTIONS.isPolymorphicFn("sum"));
         assertFalse(FUNCTIONS.isPolymorphicFn("cumSum"));
         assertFalse(FUNCTIONS.isPolymorphicFn("count"));
@@ -171,14 +141,6 @@ class DefaultQLFunctionsTest {
         assertFalse(FUNCTIONS.isPolymorphicFn("vConcat"));
     }
 
-    /**
-     * An untyped function is only reachable from the untyped expression position: it satisfies no typed rule.
-     * <p>
-     * ANY and OBJECT are both "untyped" here and are excluded: a name declaring either is not claimed by a typed
-     * rule, and the grammar only ever asks {@link QLFunctions#mayReturn} about the seven typed classifiers. Which
-     * of the two a declaration uses is an artifact of how it is written - a {@code QLFunction} class returning
-     * {@code Exp<?>} classifies as OBJECT, an explicit signature can say ANY.
-     */
     @Test
     void untypedFunctionsClaimNoTypedRule() {
         for (String name : List.of("first", "last", "if", "ifNull", "vConcat")) {
@@ -190,14 +152,11 @@ class DefaultQLFunctionsTest {
         }
     }
 
-    // Resolution: what the registry picks for a given call
-
     @Test
     void zeroArityOverloads() {
         assertEquals(0, resolve("count").args().length);
         assertFalse(resolve("count").isVarArgs());
 
-        // "concat" has no zero-arity overload: the vararg one takes an empty list
         assertEquals(0, resolve("concat").args().length);
         assertTrue(resolve("concat").isVarArgs());
 
@@ -225,30 +184,15 @@ class DefaultQLFunctionsTest {
                 call("vConcat", $str("a"), $bool("b"), $strVal(","), $strVal("["), $strVal("]")));
     }
 
-    /**
-     * An argument whose type is only known at eval time is passable to a typed parameter, so a call by an ANY
-     * argument resolves. Whether the producer can then build an expression is a separate question.
-     * <p>
-     * This holds for a name with a single candidate in that position. A name with several receiver overloads - every
-     * one of which such an argument matches equally well - is ambiguous instead, see
-     * {@link #untypedReceiverOfAMultiReceiverNameIsAmbiguous()}.
-     */
     @Test
     void anyArgumentResolves() {
-
-        // "sum" declares a single numeric receiver, "len" a single string one
         assertSame(resolve("sum", $int("i")), resolve("sum", $col("c")));
         assertSame(resolve("sum", $int("i")), resolve("sum", $date("d").first()));
         assertSame(resolve("len", $str("s")), resolve("len", $col("c")));
     }
 
-    /**
-     * A name with several receiver overloads can not be called with an argument whose type is only known at eval
-     * time: every overload matches it equally well, so the choice would come down to registration order.
-     */
     @Test
     void untypedReceiverOfAMultiReceiverNameIsAmbiguous() {
-
         assertEquals("Ambiguous call to year(): the type of argument 1 is only known at eval time, and year is"
                         + " defined for [DATE, DATETIME, OFFSETDATETIME] arguments in that position."
                         + " Cast it, e.g. year(castAsDate(..))",
@@ -259,13 +203,9 @@ class DefaultQLFunctionsTest {
                         + " Cast it, e.g. min(castAsInt(..))",
                 assertThrows(IllegalArgumentException.class, () -> resolve("min", $col("c"))).getMessage());
 
-        // an expression whose value type is only recoverable at eval time is no better than a bare column ref
         assertThrows(IllegalArgumentException.class, () -> resolve("year", $date("d").first()));
     }
 
-    /**
-     * "sum" and "cumSum" are numeric-only and keep a fixed return type, unlike "min"/"max"/"avg"/"median".
-     */
     @Test
     void numericOnlyAggregates() {
         assertEquals(TypeClassifier.NUMERIC, resolve("sum", $int("i")).returnType());
@@ -280,13 +220,8 @@ class DefaultQLFunctionsTest {
         assertThrows(IllegalArgumentException.class, () -> call("sum", $date("d")));
     }
 
-    /**
-     * A polymorphic call's effective return type is the classifier of its receiver, as a consequence of resolution:
-     * the receiver picks the overload, and the overload's own fixed return is the receiver's type.
-     */
     @Test
     void polymorphicReturnFollowsReceiver() {
-
         assertEquals(TypeClassifier.NUMERIC, effectiveReturnType("min", $int("i")));
         assertEquals(TypeClassifier.STRING, effectiveReturnType("min", $str("s")));
         assertEquals(TypeClassifier.DATE, effectiveReturnType("min", $date("d")));
@@ -299,12 +234,8 @@ class DefaultQLFunctionsTest {
                 effectiveReturnType("plusDays", $offsetDateTime("odt"), $intVal(1)));
     }
 
-    // Expressions produced: these must be identical to what the grammar builds today
-
     @Test
     void aggregatesMatchTheUnfilteredApi() {
-        // the Exp API's unfiltered overloads delegate to the filtered ones with a null filter, which is what the
-        // grammar has always relied on
         assertEquals($int("i").min(), call("min", $int("i")));
         assertEquals($str("s").max(), call("max", $str("s")));
         assertEquals($date("d").avg(), call("avg", $date("d")));
@@ -318,8 +249,6 @@ class DefaultQLFunctionsTest {
         assertEquals($int("i").quantile(0.5), call("quantile", $int("i"), $doubleVal(0.5)));
         assertEquals($int("i").quantile(0.5, $bool("b")), call("quantile", $int("i"), $doubleVal(0.5), $bool("b")));
         assertEquals($date("d").quantile(0.5), call("quantile", $date("d"), $doubleVal(0.5)));
-
-        // an integer literal is narrowed rather than cast
         assertEquals($int("i").quantile(1.0), call("quantile", $int("i"), $intVal(1)));
     }
 
@@ -374,15 +303,9 @@ class DefaultQLFunctionsTest {
         assertEquals($int("i").shift(2, 0), call("shift", $int("i"), $intVal(2), $intVal(0)));
         assertEquals($str("s").shift(1, "x"), call("shift", $str("s"), $intVal(1), $strVal("x")));
         assertEquals($bool("b").shift(1, true), call("shift", $bool("b"), $intVal(1), $boolVal(true)));
-
-        // newly legal: the grammar has no temporal alternative in its "shift" rule
         assertEquals($date("d").shift(1), call("shift", $date("d"), $intVal(1)));
     }
 
-    /**
-     * Shifting a Condition produces a plain Exp&lt;Boolean&gt;, since Condition does not override shift(). Its
-     * overloads therefore declare a bare {@code Exp<?>} - classifying as OBJECT - rather than BOOLEAN.
-     */
     @Test
     void shiftOfAConditionIsUntyped() {
         assertEquals(TypeClassifier.OBJECT, resolve("shift", $bool("b"), $intVal(1)).returnType());
@@ -394,57 +317,35 @@ class DefaultQLFunctionsTest {
                 resolve("shift", $int("i"), $intVal(1)));
     }
 
-    // Negatives
-
     @Test
     void plusCountMustBeANumericConstant() {
-
-        // a string count does not match the declared numeric parameter
         assertThrows(IllegalArgumentException.class,
                 () -> resolve("plusDays", $date("d"), $strVal("3")));
-
-        // a non-constant count can not be read at parse time
         assertThrows(IllegalArgumentException.class,
                 () -> resolve("plusWeeks", $date("d"), $int("n")));
         assertThrows(IllegalArgumentException.class,
                 () -> resolve("plusWeeks", $date("d"), $intVal(1).add(2)));
     }
 
-    /**
-     * A receiver a function does not support is one it declares no overload for, so the call does not resolve at
-     * all. There is no producer-level "unsupported receiver" check left behind these names.
-     */
     @Test
     void unsupportedReceiverDoesNotResolve() {
-
-        // OffsetDateTimeExp declares no aggregates
         assertEquals("Function min([OFFSETDATETIME]) not found",
                 assertThrows(IllegalArgumentException.class,
                         () -> call("min", $offsetDateTime("odt"))).getMessage());
-
-        // "avg" and "median" are not declared on StrExp
         assertEquals("Function avg([STRING]) not found",
                 assertThrows(IllegalArgumentException.class, () -> call("avg", $str("s"))).getMessage());
-
-        // "year" of a time, "hour" of a date
         assertEquals("Function year([TIME]) not found",
                 assertThrows(IllegalArgumentException.class, () -> call("year", $time("t"))).getMessage());
         assertEquals("Function hour([DATE]) not found",
                 assertThrows(IllegalArgumentException.class, () -> call("hour", $date("d"))).getMessage());
 
-        // "quantile" and "plusX" of an unsupported receiver
         assertThrows(IllegalArgumentException.class, () -> call("quantile", $str("s"), $doubleVal(0.5)));
         assertThrows(IllegalArgumentException.class, () -> call("plusDays", $time("t"), $intVal(1)));
         assertThrows(IllegalArgumentException.class, () -> call("plusHours", $date("d"), $intVal(1)));
     }
 
-    /**
-     * The grammar enforced the filler type by having one shift alternative per receiver type, each with a matching
-     * scalar filler rule. The untyped overload, which accepts a receiver of any type, has to check it by hand.
-     */
     @Test
     void shiftFillerMustMatchTheReceiverType() {
-
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> call("shift", $int("i"), $intVal(2), $strVal("replace")));
         assertTrue(e.getMessage().startsWith("shift() filler of type STRING"), e.getMessage());
@@ -454,13 +355,11 @@ class DefaultQLFunctionsTest {
         assertThrows(IllegalArgumentException.class,
                 () -> call("shift", $bool("b"), $intVal(1), $strVal("x")));
 
-        // an untyped receiver takes any filler - there is nothing to check against
         assertEquals($col("c").shift(1, "x"), call("shift", $col("c"), $intVal(1), $strVal("x")));
     }
 
     @Test
     void booleanParameterRejectsAnUntypedArgumentInTheProducer() {
-        // "count(a)" resolves via ANY -> BOOLEAN, but an untyped column is not a Condition
         assertEquals("count() expects argument 1 to be BOOLEAN, got: a",
                 assertThrows(IllegalArgumentException.class, () -> call("count", $col("a"))).getMessage());
     }
@@ -472,8 +371,6 @@ class DefaultQLFunctionsTest {
         assertThrows(IllegalArgumentException.class, () -> resolve("year"));
         assertThrows(IllegalArgumentException.class, () -> resolve("last", $col("c"), $bool("b")));
     }
-
-    // Helpers
 
     private static QLFunctionDescriptor resolve(String name, Exp<?>... args) {
         return FUNCTIONS.function(name, Arrays.stream(args).map(Arg::of).toList());
@@ -494,8 +391,7 @@ class DefaultQLFunctionsTest {
     }
 
     /**
-     * An argument list matching exactly what the descriptor declares: one expression per parameter, of the
-     * parameter's own classifier, constant where the parameter is.
+     * An argument list matching exactly what the descriptor declares.
      */
     private static List<Exp<?>> plausibleArgs(QLFunctionDescriptor descriptor) {
 
@@ -506,8 +402,6 @@ class DefaultQLFunctionsTest {
         }
 
         if (descriptor.isVarArgs()) {
-            // trailing vararg values are unconstrained. Repeat the type of the last declared parameter, so that a
-            // function whose varargs are homogeneous with its leading params still gets sensible arguments
             Arg[] declared = descriptor.args();
             TypeClassifier tail = declared.length > 0 ? declared[declared.length - 1].type() : TypeClassifier.STRING;
             args.add(column(tail));
@@ -517,9 +411,6 @@ class DefaultQLFunctionsTest {
         return args;
     }
 
-    /**
-     * A non-constant expression of the given type.
-     */
     private static Exp<?> column(TypeClassifier type) {
         return switch (type) {
             case NUMERIC -> $int("i");
@@ -529,15 +420,11 @@ class DefaultQLFunctionsTest {
             case TIME -> $time("t");
             case DATETIME -> $dateTime("dt");
             case OFFSETDATETIME -> $offsetDateTime("odt");
-            // a genuinely Object-valued expression, as opposed to an untyped column reference
             case OBJECT -> $col("o").list();
             case ANY -> $col("o");
         };
     }
 
-    /**
-     * A constant expression of the given type.
-     */
     private static Exp<?> constant(TypeClassifier type) {
         return switch (type) {
             case NUMERIC -> $intVal(1);
@@ -547,7 +434,6 @@ class DefaultQLFunctionsTest {
             case TIME -> $timeVal(LocalTime.of(1, 2, 3));
             case DATETIME -> $dateTimeVal(LocalDateTime.of(2024, 1, 2, 3, 4, 5));
             case OFFSETDATETIME -> $offsetDateTimeVal(OffsetDateTime.parse("2024-01-02T03:04:05+01:00"));
-            // there is no constant of an eval-time-only type, so a plain Object constant stands in for it
             case OBJECT, ANY -> $val(new Object());
         };
     }

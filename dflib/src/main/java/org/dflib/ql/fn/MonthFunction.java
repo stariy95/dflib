@@ -7,8 +7,7 @@ import org.dflib.OffsetDateTimeExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code month(e)}: the month of a date, datetime or offset datetime expression, 1-based. A time has no date
- * part, so a {@code TimeExp} receiver is rejected.
+ * QL {@code month(e)} function.
  *
  * @since 2.0.0
  */

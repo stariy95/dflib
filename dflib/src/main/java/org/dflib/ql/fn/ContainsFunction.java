@@ -5,8 +5,7 @@ import org.dflib.Exp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code contains(e, substring)}: converts each value to a String and tests it for a constant substring. Accepts
- * a receiver of any type.
+ * QL {@code contains(e, substring)} function.
  *
  * @since 2.0.0
  */

@@ -7,8 +7,7 @@ import org.dflib.TimeExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code second(e)}: the second of a time, datetime or offset datetime expression. A date has no time part, so a
- * {@code DateExp} receiver is rejected.
+ * QL {@code second(e)} function.
  *
  * @since 2.0.0
  */

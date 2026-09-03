@@ -5,7 +5,7 @@ import org.dflib.Exp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code castAsBool(e)}: reinterprets an expression of any type as a boolean condition.
+ * QL {@code castAsBool(e)} function.
  *
  * @since 2.0.0
  */

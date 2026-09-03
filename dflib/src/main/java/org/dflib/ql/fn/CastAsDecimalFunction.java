@@ -5,7 +5,7 @@ import org.dflib.Exp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code castAsDecimal(e)}: converts an expression of any type to a BigDecimal one.
+ * QL {@code castAsDecimal(e)} function.
  *
  * @since 2.0.0
  */

@@ -5,7 +5,7 @@ import org.dflib.NumExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code len(e)}: the length of each value converted to a String. Accepts a receiver of any type.
+ * QL {@code len(e)} function.
  *
  * @since 2.0.0
  */

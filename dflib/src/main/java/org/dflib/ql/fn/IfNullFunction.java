@@ -4,9 +4,7 @@ import org.dflib.Exp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code ifNull(e, ifNull)}: replaces the null values of a receiver of any type with those of another
- * expression. The result carries its value type only at eval time, so it implements none of the typed expression
- * interfaces.
+ * QL {@code ifNull(e, ifNull)} function.
  *
  * @since 2.0.0
  */

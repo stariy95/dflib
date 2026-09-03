@@ -5,8 +5,7 @@ import org.dflib.OffsetDateTimeExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code castAsOffsetDateTime(e)} and {@code castAsOffsetDateTime(e, format)}: converts an expression of any
- * type to an offset datetime one, parsing its String form with an optional constant format pattern.
+ * QL {@code castAsOffsetDateTime(e)} and {@code castAsOffsetDateTime(e, format)} functions.
  *
  * @since 2.0.0
  */

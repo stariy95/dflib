@@ -7,9 +7,7 @@ import org.dflib.exp.ScalarExp;
 import java.math.BigInteger;
 
 /**
- * Reads the value of a constant (scalar) argument expression. Used by the reflective {@link CallProducer}, which
- * unwraps an implicit constant parameter of a {@link QLFunction} by its declared Java type, and by the rare
- * {@link QLFunction} that has to take a constant argument as an expression and unwrap it itself.
+ * Reads the values of constant (scalar) argument expressions.
  *
  * @since 2.0.0
  */
@@ -22,7 +20,6 @@ public class ConstantArgs {
      * Returns the value of a constant expression.
      *
      * @throws IllegalArgumentException if the expression is not a constant
-     * @see ScalarExp
      */
     public static <T> T constantValue(Exp<T> exp) {
         if (exp instanceof ScalarExp) {
@@ -33,10 +30,7 @@ public class ConstantArgs {
     }
 
     /**
-     * Narrows a constant numeric argument to an int. The QL integer literal type depends on the literal magnitude and
-     * suffix (Integer, Long or BigInteger), so the value is narrowed rather than cast. A fractional literal is
-     * rejected instead of being silently truncated: these arguments are counts, positions and scales, and the
-     * grammar used to accept only integer literals in these positions.
+     * Narrows an integral constant to an int, rejecting fractional literals rather than truncating them.
      */
     static int toInt(Number n, Exp<?> exp) {
         return requireIntegral(n, exp).intValue();

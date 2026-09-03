@@ -5,7 +5,7 @@ import org.dflib.StrExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code upper(e)}: converts each value to a String and then to upper case. Accepts a receiver of any type.
+ * QL {@code upper(e)} function.
  *
  * @since 2.0.0
  */

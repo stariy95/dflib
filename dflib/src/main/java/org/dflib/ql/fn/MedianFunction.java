@@ -8,9 +8,7 @@ import org.dflib.TimeExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code median(e)} and {@code median(e, filter)}: an aggregate returning the median value of the receiver,
- * optionally over the rows matching a boolean expression. The result is of the receiver's own type. Strings have no
- * median, and {@code OffsetDateTimeExp} declares no aggregates, so neither is a valid receiver.
+ * QL {@code median(e)} and {@code median(e, filter)} functions.
  *
  * @since 2.0.0
  */

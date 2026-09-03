@@ -5,8 +5,7 @@ import org.dflib.Exp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code castAsDateTime(e)} and {@code castAsDateTime(e, format)}: converts an expression of any type to a
- * datetime one, parsing its String form with an optional constant format pattern.
+ * QL {@code castAsDateTime(e)} and {@code castAsDateTime(e, format)} functions.
  *
  * @since 2.0.0
  */

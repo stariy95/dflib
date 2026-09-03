@@ -5,7 +5,7 @@ import org.dflib.NumExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code castAsFloat(e)}: converts an expression of any type to a float one.
+ * QL {@code castAsFloat(e)} function.
  *
  * @since 2.0.0
  */

@@ -9,9 +9,7 @@ import org.dflib.TimeExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code min(e)} and {@code min(e, filter)}: an aggregate returning the smallest value of the receiver,
- * optionally over the rows matching a boolean expression. The result is of the receiver's own type. An
- * {@code OffsetDateTimeExp} receiver is rejected: it declares no aggregates.
+ * QL {@code min(e)} and {@code min(e, filter)} functions.
  *
  * @since 2.0.0
  */

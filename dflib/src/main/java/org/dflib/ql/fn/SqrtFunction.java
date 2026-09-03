@@ -4,7 +4,7 @@ import org.dflib.NumExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code sqrt(e)}: the square root of a numeric expression.
+ * QL {@code sqrt(e)} function.
  *
  * @since 2.0.0
  */

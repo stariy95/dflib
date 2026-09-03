@@ -62,20 +62,7 @@ import org.dflib.ql.fn.VConcatFunction;
 import org.dflib.ql.fn.YearFunction;
 
 /**
- * Registrations of the QL built-in functions. This class is a pure registration list: every built-in is a
- * {@link QLFunction} class in {@code org.dflib.ql.fn}, one per name, whose typed {@code call} overloads javac checks
- * against the expression interfaces they declare.
- * <p>
- * The declared signature and the producer must agree: for any arguments matching the signature, the classifier of
- * the produced expression must be the descriptor's return type. The parser casts the result to the type the
- * signature promised, so a mismatch is a {@code ClassCastException} inside generated code. Declaring the exact
- * {@code Exp} subinterface a {@code call} overload returns is what makes this a compile-time property rather than a
- * convention. It is verified by {@code DefaultQLFunctionsTest}.
- * <p>
- * There is no shared "temporal" or "aggregate" expression interface in DFLib - {@code year()}, {@code plusDays()}
- * and {@code min()} are declared separately on {@code DateExp}, {@code TimeExp} and friends - so a function that
- * accepts several receiver types declares one {@code call} overload per receiver, and the receivers it does not
- * support are simply the ones it declares no overload for.
+ * Registrations of the built-in QL functions, one {@link QLFunction} class per name in {@code org.dflib.ql.fn}.
  */
 class DefaultQLFunctions {
 
@@ -123,10 +110,6 @@ class DefaultQLFunctions {
                 .function("contains", new ContainsFunction());
     }
 
-    /**
-     * Collection- and array-valued functions. None of these has a dedicated expression type, so they are all plain
-     * OBJECT.
-     */
     private static void registerCollectionFunctions(QLFunctions.Builder builder) {
         builder
                 .function("list", new ListFunction())
@@ -134,11 +117,6 @@ class DefaultQLFunctions {
                 .function("split", new SplitFunction());
     }
 
-    /**
-     * Casts. Every cast has a fixed return type and accepts an expression of any type, mirroring the grammar, where
-     * the cast argument is an untyped {@code expression}. Temporal casts additionally accept a constant format
-     * string.
-     */
     private static void registerCasts(QLFunctions.Builder builder) {
         builder
                 .function("castAsInt", new CastAsIntFunction())
@@ -154,11 +132,6 @@ class DefaultQLFunctions {
                 .function("castAsOffsetDateTime", new CastAsOffsetDateTimeFunction());
     }
 
-    /**
-     * Temporal field accessors. All of them return an int regardless of the receiver, so their return type is fixed
-     * and only the set of receivers they accept differs: "year"/"month"/"day" have no time receiver, and
-     * "hour".."millisecond" have no date one.
-     */
     private static void registerFieldFunctions(QLFunctions.Builder builder) {
         builder
                 .function("year", new YearFunction())
@@ -170,10 +143,6 @@ class DefaultQLFunctions {
                 .function("millisecond", new MillisecondFunction());
     }
 
-    /**
-     * "plusX" functions. Each returns the receiver's own type, so a name that has more than one receiver is
-     * polymorphic even though every one of its overloads has a fixed return.
-     */
     private static void registerTemporalArithmetic(QLFunctions.Builder builder) {
         builder
                 .function("plusYears", new PlusYearsFunction())
@@ -189,22 +158,13 @@ class DefaultQLFunctions {
 
     private static void registerAggregates(QLFunctions.Builder builder) {
         builder
-
-                // "min"/"max"/"avg"/"median"/"quantile" preserve the receiver type, so they are polymorphic across
-                // their receiver overloads. "sum"/"cumSum" are numeric-only, and have a fixed NUMERIC return: a
-                // fixed return keeps their call sites single-alternative in the grammar
                 .function("min", new MinFunction())
                 .function("max", new MaxFunction())
                 .function("avg", new AvgFunction())
                 .function("median", new MedianFunction())
                 .function("quantile", new QuantileFunction())
-
                 .function("sum", new SumFunction())
                 .function("cumSum", new CumSumFunction())
-
-                // "first"/"last"/"vConcat" have no typed expression implementation - they produce an expression
-                // whose value type is only recoverable at eval time - so they are declared as returning a bare
-                // "Exp", reachable only from the untyped expression position
                 .function("first", new FirstFunction())
                 .function("last", new LastFunction())
                 .function("vConcat", new VConcatFunction());
@@ -212,14 +172,8 @@ class DefaultQLFunctions {
 
     private static void registerSpecialForms(QLFunctions.Builder builder) {
         builder
-
-                // "if" and "ifNull" produce IfExp/IfNullExp, which implement none of the typed Exp interfaces
                 .function("if", new IfFunction())
                 .function("ifNull", new IfNullFunction())
-
-                // "shift" is covariantly overridden on every typed expression interface except Condition, so it
-                // returns the receiver's own type - except for a boolean receiver, where it produces a plain
-                // Exp<Boolean> rather than a Condition
                 .function("shift", new ShiftFunction());
     }
 }

@@ -5,8 +5,7 @@ import org.dflib.NumExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code sum(e)} and {@code sum(e, filter)}: a numeric-only aggregate summing the values of the receiver. Its
- * return type is fixed, unlike the receiver-preserving {@code min}/{@code max}/{@code avg}/{@code median}.
+ * QL {@code sum(e)} and {@code sum(e, filter)} functions.
  *
  * @since 2.0.0
  */

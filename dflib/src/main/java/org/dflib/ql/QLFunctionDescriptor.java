@@ -22,6 +22,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
+/**
+ * A description of one overload of a QL function: its name, argument shape, return type and expression factory.
+ *
+ * @since 2.0.0
+ */
 public class QLFunctionDescriptor {
 
     final String name;
@@ -41,11 +46,8 @@ public class QLFunctionDescriptor {
     }
 
     /**
-     * Two descriptors are equal when they have the same name and the same declared argument shape. The return type
-     * is deliberately excluded: function resolution is driven by the name and the arguments alone, so two
-     * descriptors with an identical argument shape are genuinely unresolvable no matter what they return. Treating
-     * them as equal is what turns such a pair into an error at registry build time, instead of a silent
-     * first-one-wins at parse time.
+     * Descriptors with the same name and argument shape are equal regardless of the return type, as the parser
+     * can not tell them apart.
      */
     @Override
     public boolean equals(Object o) {
@@ -61,10 +63,6 @@ public class QLFunctionDescriptor {
         return name;
     }
 
-    /**
-     * Returns the type of the expression a call to this function produces. A function whose result type depends on
-     * the receiver is registered as one descriptor per receiver type, each with its own return type.
-     */
     public TypeClassifier returnType() {
         return returnType;
     }
@@ -90,20 +88,11 @@ public class QLFunctionDescriptor {
     }
 
     /**
-     * Expression interfaces whose classifier is fixed by the interface itself, whatever its value type parameter
-     * reflects as. Consulted before any generic unwinding, because {@code NumExp<?>}, raw {@code NumExp} and
-     * {@code <N extends Number> NumExp<N>} all carry their numeric-ness in the interface and not in the reflected
-     * type argument: a wildcard's reflected upper bound is {@code Object}, a raw type has no argument at all, and
-     * the interface-declared {@code N extends Number} bound is propagated into neither. Iterated in order, first
-     * assignable wins; the entries are mutually disjoint except for {@link org.dflib.DecimalExp}, which is a
-     * {@link NumExp}.
+     * Typed expression interfaces, checked in order before any generic unwinding, as their reflected type argument
+     * is useless (a wildcard bound is Object, a raw type has none).
      */
     private static final Map<Class<?>, TypeClassifier> EXP_INTERFACE_CLASSIFIERS;
 
-    /**
-     * Primitives are boxed before classification: {@code Number.class.isAssignableFrom(int.class)} is false, so an
-     * implicit constant parameter declared as {@code int} or {@code double} would otherwise classify as OBJECT.
-     */
     private static final Map<Class<?>, Class<?>> BOXED_PRIMITIVES = Map.of(
             boolean.class, Boolean.class,
             byte.class, Byte.class,
@@ -126,10 +115,6 @@ public class QLFunctionDescriptor {
         EXP_INTERFACE_CLASSIFIERS = m;
     }
 
-    /**
-     * Returns the erasure of a type if it is a class or a parameterized type, null for anything else (a type
-     * variable, a wildcard, a generic array).
-     */
     private static Class<?> erasedOrNull(Type type) {
         return switch (type) {
             case Class<?> c -> c;
@@ -138,9 +123,6 @@ public class QLFunctionDescriptor {
         };
     }
 
-    /**
-     * Returns the wrapper class of a primitive type, or the type itself if it is not a primitive.
-     */
     static Class<?> box(Class<?> type) {
         return type.isPrimitive() ? BOXED_PRIMITIVES.getOrDefault(type, type) : type;
     }
@@ -148,7 +130,6 @@ public class QLFunctionDescriptor {
     private static Class<?> unwindGeneric(Type type) {
         switch (type) {
             case Class<?> c -> {
-                // a non-parameterized expression interface, such as StrExp
                 return Exp.class.isAssignableFrom(c) ? unwindExpType(c) : c;
             }
             case ParameterizedType pt -> {
@@ -173,9 +154,7 @@ public class QLFunctionDescriptor {
                 throw new IllegalArgumentException("Wildcard type with no bounds");
             }
             case TypeVariable<?> tv -> {
-                // a method-level type variable, as in "<T> Exp<T> call(..)" or "<N extends Number> N filler".
-                // Reflection can not resolve it to a call site, so it is worth exactly its declared bound:
-                // "T" is Object (OBJECT), "N extends Number" is Number (NUMERIC)
+                // a type variable is worth its declared bound
                 Type[] bounds = tv.getBounds();
                 return bounds.length > 0 ? unwindGeneric(bounds[0]) : Object.class;
             }
@@ -228,19 +207,15 @@ public class QLFunctionDescriptor {
          */
         public static final int NO_MATCH = -1;
 
-        /**
-         * The cost of an argument whose type is exactly the declared one.
-         */
         public static final int EXACT = 0;
 
         /**
-         * The cost of an argument passed to an OBJECT parameter, i.e. one written to accept any type.
+         * The cost of an argument passed to an OBJECT parameter.
          */
         public static final int WILDCARD = 1;
 
         /**
-         * The cost of an argument whose type is only known at eval time passed to a typed parameter: it resolves,
-         * but the producer may still reject it.
+         * The cost of an ANY argument passed to a typed parameter.
          */
         public static final int COERCION = 2;
 
@@ -251,16 +226,14 @@ public class QLFunctionDescriptor {
         }
 
         /**
-         * Returns true for a classifier that names a concrete type the grammar has an expression rule for. OBJECT
-         * and ANY are not types but the absence of one.
+         * Returns true for a classifier that names a concrete type, i.e. anything but OBJECT and ANY.
          */
         public boolean isTyped() {
             return castFunction != null;
         }
 
         /**
-         * Returns the name of the QL cast function producing an expression of this type, or null for OBJECT and
-         * ANY, which a caller can not cast to.
+         * Returns the name of the QL cast function producing an expression of this type, or null for OBJECT and ANY.
          */
         public String castFunction() {
             return castFunction;
@@ -274,9 +247,6 @@ public class QLFunctionDescriptor {
 
             switch (type) {
                 case TypeVariable<?> tv -> {
-                    // "<T> Exp<T> call(Exp<T> e, T filler)": a bare type variable in a parameter or return
-                    // position is worth its declared bound - Object for an unbounded "T", Number for
-                    // "<N extends Number> N"
                     Type[] bounds = tv.getBounds();
                     return bounds.length > 0 ? classify(bounds[0]) : OBJECT;
                 }
@@ -292,8 +262,6 @@ public class QLFunctionDescriptor {
                 }
             }
 
-            // a typed expression interface classifies by the interface alone. Its reflected type argument is
-            // useless for "NumExp<?>" and absent for raw "NumExp", and unwinding it would land on Object
             Class<?> erased = erasedOrNull(type);
             if (erased != null && !erased.isArray()) {
                 for (Map.Entry<Class<?>, TypeClassifier> e : EXP_INTERFACE_CLASSIFIERS.entrySet()) {
@@ -303,7 +271,6 @@ public class QLFunctionDescriptor {
                 }
             }
 
-            // what is left is a raw "Exp<V>" (or a non-expression type): classify its value type
             Class<?> expressionType = box(unwindGeneric(type));
             if (Number.class.isAssignableFrom(expressionType)) {
                 return NUMERIC;
@@ -335,9 +302,7 @@ public class QLFunctionDescriptor {
                 case OffsetDateTimeExp ignored -> TypeClassifier.OFFSETDATETIME;
                 case ScalarExp<?> ignored -> TypeClassifier.OBJECT;
 
-                // What is left is an expression that implements none of the typed Exp interfaces: a bare column
-                // ref, "if", "ifNull", "shift", "first" and friends. Its value type - when it has one - is only
-                // recoverable at eval time, so it classifies as ANY and is passable to a parameter of any type
+                // an expression implementing none of the typed interfaces ("if", "first", a bare column ref)
                 case Exp<?> e -> classifyValueType(e.getType());
 
                 case null -> TypeClassifier.OBJECT;
@@ -347,20 +312,15 @@ public class QLFunctionDescriptor {
         private static TypeClassifier classifyValueType(Class<?> valueType) {
 
             if (valueType == null || valueType == Object.class) {
-                // no static type at all, e.g. a bare column ref or "ifNull(a, b)" over untyped columns
                 return ANY;
             }
 
-            // "first(date(a))" is a FirstExp<LocalDate> and "if(c, int(a), int(b))" is an IfExp<Integer>: both are
-            // usable as a typed argument, they just can't be recognized by their interface. Only a genuinely
-            // Object-valued expression - Exp<String[]> from "split()", Exp<List<T>> from "list()" - stays OBJECT
             return classify(valueType) == OBJECT ? OBJECT : ANY;
         }
 
         /**
          * Returns the cost of passing an argument of the {@code actual} type to a parameter declared as
-         * {@code declared}: {@link #EXACT}, {@link #WILDCARD} or {@link #COERCION}, or {@link #NO_MATCH} if the
-         * argument can not be passed at all.
+         * {@code declared}, or {@link #NO_MATCH} if it can not be passed.
          */
         public static int matchCost(TypeClassifier declared, TypeClassifier actual) {
 

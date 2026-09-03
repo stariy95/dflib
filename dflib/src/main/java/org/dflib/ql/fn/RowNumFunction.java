@@ -5,7 +5,7 @@ import org.dflib.NumExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code rowNum()}: a one-based row number. Takes no receiver.
+ * QL {@code rowNum()} function.
  *
  * @since 2.0.0
  */

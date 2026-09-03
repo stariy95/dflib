@@ -6,9 +6,7 @@ import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
 import static org.dflib.ql.QLFunctionSignature.signature;
 
 /**
- * Registers stand-ins for the built-in functions whose return type is the type of their receiver - "shift",
- * "plusDays", "min" - so that dispatch tests can exercise a polymorphic call site against a registry of a known
- * shape, and a failure points at the dispatch rules rather than at a built-in's signature.
+ * Test stand-ins for the built-in functions whose return type is the type of their receiver.
  */
 class IdentityFunctions {
 
@@ -16,9 +14,7 @@ class IdentityFunctions {
     }
 
     /**
-     * Registers a function returning its first argument unchanged, the way every built-in is written: one
-     * fixed-return overload per typed receiver, plus one for a receiver whose type is only known at eval time. The
-     * type of a call to it is the type of its receiver, and is not known from its name.
+     * Registers a function returning its first argument unchanged, with one overload per receiver type.
      */
     static QLFunctions.Builder identity(QLFunctions.Builder builder, String name, Arg... trailingArgs) {
 

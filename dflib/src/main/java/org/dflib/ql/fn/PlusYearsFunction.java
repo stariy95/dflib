@@ -6,8 +6,7 @@ import org.dflib.OffsetDateTimeExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code plusYears(e, n)}: adds a constant number of years to a temporal expression, preserving the receiver
- * type. A {@code TimeExp} receiver is rejected: a time has no date part.
+ * QL {@code plusYears(e, n)} function.
  *
  * @since 2.0.0
  */

@@ -15,19 +15,13 @@ import java.util.List;
 import java.util.function.Function;
 
 /**
- * Produces an expression by invoking one {@code call} overload of a {@link QLFunction}: it checks every expression
- * argument against the parameter type the overload declared and unwraps the implicit constant arguments to the
- * declared Java type. This is the argument handling every function body would otherwise have to repeat.
- * <p>
- * The checks are not redundant with function resolution. A parameter declared as a typed expression interface also
- * accepts an argument whose type is only known at eval time (the ANY classifier), which is exactly what an
- * {@code isInstance} check can fail on here.
+ * Produces an expression by invoking one {@code call} overload of a {@link QLFunction}, checking the expression
+ * arguments against the declared parameter types and unwrapping the constant ones.
  */
 class CallProducer implements Function<List<Exp<?>>, Exp<?>> {
 
     /**
-     * Java types a non-expression (implicit constant) parameter may be declared as. A type variable bounded by
-     * {@code Number} erases to {@code Number} and is allowed through the same entry.
+     * Java types a non-expression (implicit constant) parameter may be declared as.
      */
     static final List<Class<?>> CONSTANT_TYPES = List.of(
             int.class, Integer.class,
@@ -41,16 +35,8 @@ class CallProducer implements Function<List<Exp<?>>, Exp<?>> {
     private final String name;
     private final QLFunction function;
     private final Method method;
-
-    /**
-     * Declared types of the leading (non-vararg) parameters.
-     */
     private final Class<?>[] paramTypes;
     private final boolean[] isExp;
-
-    /**
-     * The component type of the trailing vararg array, or null for a fixed-arity overload.
-     */
     private final Class<?> varArgComponent;
 
     CallProducer(String name, QLFunction function, Method method) {
@@ -87,7 +73,6 @@ class CallProducer implements Function<List<Exp<?>>, Exp<?>> {
         }
 
         if (varArgComponent != null) {
-            // varargs are passed as a single array element, not spread over the invocation arguments
             int tail = args.size() - declared;
             Object array = Array.newInstance(varArgComponent, tail);
             for (int i = 0; i < tail; i++) {
@@ -99,8 +84,7 @@ class CallProducer implements Function<List<Exp<?>>, Exp<?>> {
         try {
             return (Exp<?>) method.invoke(function, values);
         } catch (InvocationTargetException e) {
-            // without unwrapping, an argument error thrown by the function body would reach the parser as an
-            // "Unexpected exception during parsing" wrapper hiding the actual problem
+            // unwrap, or the parser reports a generic "Unexpected exception during parsing"
             Throwable cause = e.getCause();
             if (cause instanceof RuntimeException re) {
                 throw re;
@@ -116,8 +100,6 @@ class CallProducer implements Function<List<Exp<?>>, Exp<?>> {
 
     private Exp<?> expArg(int i, Exp<?> arg) {
 
-        // an argument of a known but different type never reaches here: it does not resolve to this overload. What
-        // can fail is an argument whose type is only known at eval time
         if (paramTypes[i].isInstance(arg)) {
             return arg;
         }

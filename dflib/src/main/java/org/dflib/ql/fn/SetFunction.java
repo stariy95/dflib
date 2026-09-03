@@ -4,8 +4,7 @@ import org.dflib.Exp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code set(e)}: an aggregate collecting the values of a receiver of any type into a Set. The result is a
- * Set-valued expression with no dedicated type of its own.
+ * QL {@code set(e)} function.
  *
  * @since 2.0.0
  */

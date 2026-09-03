@@ -6,8 +6,7 @@ import org.dflib.StrExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * A fixture proving that a public {@link QLFunction} class in a package other than {@code org.dflib.ql} - which is
- * where the built-in functions will live - is reflectively invokable without {@code setAccessible}.
+ * A test fixture of a {@link QLFunction} in a package other than {@code org.dflib.ql}.
  */
 public class OtherPackageFunction implements QLFunction {
 

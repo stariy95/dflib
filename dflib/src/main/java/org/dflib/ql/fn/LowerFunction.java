@@ -5,7 +5,7 @@ import org.dflib.StrExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code lower(e)}: converts each value to a String and then to lower case. Accepts a receiver of any type.
+ * QL {@code lower(e)} function.
  *
  * @since 2.0.0
  */

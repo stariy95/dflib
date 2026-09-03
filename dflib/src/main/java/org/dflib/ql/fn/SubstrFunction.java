@@ -5,8 +5,7 @@ import org.dflib.StrExp;
 import org.dflib.ql.QLFunction;
 
 /**
- * QL {@code substr(e, from)} and {@code substr(e, from, len)}: a substring of each value converted to a String.
- * Accepts a receiver of any type; the position and the length are integer constants.
+ * QL {@code substr(e, from)} and {@code substr(e, from, len)} functions.
  *
  * @since 2.0.0
  */

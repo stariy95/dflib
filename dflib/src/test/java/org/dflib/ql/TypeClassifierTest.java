@@ -24,8 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests of {@link TypeClassifier#classify(Type)}, the static classifier that maps a declared Java type - a method
- * return type or a parameter type - to a QL type classifier.
+ * Tests of {@link TypeClassifier#classify(Type)}.
  */
 class TypeClassifierTest {
 
@@ -48,26 +47,18 @@ class TypeClassifierTest {
 
     @Test
     void numExp_Wildcard() {
-
-        // the reflected upper bound of the "?" in "NumExp<?>" is Object: the interface-declared "N extends Number"
-        // is not propagated into it. The interface itself is what makes the type numeric
         assertEquals(TypeClassifier.NUMERIC, paramOf("numWildcard", 0));
         assertEquals(TypeClassifier.NUMERIC, returnOf("numWildcard"));
     }
 
     @Test
     void numExp_Raw() {
-
-        // a raw "NumExp" carries no type argument at all
         assertEquals(TypeClassifier.NUMERIC, paramOf("rawNum", 0));
         assertEquals(TypeClassifier.NUMERIC, returnOf("rawNum"));
     }
 
     @Test
     void numExp_TypeVariable() {
-
-        // "<N extends Number> NumExp<N>": the argument is a type variable that reflection can not resolve to a
-        // call site, but the interface already answers the question
         assertEquals(TypeClassifier.NUMERIC, paramOf("numVar", 0));
         assertEquals(TypeClassifier.NUMERIC, returnOf("numVar"));
     }
@@ -80,8 +71,6 @@ class TypeClassifierTest {
 
     @Test
     void decimalExp() {
-
-        // DecimalExp is a NumExp and takes no type parameter of its own
         assertEquals(TypeClassifier.NUMERIC, paramOf("decimal", 0));
         assertEquals(TypeClassifier.NUMERIC, returnOf("decimal"));
     }
@@ -109,9 +98,6 @@ class TypeClassifierTest {
 
     @Test
     void bareTypeVariable() {
-
-        // a non-Exp parameter is an implicit constant argument, so a bare "<N extends Number> N filler" must
-        // classify by its bound. An unbounded "T" is worth Object
         assertEquals(TypeClassifier.NUMERIC, paramOf("bareNumVar", 0));
         assertEquals(TypeClassifier.NUMERIC, returnOf("bareNumVar"));
 
@@ -121,16 +107,12 @@ class TypeClassifierTest {
 
     @Test
     void expOfATypeVariable() {
-
-        // "<T> Exp<T>" is the shape of "first", "if" and "shift" over an untyped receiver: no static type
         assertEquals(TypeClassifier.OBJECT, paramOf("expVar", 0));
         assertEquals(TypeClassifier.OBJECT, returnOf("expVar"));
     }
 
     @Test
     void primitives() {
-
-        // "Number.class.isAssignableFrom(int.class)" is false, so primitives have to be boxed before classifying
         assertEquals(TypeClassifier.NUMERIC, paramOf("primitives", 0)); // int
         assertEquals(TypeClassifier.NUMERIC, paramOf("primitives", 1)); // double
         assertEquals(TypeClassifier.NUMERIC, paramOf("primitives", 2)); // long
@@ -138,8 +120,6 @@ class TypeClassifierTest {
         assertEquals(TypeClassifier.NUMERIC, paramOf("primitives", 4)); // short
         assertEquals(TypeClassifier.NUMERIC, paramOf("primitives", 5)); // byte
         assertEquals(TypeClassifier.BOOLEAN, paramOf("primitives", 6)); // boolean
-
-        // char is not a CharSequence and is not used as a QL argument type
         assertEquals(TypeClassifier.OBJECT, paramOf("primitives", 7)); // char
 
         assertEquals(TypeClassifier.NUMERIC, returnOf("primitives"));
@@ -147,8 +127,6 @@ class TypeClassifierTest {
 
     @Test
     void valueTypes() {
-
-        // implicit constant arguments declared by their value type rather than as an expression
         assertEquals(TypeClassifier.STRING, paramOf("values", 0));
         assertEquals(TypeClassifier.DATE, paramOf("values", 1));
         assertEquals(TypeClassifier.TIME, paramOf("values", 2));
@@ -161,8 +139,6 @@ class TypeClassifierTest {
 
     @Test
     void rawExp() {
-
-        // a bare "Exp<V>" is not a typed interface: the value type is what classifies it
         assertEquals(TypeClassifier.OBJECT, paramOf("wildcardExp", 0));
         assertEquals(TypeClassifier.OBJECT, returnOf("wildcardExp"));
 
@@ -173,27 +149,18 @@ class TypeClassifierTest {
 
     @Test
     void expOfAnArray() {
-
-        // "split()" produces an array-valued expression. String[] is not a CharSequence, so it must not leak into
-        // the STRING namespace
         assertEquals(TypeClassifier.OBJECT, paramOf("arrayExp", 0));
         assertEquals(TypeClassifier.OBJECT, returnOf("arrayExp"));
     }
 
     @Test
     void expOfANestedGeneric() {
-
-        // only the expression layer is unwrapped: the value type of "Exp<List<String>>" is List, not String
         assertEquals(TypeClassifier.OBJECT, paramOf("listExp", 0));
         assertEquals(TypeClassifier.OBJECT, returnOf("listExp"));
     }
 
     @Test
     void varArgs() {
-
-        // "Exp<?>..." reflects as a generic array type. It is not a typed expression interface and classifies as
-        // OBJECT, as it always did (vararg parameters are not turned into declared args at all - see
-        // QLFunctionSignature.reflect)
         Method m = method("varargs");
         assertTrue(m.isVarArgs());
         assertEquals(TypeClassifier.OBJECT, paramOf("varargs", 0));
