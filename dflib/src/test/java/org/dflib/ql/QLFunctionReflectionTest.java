@@ -8,8 +8,6 @@ import org.dflib.Exp;
 import org.dflib.NumExp;
 import org.dflib.StrExp;
 import org.dflib.Udf1;
-import org.dflib.ql.QLFunctionDescriptor.Arg;
-import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
 import org.dflib.ql.fn.OtherPackageFunction;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,13 +53,13 @@ public class QLFunctionReflectionTest {
 
     private static Exp<?> call(QLFunctions functions, String name, Exp<?>... args) {
         List<Exp<?>> exps = Arrays.asList(args);
-        List<Arg> descriptors = exps.stream().map(Arg::of).toList();
+        List<QLFunctionArg> descriptors = exps.stream().map(QLFunctionArg::of).toList();
         return functions.function(name, descriptors).expProducer().apply(exps);
     }
 
     private static List<String> shapes(QLFunctions functions) {
         return functions.descriptors()
-                .map(d -> d.returnType() + " " + Arrays.toString(d.args()) + (d.isVarArgs() ? "..." : ""))
+                .map(d -> d.returnType() + " " + d.args().toString() + (d.varArgs() ? "..." : ""))
                 .toList();
     }
 
@@ -90,8 +88,8 @@ public class QLFunctionReflectionTest {
         QLFunctions functions = registry("plusDays", new PlusDaysFunction());
 
         QLFunctionDescriptor d = functions.function("plusDays",
-                List.of(new Arg(TypeClassifier.DATE, false), new Arg(TypeClassifier.NUMERIC, true)));
-        assertEquals("[DATE, const NUMERIC]", Arrays.toString(d.args()));
+                List.of(new QLFunctionArg(TypeClassifier.DATE, false), new QLFunctionArg(TypeClassifier.NUMERIC, true)));
+        assertEquals("[DATE, const NUMERIC]", d.args().toString());
 
         assertEquals($date("a").plusDays(3), call(functions, "plusDays", $date("a"), $intVal(3)));
     }
@@ -140,7 +138,7 @@ public class QLFunctionReflectionTest {
         QLFunctions functions = registry("shift", new ObjectFillerFunction());
 
         assertEquals("[OBJECT, const NUMERIC, const OBJECT]",
-                Arrays.toString(functions.descriptors().findFirst().orElseThrow().args()));
+                functions.descriptors().findFirst().orElseThrow().args().toString());
 
         assertEquals($col("a").shift(1, "x"), call(functions, "shift", $col("a"), $intVal(1), $strVal("x")));
         assertEquals($col("a").shift(1, 5), call(functions, "shift", $col("a"), $intVal(1), $intVal(5)));
@@ -156,7 +154,7 @@ public class QLFunctionReflectionTest {
         QLFunctions functions = registry("shift", new ShiftFunction());
 
         assertEquals("[NUMERIC, const NUMERIC, const NUMERIC]",
-                Arrays.toString(functions.descriptors().findFirst().orElseThrow().args()));
+                functions.descriptors().findFirst().orElseThrow().args().toString());
 
         assertEquals($int("a").shift(2, 0), call(functions, "shift", $int("a"), $intVal(2), $intVal(0)));
     }

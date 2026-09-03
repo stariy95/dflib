@@ -16,8 +16,8 @@ import org.dflib.TimeExp;
 import org.dflib.exp.bool.BoolScalarExp;
 import org.dflib.exp.flow.IfNullExp;
 import org.dflib.exp.str.StrScalarExp;
-import org.dflib.ql.QLFunctionDescriptor.Arg;
-import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
+import org.dflib.ql.QLFunctionArg;
+import org.dflib.ql.TypeClassifier;
 import org.dflib.ql.QLFunctions;
 import org.dflib.ql.QLParserException;
 
@@ -666,8 +666,8 @@ class ExpParserUtils {
      * reported as a positioned {@link QLParserException}.
      */
     public static Exp<?> fn(Token name, List<Exp<?>> args) {
-        List<Arg> argDescriptors = args.stream()
-                .map(Arg::of)
+        List<QLFunctionArg> argDescriptors = args.stream()
+                .map(QLFunctionArg::of)
                 .collect(Collectors.toList());
 
         try {

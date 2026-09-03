@@ -1,8 +1,6 @@
 package org.dflib.ql;
 
 import org.dflib.Exp;
-import org.dflib.ql.QLFunctionDescriptor.Arg;
-import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -56,7 +54,7 @@ class DefaultQLFunctionsTest {
     void returnTypeIsHonest(String label, QLFunctionDescriptor descriptor) {
 
         List<Exp<?>> args = plausibleArgs(descriptor);
-        List<Arg> argTypes = args.stream().map(Arg::of).toList();
+        List<QLFunctionArg> argTypes = args.stream().map(QLFunctionArg::of).toList();
 
         Exp<?> result = descriptor.expProducer().apply(args);
         assertReturnTypeIsHonest(label + " called with " + argTypes, descriptor.returnType(), result);
@@ -82,7 +80,7 @@ class DefaultQLFunctionsTest {
     @MethodSource("defaultDescriptors")
     void isResolvableByItsOwnSignature(String label, QLFunctionDescriptor descriptor) {
 
-        List<Arg> argTypes = plausibleArgs(descriptor).stream().map(Arg::of).toList();
+        List<QLFunctionArg> argTypes = plausibleArgs(descriptor).stream().map(QLFunctionArg::of).toList();
 
         assertSame(
                 descriptor,
@@ -154,14 +152,14 @@ class DefaultQLFunctionsTest {
 
     @Test
     void zeroArityOverloads() {
-        assertEquals(0, resolve("count").args().length);
-        assertFalse(resolve("count").isVarArgs());
+        assertEquals(0, resolve("count").args().size());
+        assertFalse(resolve("count").varArgs());
 
-        assertEquals(0, resolve("concat").args().length);
-        assertTrue(resolve("concat").isVarArgs());
+        assertEquals(0, resolve("concat").args().size());
+        assertTrue(resolve("concat").varArgs());
 
-        assertTrue(resolve("concat", $str("a"), $str("b"), $str("c")).isVarArgs());
-        assertTrue(resolve("concat", $str("a")).isVarArgs());
+        assertTrue(resolve("concat", $str("a"), $str("b"), $str("c")).varArgs());
+        assertTrue(resolve("concat", $str("a")).varArgs());
 
         assertEquals(Exp.count(), call("count"));
         assertEquals(Exp.concat(), call("concat"));
@@ -373,7 +371,7 @@ class DefaultQLFunctionsTest {
     }
 
     private static QLFunctionDescriptor resolve(String name, Exp<?>... args) {
-        return FUNCTIONS.function(name, Arrays.stream(args).map(Arg::of).toList());
+        return FUNCTIONS.function(name, Arrays.stream(args).map(QLFunctionArg::of).toList());
     }
 
     private static Exp<?> call(String name, Exp<?>... args) {
@@ -385,8 +383,8 @@ class DefaultQLFunctionsTest {
     }
 
     private static String label(QLFunctionDescriptor descriptor) {
-        return descriptor.name() + Arrays.toString(descriptor.args())
-                + (descriptor.isVarArgs() ? "..." : "")
+        return descriptor.name() + descriptor.args().toString()
+                + (descriptor.varArgs() ? "..." : "")
                 + " -> " + descriptor.returnType();
     }
 
@@ -396,14 +394,14 @@ class DefaultQLFunctionsTest {
     private static List<Exp<?>> plausibleArgs(QLFunctionDescriptor descriptor) {
 
         List<Exp<?>> args = new ArrayList<>();
-        for (Arg a : descriptor.args()) {
+        for (QLFunctionArg a : descriptor.args()) {
             TypeClassifier type = a.type();
             args.add(a.constant() ? constant(type) : column(type));
         }
 
-        if (descriptor.isVarArgs()) {
-            Arg[] declared = descriptor.args();
-            TypeClassifier tail = declared.length > 0 ? declared[declared.length - 1].type() : TypeClassifier.STRING;
+        if (descriptor.varArgs()) {
+            List<QLFunctionArg> declared = descriptor.args();
+            TypeClassifier tail = declared.isEmpty() ? TypeClassifier.STRING : declared.getLast().type();
             args.add(column(tail));
             args.add(column(tail));
         }

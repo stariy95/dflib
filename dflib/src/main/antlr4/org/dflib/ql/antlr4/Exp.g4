@@ -18,7 +18,7 @@ import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 import org.dflib.*;
-import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
+import org.dflib.ql.TypeClassifier;
 
 import static org.dflib.ql.antlr4.ExpParserUtils.*;
 }

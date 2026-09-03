@@ -9,7 +9,6 @@ import org.dflib.NumExp;
 import org.dflib.OffsetDateTimeExp;
 import org.dflib.StrExp;
 import org.dflib.TimeExp;
-import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;

@@ -2,7 +2,6 @@ package org.dflib.ql;
 
 import org.dflib.Environment;
 import org.dflib.Exp;
-import org.dflib.ql.QLFunctionDescriptor.Arg;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,7 +16,7 @@ import static org.dflib.Exp.$intVal;
 import static org.dflib.Exp.$str;
 import static org.dflib.Exp.$strVal;
 import static org.dflib.ql.IdentityFunctions.identity;
-import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.NUMERIC;
+import static org.dflib.ql.TypeClassifier.NUMERIC;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
@@ -33,7 +32,7 @@ public class FnRelationTest {
 
         QLFunctions.Builder builder = QLFunctions.builder();
         identity(builder, "f");
-        identity(builder, "f", new Arg(NUMERIC, true));
+        identity(builder, "f", new QLFunctionArg(NUMERIC, true));
         Environment.setQLFunctions(builder.build());
     }
 

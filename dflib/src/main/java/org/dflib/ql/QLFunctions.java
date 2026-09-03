@@ -5,11 +5,8 @@ import org.dflib.Udf1;
 import org.dflib.Udf2;
 import org.dflib.Udf3;
 import org.dflib.UdfN;
-import org.dflib.ql.QLFunctionDescriptor.Arg;
-import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -23,9 +20,9 @@ import java.util.Set;
 import java.util.SequencedSet;
 import java.util.stream.Stream;
 
-import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.COERCION;
-import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.NO_MATCH;
-import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.WILDCARD;
+import static org.dflib.ql.TypeClassifier.COERCION;
+import static org.dflib.ql.TypeClassifier.NO_MATCH;
+import static org.dflib.ql.TypeClassifier.WILDCARD;
 
 /**
  * A registry of functions recognized by the QL parser.
@@ -106,7 +103,7 @@ public class QLFunctions {
      * specific argument match, then the registration order. A tie caused by an argument whose type is only known
      * at eval time is reported as ambiguous.
      */
-    public QLFunctionDescriptor function(String name, List<Arg> args) {
+    public QLFunctionDescriptor function(String name, List<QLFunctionArg> args) {
 
         SequencedSet<QLFunctionDescriptor> descriptors = functions.get(name);
         if (descriptors == null) {
@@ -155,11 +152,11 @@ public class QLFunctions {
                 .thenComparingInt(MatchCost::coercions)
                 .thenComparingInt(MatchCost::wildcards);
 
-        static MatchCost of(QLFunctionDescriptor descriptor, List<Arg> args) {
+        static MatchCost of(QLFunctionDescriptor descriptor, List<QLFunctionArg> args) {
 
-            int declared = descriptor.args().length;
+            int declared = descriptor.args().size();
 
-            if (descriptor.isVarArgs()) {
+            if (descriptor.varArgs()) {
                 if (args.size() < declared) {
                     return null;
                 }
@@ -171,7 +168,7 @@ public class QLFunctions {
             int wildcards = 0;
 
             for (int i = 0; i < declared; i++) {
-                switch (Arg.matchCost(descriptor.args()[i], args.get(i))) {
+                switch (QLFunctionArg.matchCost(descriptor.args().get(i), args.get(i))) {
                     case NO_MATCH -> {
                         return null;
                     }
@@ -182,7 +179,7 @@ public class QLFunctions {
                 }
             }
 
-            return new MatchCost(descriptor.isVarArgs(), coercions, wildcards);
+            return new MatchCost(descriptor.varArgs(), coercions, wildcards);
         }
 
         @Override
@@ -191,14 +188,14 @@ public class QLFunctions {
         }
     }
 
-    private static IllegalArgumentException notFound(String name, List<Arg> args) {
+    private static IllegalArgumentException notFound(String name, List<QLFunctionArg> args) {
         return new IllegalArgumentException("Function " + name + "(" + args + ") not found");
     }
 
     /**
      * Throws if equally good candidates disagree on the declared type of a parameter whose argument is ANY.
      */
-    private static void checkAmbiguity(String name, List<Arg> args, List<QLFunctionDescriptor> candidates) {
+    private static void checkAmbiguity(String name, List<QLFunctionArg> args, List<QLFunctionDescriptor> candidates) {
 
         int len = args.size();
         for (int i = 0; i < len; i++) {
@@ -209,8 +206,8 @@ public class QLFunctions {
 
             EnumSet<TypeClassifier> declared = EnumSet.noneOf(TypeClassifier.class);
             for (QLFunctionDescriptor d : candidates) {
-                if (i < d.args().length) {
-                    declared.add(d.args()[i].type());
+                if (i < d.args().size()) {
+                    declared.add(d.args().get(i).type());
                 }
             }
 
@@ -285,7 +282,7 @@ public class QLFunctions {
             String name = descriptor.name();
             boolean hasSameDescriptor = !functions.computeIfAbsent(name, n -> new LinkedHashSet<>()).add(descriptor);
             if (hasSameDescriptor) {
-                throw new IllegalArgumentException("Function " + name + "(" + Arrays.toString(descriptor.args()) + ") already defined");
+                throw new IllegalArgumentException("Function " + name + "(" + descriptor.args() + ") already defined");
             }
 
             return this;

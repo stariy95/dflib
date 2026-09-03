@@ -1,8 +1,5 @@
 package org.dflib.ql;
 
-import org.dflib.ql.QLFunctionDescriptor.Arg;
-import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
-
 import static org.dflib.ql.DescriptorBuilder.descriptor;
 
 /**
@@ -16,7 +13,7 @@ class IdentityFunctions {
     /**
      * Registers a function returning its first argument unchanged, with one overload per receiver type.
      */
-    static QLFunctions.Builder identity(QLFunctions.Builder builder, String name, Arg... trailingArgs) {
+    static QLFunctions.Builder identity(QLFunctions.Builder builder, String name, QLFunctionArg... trailingArgs) {
 
         for (TypeClassifier t : TypeClassifier.values()) {
             if (t.isTyped()) {
@@ -31,10 +28,10 @@ class IdentityFunctions {
             String name,
             TypeClassifier receiver,
             TypeClassifier returns,
-            Arg... trailingArgs) {
+            QLFunctionArg... trailingArgs) {
 
         DescriptorBuilder b = descriptor(name).returning(returns).arg(receiver);
-        for (Arg a : trailingArgs) {
+        for (QLFunctionArg a : trailingArgs) {
             b.arg(a);
         }
         return b.as(args -> args.get(0));

@@ -2,7 +2,6 @@ package org.dflib.ql;
 
 import org.dflib.Environment;
 import org.dflib.Exp;
-import org.dflib.ql.QLFunctionDescriptor.Arg;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,9 +16,9 @@ import static org.dflib.Exp.$strVal;
 import static org.dflib.Exp.count;
 import static org.dflib.Exp.parseExp;
 import static org.dflib.ql.IdentityFunctions.identity;
-import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.ANY;
-import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.NUMERIC;
-import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.OBJECT;
+import static org.dflib.ql.TypeClassifier.ANY;
+import static org.dflib.ql.TypeClassifier.NUMERIC;
+import static org.dflib.ql.TypeClassifier.OBJECT;
 import static org.dflib.ql.DescriptorBuilder.descriptor;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -36,7 +35,7 @@ public class PolymorphicDispatchTest {
 
         QLFunctions.Builder builder = QLFunctions.builder();
         identity(builder, "pmin");
-        identity(builder, "plusLike", new Arg(NUMERIC, true));
+        identity(builder, "plusLike", new QLFunctionArg(NUMERIC, true));
 
         Environment.setQLFunctions(builder
                 .function(descriptor("foo")

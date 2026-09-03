@@ -1,7 +1,6 @@
 package org.dflib.ql;
 
 import org.dflib.Exp;
-import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
 
 import java.lang.reflect.Array;
 import java.lang.reflect.InvocationTargetException;
@@ -129,7 +128,8 @@ class CallProducer implements Function<List<Exp<?>>, Exp<?>> {
             return requireNumber(i, arg, value).doubleValue();
         }
 
-        if (!QLFunctionDescriptor.box(declared).isInstance(value)) {
+        Class<?> boxed = declared == boolean.class ? Boolean.class : declared;
+        if (!boxed.isInstance(value)) {
             throw wrongArg(i, arg, "a constant ");
         }
 

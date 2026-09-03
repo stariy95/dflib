@@ -1,8 +1,6 @@
 package org.dflib.ql;
 
 import org.dflib.*;
-import org.dflib.ql.QLFunctionDescriptor.Arg;
-import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
@@ -10,24 +8,24 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 import static org.dflib.ql.DescriptorBuilder.descriptor;
-import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.ANY;
-import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.BOOLEAN;
-import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.DATE;
-import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.DATETIME;
-import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.NUMERIC;
-import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.OBJECT;
-import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.OFFSETDATETIME;
-import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.STRING;
+import static org.dflib.ql.TypeClassifier.ANY;
+import static org.dflib.ql.TypeClassifier.BOOLEAN;
+import static org.dflib.ql.TypeClassifier.DATE;
+import static org.dflib.ql.TypeClassifier.DATETIME;
+import static org.dflib.ql.TypeClassifier.NUMERIC;
+import static org.dflib.ql.TypeClassifier.OBJECT;
+import static org.dflib.ql.TypeClassifier.OFFSETDATETIME;
+import static org.dflib.ql.TypeClassifier.STRING;
 import static org.junit.jupiter.api.Assertions.*;
 
 class QLFunctionsTest {
 
-    private static Arg arg(TypeClassifier type) {
-        return new Arg(type, false);
+    private static QLFunctionArg arg(TypeClassifier type) {
+        return new QLFunctionArg(type, false);
     }
 
-    private static Arg constant(TypeClassifier type) {
-        return new Arg(type, true);
+    private static QLFunctionArg constant(TypeClassifier type) {
+        return new QLFunctionArg(type, true);
     }
 
     @Test
@@ -85,7 +83,7 @@ class QLFunctionsTest {
         assertNotNull(result);
         assertEquals("sum", result.name());
         assertEquals(NUMERIC, result.returnType());
-        assertEquals(2, result.args().length);
+        assertEquals(2, result.args().size());
     }
 
     @Test
@@ -101,7 +99,7 @@ class QLFunctionsTest {
         assertNotNull(result);
         assertEquals("sum", result.name());
         assertEquals(NUMERIC, result.returnType());
-        assertEquals(3, result.args().length);
+        assertEquals(3, result.args().size());
     }
 
     @Test
@@ -109,7 +107,7 @@ class QLFunctionsTest {
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("sum", new Int2SumFunction())
                 .build();
-        List<Arg> wrongArgTypes = List.of(arg(NUMERIC), arg(STRING));
+        List<QLFunctionArg> wrongArgTypes = List.of(arg(NUMERIC), arg(STRING));
 
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
@@ -139,19 +137,19 @@ class QLFunctionsTest {
 
         QLFunctionDescriptor result2 = functions.function("sum", List.of(arg(NUMERIC), arg(NUMERIC)));
         assertNotNull(result2);
-        assertTrue(result2.isVarArgs());
+        assertTrue(result2.varArgs());
 
         QLFunctionDescriptor result3 = functions.function("sum", List.of(arg(NUMERIC), arg(NUMERIC), arg(NUMERIC)));
         assertNotNull(result3);
-        assertTrue(result3.isVarArgs());
+        assertTrue(result3.varArgs());
 
         QLFunctionDescriptor result1 = functions.function("sum", List.of(arg(NUMERIC)));
         assertNotNull(result1);
-        assertTrue(result1.isVarArgs());
+        assertTrue(result1.varArgs());
 
         QLFunctionDescriptor result0 = functions.function("sum", List.of());
         assertNotNull(result0);
-        assertTrue(result0.isVarArgs());
+        assertTrue(result0.varArgs());
     }
 
     @Test
@@ -163,12 +161,12 @@ class QLFunctionsTest {
 
         QLFunctionDescriptor result2 = functions.function("sum", List.of(arg(NUMERIC), arg(NUMERIC)));
         assertNotNull(result2);
-        assertFalse(result2.isVarArgs());
-        assertEquals(2, result2.args().length);
+        assertFalse(result2.varArgs());
+        assertEquals(2, result2.args().size());
 
         QLFunctionDescriptor result3 = functions.function("sum", List.of(arg(NUMERIC), arg(NUMERIC), arg(NUMERIC)));
         assertNotNull(result3);
-        assertTrue(result3.isVarArgs());
+        assertTrue(result3.varArgs());
     }
 
     @Test
@@ -180,7 +178,7 @@ class QLFunctionsTest {
         QLFunctionDescriptor result = functions.function("sum", List.of(arg(ANY), arg(ANY)));
 
         assertNotNull(result);
-        assertEquals(2, result.args().length);
+        assertEquals(2, result.args().size());
     }
 
     @Test
@@ -189,7 +187,7 @@ class QLFunctionsTest {
                 .function("sum", new Int2SumFunction())
                 .build();
 
-        List<Arg> argTypes = List.of(arg(NUMERIC), arg(OBJECT));
+        List<QLFunctionArg> argTypes = List.of(arg(NUMERIC), arg(OBJECT));
 
         assertThrows(
                 IllegalArgumentException.class,
@@ -206,7 +204,7 @@ class QLFunctionsTest {
 
         QLFunctionDescriptor result = functions.function("f", List.of(arg(STRING)));
 
-        assertArrayEquals(new Arg[]{arg(STRING)}, result.args());
+        assertEquals(List.of(arg(STRING)), result.args());
     }
 
     @Test
@@ -218,20 +216,20 @@ class QLFunctionsTest {
 
         QLFunctionDescriptor result = functions.function("f", List.of(arg(ANY)));
 
-        assertArrayEquals(new Arg[]{arg(OBJECT)}, result.args());
+        assertEquals(List.of(arg(OBJECT)), result.args());
     }
 
     @Test
     void function_EquallySpecific_FirstRegisteredWins() {
-        List<Arg> argTypes = List.of(arg(STRING), arg(STRING));
+        List<QLFunctionArg> argTypes = List.of(arg(STRING), arg(STRING));
 
         QLFunctions strFirst = QLFunctions.builder().noDefaultFunctions()
                 .function("f", new StrObjArgFunction())
                 .function("f", new ObjStrArgFunction())
                 .build();
 
-        assertArrayEquals(
-                new Arg[]{arg(STRING), arg(OBJECT)},
+        assertEquals(
+                List.of(arg(STRING), arg(OBJECT)),
                 strFirst.function("f", argTypes).args());
 
         QLFunctions objFirst = QLFunctions.builder().noDefaultFunctions()
@@ -239,8 +237,8 @@ class QLFunctionsTest {
                 .function("f", new StrObjArgFunction())
                 .build();
 
-        assertArrayEquals(
-                new Arg[]{arg(OBJECT), arg(STRING)},
+        assertEquals(
+                List.of(arg(OBJECT), arg(STRING)),
                 objFirst.function("f", argTypes).args());
     }
 
@@ -297,12 +295,12 @@ class QLFunctionsTest {
                 IllegalArgumentException.class,
                 () -> functions.function("f", List.of(arg(ANY), arg(BOOLEAN))));
 
-        assertArrayEquals(
-                new Arg[]{arg(NUMERIC), arg(BOOLEAN)},
+        assertEquals(
+                List.of(arg(NUMERIC), arg(BOOLEAN)),
                 functions.function("f", List.of(arg(NUMERIC), arg(BOOLEAN))).args());
 
-        assertArrayEquals(
-                new Arg[]{arg(DATE), arg(BOOLEAN)},
+        assertEquals(
+                List.of(arg(DATE), arg(BOOLEAN)),
                 functions.function("f", List.of(arg(DATE), arg(BOOLEAN))).args());
     }
 
@@ -315,8 +313,8 @@ class QLFunctionsTest {
                         .returning(STRING).arg(DATE).arg(OBJECT).arg(STRING).as(args -> args.get(0).castAsStr()))
                 .build();
 
-        assertArrayEquals(
-                new Arg[]{arg(DATE), arg(STRING), arg(OBJECT)},
+        assertEquals(
+                List.of(arg(DATE), arg(STRING), arg(OBJECT)),
                 functions.function("f", List.of(arg(ANY), arg(STRING), arg(STRING))).args());
     }
 
@@ -327,7 +325,7 @@ class QLFunctionsTest {
                         .returning(STRING).arg(OBJECT).as(args -> args.get(0).castAsStr()))
                 .build();
 
-        assertArrayEquals(new Arg[]{arg(OBJECT)}, functions.function("f", List.of(arg(ANY))).args());
+        assertEquals(List.of(arg(OBJECT)), functions.function("f", List.of(arg(ANY))).args());
     }
 
     @Test
@@ -341,12 +339,12 @@ class QLFunctionsTest {
                         .returning(OBJECT).arg(OBJECT).arg(OBJECT).as(args -> args.get(0).castAsStr()))
                 .build();
 
-        assertArrayEquals(
-                new Arg[]{arg(OBJECT), arg(OBJECT)},
+        assertEquals(
+                List.of(arg(OBJECT), arg(OBJECT)),
                 functions.function("f", List.of(arg(ANY), arg(STRING))).args());
 
-        assertArrayEquals(
-                new Arg[]{arg(STRING), arg(STRING)},
+        assertEquals(
+                List.of(arg(STRING), arg(STRING)),
                 functions.function("f", List.of(arg(STRING), arg(STRING))).args());
     }
 
@@ -361,8 +359,8 @@ class QLFunctionsTest {
 
         QLFunctionDescriptor descriptor = functions.function("f", List.of(arg(ANY)));
 
-        assertFalse(descriptor.isVarArgs());
-        assertArrayEquals(new Arg[]{arg(NUMERIC)}, descriptor.args());
+        assertFalse(descriptor.varArgs());
+        assertEquals(List.of(arg(NUMERIC)), descriptor.args());
     }
 
     @Test
@@ -403,7 +401,7 @@ class QLFunctionsTest {
         QLFunctionDescriptor result = functions.function("substr", List.of(arg(STRING), constant(NUMERIC)));
 
         assertNotNull(result);
-        assertArrayEquals(new Arg[]{arg(OBJECT), constant(NUMERIC)}, result.args());
+        assertEquals(List.of(arg(OBJECT), constant(NUMERIC)), result.args());
     }
 
     @Test
@@ -412,7 +410,7 @@ class QLFunctionsTest {
                 .function("substr", new StrConstIntFunction())
                 .build();
 
-        List<Arg> argTypes = List.of(arg(STRING), arg(NUMERIC));
+        List<QLFunctionArg> argTypes = List.of(arg(STRING), arg(NUMERIC));
 
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
@@ -451,12 +449,12 @@ class QLFunctionsTest {
                 .function("substr", new StrIntFunction())
                 .build();
 
-        assertArrayEquals(
-                new Arg[]{arg(OBJECT), constant(NUMERIC)},
+        assertEquals(
+                List.of(arg(OBJECT), constant(NUMERIC)),
                 functions.function("substr", List.of(arg(STRING), constant(NUMERIC))).args());
 
-        assertArrayEquals(
-                new Arg[]{arg(OBJECT), arg(NUMERIC)},
+        assertEquals(
+                List.of(arg(OBJECT), arg(NUMERIC)),
                 functions.function("substr", List.of(arg(STRING), arg(NUMERIC))).args());
     }
 
@@ -583,7 +581,7 @@ class QLFunctionsTest {
     @Test
     void functionByName_NotFound() {
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions().function("sum", new Int2SumFunction()).build();
-        List<Arg> argTypes = List.of(arg(NUMERIC), arg(NUMERIC));
+        List<QLFunctionArg> argTypes = List.of(arg(NUMERIC), arg(NUMERIC));
 
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
@@ -601,7 +599,7 @@ class QLFunctionsTest {
                         .as(args -> ((DateExp) args.get(0)).year()))
                 .build();
 
-        QLFunctionDescriptor descriptor = functions.function("year", List.of(Arg.of(Exp.$date("a").first())));
+        QLFunctionDescriptor descriptor = functions.function("year", List.of(QLFunctionArg.of(Exp.$date("a").first())));
 
         assertNotNull(descriptor);
         assertEquals(NUMERIC, descriptor.returnType());
@@ -622,7 +620,7 @@ class QLFunctionsTest {
         QLFunctionDescriptor descriptor = functions.function("between",
                 List.of(arg(NUMERIC), arg(NUMERIC), arg(NUMERIC), constant(STRING)));
 
-        assertEquals(4, descriptor.args().length);
+        assertEquals(4, descriptor.args().size());
         assertEquals(BOOLEAN, descriptor.returnType());
 
         assertThrows(IllegalArgumentException.class, () -> functions.function("between",
@@ -641,9 +639,9 @@ class QLFunctionsTest {
                         .as(args -> Exp.$strVal("")))
                 .build();
 
-        assertFalse(functions.function("concat", List.of()).isVarArgs());
-        assertTrue(functions.function("concat", List.of(arg(STRING))).isVarArgs());
-        assertTrue(functions.function("concat", List.of(arg(STRING), arg(NUMERIC))).isVarArgs());
+        assertFalse(functions.function("concat", List.of()).varArgs());
+        assertTrue(functions.function("concat", List.of(arg(STRING))).varArgs());
+        assertTrue(functions.function("concat", List.of(arg(STRING), arg(NUMERIC))).varArgs());
     }
 
     @Test
@@ -676,8 +674,8 @@ class QLFunctionsTest {
                         .as(args -> args.get(0).castAsStr()))
                 .build();
 
-        assertArrayEquals(
-                new Arg[]{arg(OBJECT), constant(NUMERIC)},
+        assertEquals(
+                List.of(arg(OBJECT), constant(NUMERIC)),
                 functions.function("substr", List.of(arg(STRING), constant(NUMERIC))).args());
 
         assertThrows(IllegalArgumentException.class,

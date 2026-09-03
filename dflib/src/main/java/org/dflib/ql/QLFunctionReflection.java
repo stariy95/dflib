@@ -6,8 +6,6 @@ import org.dflib.Udf1;
 import org.dflib.Udf2;
 import org.dflib.Udf3;
 import org.dflib.UdfN;
-import org.dflib.ql.QLFunctionDescriptor.Arg;
-import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -66,10 +64,10 @@ class QLFunctionReflection {
             boolean varArgs,
             Function<List<Exp<?>>, Exp<?>> producer) {
 
-        List<Arg> args = new ArrayList<>();
+        List<QLFunctionArg> args = new ArrayList<>();
         if (!varArgs) {
             for (Type p : method.getGenericParameterTypes()) {
-                args.add(new Arg(TypeClassifier.classify(p), false));
+                args.add(new QLFunctionArg(TypeClassifier.classify(p), false));
             }
         }
 
@@ -113,10 +111,10 @@ class QLFunctionReflection {
      * registration order is the resolver's tie-break.
      */
     private static final Comparator<QLFunctionDescriptor> OVERLOAD_ORDER = Comparator
-            .<QLFunctionDescriptor>comparingInt(d -> d.args().length)
+            .<QLFunctionDescriptor>comparingInt(d -> d.args().size())
             .thenComparing(QLFunctionReflection::argTypeOrdinals, Arrays::compare)
             .thenComparing(QLFunctionReflection::argConstancy, Arrays::compare)
-            .thenComparing(QLFunctionDescriptor::isVarArgs)
+            .thenComparing(QLFunctionDescriptor::varArgs)
             .thenComparingInt(d -> d.returnType().ordinal());
 
     static List<QLFunctionDescriptor> qlFunction(String name, QLFunction function) {
@@ -156,7 +154,7 @@ class QLFunctionReflection {
         boolean varArgs = method.isVarArgs();
         int declared = varArgs ? parameters.length - 1 : parameters.length;
 
-        List<Arg> args = new ArrayList<>(declared);
+        List<QLFunctionArg> args = new ArrayList<>(declared);
         for (int i = 0; i < declared; i++) {
             args.add(callArg(method, parameters[i]));
         }
@@ -198,12 +196,12 @@ class QLFunctionReflection {
         return classifier;
     }
 
-    private static Arg callArg(Method method, Parameter parameter) {
+    private static QLFunctionArg callArg(Method method, Parameter parameter) {
 
         Class<?> raw = parameter.getType();
 
         if (Exp.class.isAssignableFrom(raw)) {
-            return new Arg(TypeClassifier.classify(parameter.getParameterizedType()), false);
+            return new QLFunctionArg(TypeClassifier.classify(parameter.getParameterizedType()), false);
         }
 
         if (!CallProducer.CONSTANT_TYPES.contains(raw)) {
@@ -212,14 +210,14 @@ class QLFunctionReflection {
                     .map(Class::getSimpleName).distinct().toList() + ", got " + raw.getName() + ": " + method);
         }
 
-        return new Arg(TypeClassifier.classify(raw), true);
+        return new QLFunctionArg(TypeClassifier.classify(raw), true);
     }
 
     private static int[] argTypeOrdinals(QLFunctionDescriptor d) {
-        return Arrays.stream(d.args()).mapToInt(a -> a.type().ordinal()).toArray();
+        return d.args().stream().mapToInt(a -> a.type().ordinal()).toArray();
     }
 
     private static int[] argConstancy(QLFunctionDescriptor d) {
-        return Arrays.stream(d.args()).mapToInt(a -> a.constant() ? 1 : 0).toArray();
+        return d.args().stream().mapToInt(a -> a.constant() ? 1 : 0).toArray();
     }
 }

@@ -9,7 +9,7 @@ import org.dflib.OffsetDateTimeExp;
 import org.dflib.StrExp;
 import org.dflib.TimeExp;
 import org.dflib.ql.QLFunction;
-import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
+import org.dflib.ql.TypeClassifier;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;

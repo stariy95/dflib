@@ -9,7 +9,6 @@ import org.dflib.Udf2;
 import org.dflib.UdfN;
 import org.dflib.exp.flow.IfExp;
 import org.dflib.exp.flow.IfNullExp;
-import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -41,9 +40,9 @@ class QLFunctionDescriptorTest {
     void udfN() {
         QLFunctionDescriptor descriptor = QLFunctionReflection.udfN("vadd", new VarArgsFn());
         assertNotNull(descriptor);
-        assertTrue(descriptor.isVarArgs());
-        assertEquals(0, descriptor.args().length);
-        assertEquals(QLFunctionDescriptor.TypeClassifier.NUMERIC, descriptor.returnType());
+        assertTrue(descriptor.varArgs());
+        assertEquals(0, descriptor.args().size());
+        assertEquals(TypeClassifier.NUMERIC, descriptor.returnType());
 
         Exp<?> fnCall = descriptor.expProducer().apply(List.of($int("a"), $int("b")));
         assertNotNull(fnCall);
@@ -52,25 +51,25 @@ class QLFunctionDescriptorTest {
     @Test
     void returnType_NonParameterizedExpInterface() {
         assertEquals(
-                QLFunctionDescriptor.TypeClassifier.NUMERIC,
+                TypeClassifier.NUMERIC,
                 QLFunctionReflection.udf1("dec", new DecimalFn()).returnType());
 
         assertEquals(
-                QLFunctionDescriptor.TypeClassifier.BOOLEAN,
+                TypeClassifier.BOOLEAN,
                 QLFunctionReflection.udf1("cond", new ConditionFn()).returnType());
     }
 
     @Test
     void returnType_NestedGenerics() {
         assertEquals(
-                QLFunctionDescriptor.TypeClassifier.OBJECT,
+                TypeClassifier.OBJECT,
                 QLFunctionReflection.udf1("list", new ListFn()).returnType());
     }
 
     @Test
     void returnType_ArrayValueType() {
         assertEquals(
-                QLFunctionDescriptor.TypeClassifier.OBJECT,
+                TypeClassifier.OBJECT,
                 QLFunctionReflection.udf1("split", new ArrayFn()).returnType());
     }
 
@@ -80,11 +79,11 @@ class QLFunctionDescriptorTest {
         // the bridge "call" emitted for a covariant return carries no generic types
         QLFunctionDescriptor descriptor = QLFunctionReflection.udf2("scale", new CovariantFn());
 
-        assertEquals(QLFunctionDescriptor.TypeClassifier.NUMERIC, descriptor.returnType());
-        assertArrayEquals(
-                new QLFunctionDescriptor.Arg[]{
-                        new QLFunctionDescriptor.Arg(QLFunctionDescriptor.TypeClassifier.NUMERIC, false),
-                        new QLFunctionDescriptor.Arg(QLFunctionDescriptor.TypeClassifier.NUMERIC, false)},
+        assertEquals(TypeClassifier.NUMERIC, descriptor.returnType());
+        assertEquals(
+                List.of(
+                        new QLFunctionArg(TypeClassifier.NUMERIC, false),
+                        new QLFunctionArg(TypeClassifier.NUMERIC, false)),
                 descriptor.args());
     }
 

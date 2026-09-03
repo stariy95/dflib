@@ -1,8 +1,6 @@
 package org.dflib.ql;
 
 import org.dflib.Exp;
-import org.dflib.ql.QLFunctionDescriptor.Arg;
-import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,7 +13,7 @@ class DescriptorBuilder {
 
     private final String name;
     private TypeClassifier returnType;
-    private final List<Arg> args = new ArrayList<>();
+    private final List<QLFunctionArg> args = new ArrayList<>();
     private boolean varArgs;
 
     private DescriptorBuilder(String name) {
@@ -32,14 +30,14 @@ class DescriptorBuilder {
     }
 
     DescriptorBuilder arg(TypeClassifier type) {
-        return arg(new Arg(type, false));
+        return arg(new QLFunctionArg(type, false));
     }
 
     DescriptorBuilder constArg(TypeClassifier type) {
-        return arg(new Arg(type, true));
+        return arg(new QLFunctionArg(type, true));
     }
 
-    DescriptorBuilder arg(Arg arg) {
+    DescriptorBuilder arg(QLFunctionArg arg) {
         this.args.add(arg);
         return this;
     }
