@@ -58,6 +58,18 @@ class ExpParserUtils {
     private static final int DOUBLE_MIN_EXPONENT = -307;
     private static final int DOUBLE_MAX_EXPONENT = 307;
 
+    /**
+     * The call is followed by an arithmetic or logical operator, or preceded by "not" or a unary minus.
+     */
+    public static final int CONTINUATION_TYPED = 1;
+
+    /**
+     * The call is directly followed by a comparison, "between" or "in".
+     */
+    public static final int CONTINUATION_COMPARISON = 2;
+
+    public static final int CONTINUATION_NONE = 0;
+
     @SuppressWarnings({"rawtypes", "unchecked"})
     public static <T> Exp<T> val(T value) {
         Class type = value != null ? value.getClass() : Object.class;
@@ -522,18 +534,6 @@ class ExpParserUtils {
     public static boolean isPolymorphicFn(String fnName) {
         return functions().isPolymorphicFn(fnName);
     }
-
-    /**
-     * The call is followed by an arithmetic or logical operator, or preceded by "not" or a unary minus.
-     */
-    public static final int CONTINUATION_TYPED = 1;
-
-    /**
-     * The call is directly followed by a comparison, "between" or "in".
-     */
-    public static final int CONTINUATION_COMPARISON = 2;
-
-    public static final int CONTINUATION_NONE = 0;
 
     /**
      * Classifies the syntax around the call whose name is {@code LT(1)} of the stream as one of the

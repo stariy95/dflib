@@ -307,13 +307,14 @@ public class QLFunctions {
         public QLFunctions build() {
 
             // built-ins go first, so that they win ties with custom functions
-            Builder all = new Builder().noDefaultFunctions();
+            Builder builder = new Builder().noDefaultFunctions();
             if (defaultFunctions) {
-                DefaultQLFunctions.register(all);
+                DefaultQLFunctions.register(builder);
             }
 
-            functions.values().forEach(descriptors -> descriptors.forEach(all::function));
-            return new QLFunctions(all.functions);
+            functions.values()
+                    .forEach(descriptors -> descriptors.forEach(builder::function));
+            return new QLFunctions(builder.functions);
         }
     }
 }
