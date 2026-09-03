@@ -125,15 +125,11 @@ public class ShiftFunction implements QLFunction {
         TypeClassifier receiverType = TypeClassifier.classify(e);
         TypeClassifier fillerType = TypeClassifier.classify(filler);
 
-        if (isTyped(receiverType) && isTyped(fillerType) && receiverType != fillerType) {
+        if (receiverType.isTyped() && fillerType.isTyped() && receiverType != fillerType) {
             throw new IllegalArgumentException("shift() filler of type " + fillerType
                     + " is not compatible with a " + receiverType + " expression: " + e.toQL());
         }
 
         return e.shift(offset, ConstantArgs.constantValue(filler));
-    }
-
-    private static boolean isTyped(TypeClassifier type) {
-        return type != TypeClassifier.OBJECT && type != TypeClassifier.ANY;
     }
 }

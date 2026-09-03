@@ -2,6 +2,7 @@ package org.dflib.ql;
 
 import org.dflib.Environment;
 import org.dflib.Exp;
+import org.dflib.ql.QLFunctionDescriptor.Arg;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,9 +16,8 @@ import static org.dflib.Exp.$int;
 import static org.dflib.Exp.$intVal;
 import static org.dflib.Exp.$str;
 import static org.dflib.Exp.$strVal;
+import static org.dflib.ql.IdentityFunctions.identity;
 import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.NUMERIC;
-import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.OBJECT;
-import static org.dflib.ql.QLFunctionSignature.signature;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
@@ -27,9 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * {@link PolymorphicBuiltinTest}; this test exercises the rule in isolation, against a registry with one function
  * of a known shape, so that a failure points at the rule rather than at a built-in's signature.
  * <p>
- * That stand-in is declared with {@code returningArgType}. No built-in is written that way any more - each declares
- * one fixed-return overload per receiver type instead - but the declaration is still supported for explicit
- * registrations, and it is the shortest way to get a call whose type is not known from its name.
+ * That stand-in is registered by {@link IdentityFunctions}: one fixed-return overload per receiver type, the way
+ * every built-in is written.
  */
 public class FnRelationTest {
 
@@ -40,17 +39,10 @@ public class FnRelationTest {
         this.originalFunctions = Environment.commonEnv().getQLFunctions();
 
         // "f" returns its first argument unchanged, which makes the type of a call to it depend on the call site
-        Environment.setQLFunctions(QLFunctions.builder()
-                .function("f", signature()
-                        .returningArgType(0)
-                        .arg(OBJECT)
-                        .as(args -> args.get(0)))
-                .function("f", signature()
-                        .returningArgType(0)
-                        .arg(OBJECT)
-                        .constArg(NUMERIC)
-                        .as(args -> args.get(0)))
-                .build());
+        QLFunctions.Builder builder = QLFunctions.builder();
+        identity(builder, "f");
+        identity(builder, "f", new Arg(NUMERIC, true));
+        Environment.setQLFunctions(builder.build());
     }
 
     @AfterEach

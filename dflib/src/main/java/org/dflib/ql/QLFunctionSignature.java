@@ -1,8 +1,6 @@
 package org.dflib.ql;
 
-import org.dflib.Condition;
 import org.dflib.Exp;
-import org.dflib.StrExp;
 import org.dflib.Udf0;
 import org.dflib.Udf1;
 import org.dflib.Udf2;
@@ -16,37 +14,26 @@ import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.function.Function;
 
 /**
- * A fluent, non-reflective description of a QL function: its return type, its declared parameters and the factory
- * that turns a list of argument expressions into an expression.
+ * A description of a QL function that a {@link QLFunctionDescriptor} is built from: its return type, its declared
+ * parameters and the factory that turns a list of argument expressions into an expression.
  * <p>
- * This is the single way a {@link QLFunctionDescriptor} is assembled. Both reflective registration paths are
- * implemented on top of it - {@link #reflect(Method, boolean)} for a {@code Udf0..UdfN} lambda, and
- * {@link #reflectCall(Method)} for one {@code call} overload of a {@link QLFunction} - so there is only one
- * descriptor construction code path.
- * <p>
- * Built-in functions no longer go through it directly: they are {@link QLFunction} classes in
- * {@code org.dflib.ql.fn}, whose overloads are reflected. What remains of the explicit path is the fluent form used
- * by the registry's own tests and by hand-built registrations, including {@link #returningArgType(int)} - a return
- * type that follows an argument's type, which reflection can not express and which no built-in needs.
+ * Every registration path ends here. A {@code Udf0..UdfN} lambda is reflected by {@link #udf0(Udf0)} and friends,
+ * one {@code call} overload of a {@link QLFunction} class by {@link #reflectCall(Method)}, and the fluent form
+ * ({@link #signature()}, {@link #returning(TypeClassifier)}, {@link #arg(TypeClassifier)}, ...) is what the
+ * registry's own tests use to declare a function of an arbitrary shape.
  * <p>
  * Package-private on purpose: it is only promoted to public API if and when users need to register functions whose
  * shape reflection can not express.
  */
 class QLFunctionSignature {
 
-    /**
-     * A {@link #returnArgIndex} value meaning "the return type does not depend on the arguments".
-     */
-    static final int FIXED_RETURN = -1;
-
     private TypeClassifier returnType;
-    private int returnArgIndex = FIXED_RETURN;
     private final List<Arg> args = new ArrayList<>();
     private boolean varArgs;
     private Function<List<Exp<?>>, Exp<?>> producer;
@@ -61,6 +48,41 @@ class QLFunctionSignature {
         return new QLFunctionSignature();
     }
 
+    // --- Udf0..UdfN lambdas ---
+
+    static QLFunctionSignature udf0(Udf0<?> function) {
+        return reflect(
+                callMethod(function), false,
+                exps -> function.call());
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    static QLFunctionSignature udf1(Udf1<?, ?> function) {
+        return reflect(
+                callMethod(function, Exp.class), false,
+                exps -> function.call((Exp) exps.getFirst()));
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    static QLFunctionSignature udf2(Udf2<?, ?, ?> function) {
+        return reflect(
+                callMethod(function, Exp.class, Exp.class), false,
+                exps -> function.call((Exp) exps.getFirst(), (Exp) exps.get(1)));
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    static QLFunctionSignature udf3(Udf3<?, ?, ?, ?> function) {
+        return reflect(
+                callMethod(function, Exp.class, Exp.class, Exp.class), false,
+                exps -> function.call((Exp) exps.getFirst(), (Exp) exps.get(1), (Exp) exps.get(2)));
+    }
+
+    static QLFunctionSignature udfN(UdfN<?> function) {
+        return reflect(
+                callMethod(function, Exp[].class), true,
+                exps -> function.call(exps.toArray(new Exp[0])));
+    }
+
     /**
      * Builds a signature by reflecting on a UDF "call" method. Parameter and return types are recovered from the
      * method generics; {@link Constant}-annotated parameters become constant args.
@@ -68,10 +90,11 @@ class QLFunctionSignature {
      * @param varArgs whether the method's single {@code Exp[]} parameter is a vararg list rather than a declared
      *                parameter
      */
-    static QLFunctionSignature reflect(Method method, boolean varArgs) {
+    static QLFunctionSignature reflect(Method method, boolean varArgs, Function<List<Exp<?>>, Exp<?>> producer) {
 
         QLFunctionSignature signature = signature()
-                .returning(TypeClassifier.classify(method.getGenericReturnType()));
+                .returning(TypeClassifier.classify(method.getGenericReturnType()))
+                .as(producer);
 
         Parameter[] parameters = method.getParameters();
 
@@ -95,18 +118,34 @@ class QLFunctionSignature {
     }
 
     /**
-     * The return classifiers a typed expression rule of the grammar can ask about. A bare {@code Exp<V>} return
-     * whose value type lands on one of these is a lie: it claims the type without producing the interface that
-     * carries it.
+     * Returns the {@code call} methods declared in a class, skipping the bridge and synthetic ones: a covariant
+     * return makes javac emit a bridge {@code call} with the same erased parameters that carries neither the
+     * generic types nor the parameter annotations.
      */
-    private static final EnumSet<TypeClassifier> TYPED_CLASSIFIERS = EnumSet.of(
-            TypeClassifier.NUMERIC,
-            TypeClassifier.STRING,
-            TypeClassifier.BOOLEAN,
-            TypeClassifier.DATE,
-            TypeClassifier.TIME,
-            TypeClassifier.DATETIME,
-            TypeClassifier.OFFSETDATETIME);
+    private static List<Method> callMethods(Class<?> type) {
+        List<Method> methods = new ArrayList<>();
+        for (Method m : type.getDeclaredMethods()) {
+            if ("call".equals(m.getName()) && !m.isBridge() && !m.isSynthetic()) {
+                methods.add(m);
+            }
+        }
+        return methods;
+    }
+
+    private static Method callMethod(Object function, Class<?>... parameterTypes) {
+        Class<?> type = function.getClass();
+
+        for (Method m : callMethods(type)) {
+            if (Arrays.equals(m.getParameterTypes(), parameterTypes)) {
+                return m;
+            }
+        }
+
+        throw new RuntimeException(new NoSuchMethodException(
+                type.getName() + ".call(" + Arrays.toString(parameterTypes) + ")"));
+    }
+
+    // --- QLFunction classes ---
 
     /**
      * Orders the overloads of a {@link QLFunction} so that registration - which is the resolver's tie-break among
@@ -115,8 +154,8 @@ class QLFunctionSignature {
      */
     private static final Comparator<QLFunctionSignature> OVERLOAD_ORDER = Comparator
             .<QLFunctionSignature>comparingInt(s -> s.args.size())
-            .thenComparing(QLFunctionSignature::argTypeOrdinals)
-            .thenComparing(QLFunctionSignature::argConstancy)
+            .thenComparing(QLFunctionSignature::argTypeOrdinals, Arrays::compare)
+            .thenComparing(QLFunctionSignature::argConstancy, Arrays::compare)
             .thenComparing(s -> s.varArgs)
             .thenComparingInt(s -> s.returnType.ordinal());
 
@@ -140,12 +179,8 @@ class QLFunctionSignature {
         }
 
         List<QLFunctionSignature> signatures = new ArrayList<>();
-        for (Method m : type.getDeclaredMethods()) {
-            if ("call".equals(m.getName())
-                    && Modifier.isPublic(m.getModifiers())
-                    && !m.isBridge()
-                    && !m.isSynthetic()) {
-
+        for (Method m : callMethods(type)) {
+            if (Modifier.isPublic(m.getModifiers())) {
                 signatures.add(reflectCall(m));
             }
         }
@@ -164,10 +199,10 @@ class QLFunctionSignature {
     }
 
     /**
-     * Builds a signature by reflecting on one {@code call} overload of a {@link QLFunction}. Unlike
-     * {@link #reflect(Method, boolean)}, which describes a single {@code Udf} lambda, this path holds the overload to
-     * the stricter contract documented on {@link QLFunction}: an exact expression return type, and parameters that
-     * are either expressions or implicit constants of an allowed Java type.
+     * Builds a signature by reflecting on one {@code call} overload of a {@link QLFunction}. Unlike the
+     * {@code Udf} path, which describes a single lambda, this one holds the overload to the stricter contract
+     * documented on {@link QLFunction}: an exact expression return type, and parameters that are either expressions
+     * or implicit constants of an allowed Java type.
      */
     static QLFunctionSignature reflectCall(Method method) {
 
@@ -189,10 +224,6 @@ class QLFunctionSignature {
             if (tail.isAnnotationPresent(Constant.class)) {
                 throw new IllegalArgumentException(
                         "A vararg parameter declares no argument, so it can not be @Constant: " + method);
-            }
-            if (tail.isAnnotationPresent(Cast.class)) {
-                throw new IllegalArgumentException(
-                        "A vararg parameter declares no argument, so it can not be @Cast: " + method);
             }
 
             Class<?> component = tail.getType().getComponentType();
@@ -221,7 +252,7 @@ class QLFunctionSignature {
         // "Exp<String>" classifies as STRING while producing an expression that is not a StrExp: the parser would
         // record the call as a string one and the cast at the call site would fail. "Exp<?>" and "<T> Exp<T>"
         // classify as OBJECT and are fine
-        if (raw == Exp.class && TYPED_CLASSIFIERS.contains(classifier)) {
+        if (raw == Exp.class && classifier.isTyped()) {
             throw new IllegalArgumentException("A QLFunction 'call' method returning " + generic
                     + " would claim to produce " + classifier + " while producing a bare Exp. Declare the Exp"
                     + " subinterface actually produced (e.g. StrExp), or Exp<?>: " + method);
@@ -233,23 +264,9 @@ class QLFunctionSignature {
     private static Arg callArg(Method method, Parameter parameter) {
 
         Class<?> raw = parameter.getType();
-        boolean cast = parameter.isAnnotationPresent(Cast.class);
 
         if (Exp.class.isAssignableFrom(raw)) {
-            if (cast && !CallProducer.CASTS.containsKey(raw)) {
-                throw new IllegalArgumentException("@Cast is only supported for " + StrExp.class.getSimpleName()
-                        + " and " + Condition.class.getSimpleName() + " parameters, as no total cast to "
-                        + raw.getSimpleName() + " exists: " + method);
-            }
-
-            return new Arg(
-                    TypeClassifier.classify(parameter.getParameterizedType()),
-                    parameter.isAnnotationPresent(Constant.class));
-        }
-
-        if (cast) {
-            throw new IllegalArgumentException(
-                    "@Cast is only supported for expression parameters: " + method);
+            return Arg.of(parameter);
         }
 
         // a type variable bounded by Number erases to Number and is allowed through that entry
@@ -262,44 +279,24 @@ class QLFunctionSignature {
         return new Arg(TypeClassifier.classify(raw), true);
     }
 
-    private String argTypeOrdinals() {
-        StringBuilder out = new StringBuilder();
-        for (Arg a : args) {
-            out.append((char) ('0' + a.type().ordinal()));
-        }
-        return out.toString();
+    private int[] argTypeOrdinals() {
+        return args.stream().mapToInt(a -> a.type().ordinal()).toArray();
     }
 
-    private String argConstancy() {
-        StringBuilder out = new StringBuilder();
-        for (Arg a : args) {
-            out.append(a.constant() ? '1' : '0');
-        }
-        return out.toString();
+    private int[] argConstancy() {
+        return args.stream().mapToInt(a -> a.constant() ? 1 : 0).toArray();
     }
+
+    // --- the fluent form ---
 
     private QLFunctionSignature() {
     }
 
     /**
-     * Declares a return type that does not depend on the arguments.
+     * Declares the type of the expression the function produces.
      */
     QLFunctionSignature returning(TypeClassifier type) {
         this.returnType = type;
-        this.returnArgIndex = FIXED_RETURN;
-        return this;
-    }
-
-    /**
-     * Declares a polymorphic function whose return type is the type of the argument at the given position, e.g.
-     * {@code shift(e, n)} or {@code min(e)}.
-     */
-    QLFunctionSignature returningArgType(int argIndex) {
-        if (argIndex < 0) {
-            throw new IllegalArgumentException("Negative return arg index: " + argIndex);
-        }
-        this.returnType = null;
-        this.returnArgIndex = argIndex;
         return this;
     }
 
@@ -345,10 +342,6 @@ class QLFunctionSignature {
         return returnType;
     }
 
-    int returnArgIndex() {
-        return returnArgIndex;
-    }
-
     Arg[] args() {
         return args.toArray(new Arg[0]);
     }
@@ -366,13 +359,8 @@ class QLFunctionSignature {
             throw new IllegalArgumentException("No expression producer defined for function: " + name);
         }
 
-        if (returnArgIndex == FIXED_RETURN) {
-            if (returnType == null) {
-                throw new IllegalArgumentException("No return type defined for function: " + name);
-            }
-        } else if (returnArgIndex >= args.size()) {
-            throw new IllegalArgumentException("Function " + name + " returns the type of argument "
-                    + returnArgIndex + ", but declares only " + args.size() + " argument(s)");
+        if (returnType == null) {
+            throw new IllegalArgumentException("No return type defined for function: " + name);
         }
     }
 }

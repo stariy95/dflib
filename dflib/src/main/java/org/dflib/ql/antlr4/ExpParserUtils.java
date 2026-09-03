@@ -638,7 +638,7 @@ public class ExpParserUtils {
      *
      * @param input a token stream positioned at the name of a call
      */
-    public static Token tokenAfterCall(TokenStream input) {
+    static Token tokenAfterCall(TokenStream input) {
         int close = callCloseOffset(input);
         return input.LT(close + skippedGroupClosings(input, close) + 1);
     }
@@ -858,27 +858,42 @@ public class ExpParserUtils {
         };
     }
 
+    /**
+     * A temporal "between" over two string literals goes to the {@code between(String, String)} overload of the
+     * receiver rather than through {@link #dateOperand(Exp)} and friends, as the typed relation rules do: the two
+     * build different expressions.
+     */
     @SuppressWarnings({"rawtypes", "unchecked"})
     public static Condition between(Exp<?> a, Exp<?> b, Exp<?> c, boolean negate) {
+        String from = temporalStr(b);
+        String to = temporalStr(c);
+
         return switch (a) {
             case NumExp n -> negate
                     ? n.notBetween(numOperand(b), numOperand(c))
                     : n.between(numOperand(b), numOperand(c));
-            case TimeExp t -> temporalStr(b) != null
-                    ? (negate ? t.notBetween(temporalStr(b), temporalStr(c)) : t.between(temporalStr(b), temporalStr(c)))
-                    : (negate ? t.notBetween(asTimeOperand(b), asTimeOperand(c)) : t.between(asTimeOperand(b), asTimeOperand(c)));
-            case DateExp d -> temporalStr(b) != null
-                    ? (negate ? d.notBetween(temporalStr(b), temporalStr(c)) : d.between(temporalStr(b), temporalStr(c)))
-                    : (negate ? d.notBetween(asDateOperand(b), asDateOperand(c)) : d.between(asDateOperand(b), asDateOperand(c)));
-            case DateTimeExp dt -> temporalStr(b) != null
-                    ? (negate ? dt.notBetween(temporalStr(b), temporalStr(c)) : dt.between(temporalStr(b), temporalStr(c)))
-                    : (negate ? dt.notBetween(asDateTimeOperand(b), asDateTimeOperand(c)) : dt.between(asDateTimeOperand(b), asDateTimeOperand(c)));
-            case OffsetDateTimeExp odt -> temporalStr(b) != null
-                    ? (negate ? odt.notBetween(temporalStr(b), temporalStr(c)) : odt.between(temporalStr(b), temporalStr(c)))
-                    : (negate ? odt.notBetween(asOffsetOperand(b), asOffsetOperand(c)) : odt.between(asOffsetOperand(b), asOffsetOperand(c)));
+            case TimeExp t -> from != null
+                    ? (negate ? t.notBetween(from, to) : t.between(from, to))
+                    : (negate ? t.notBetween(timeOperand(b), timeOperand(c)) : t.between(timeOperand(b), timeOperand(c)));
+            case DateExp d -> from != null
+                    ? (negate ? d.notBetween(from, to) : d.between(from, to))
+                    : (negate ? d.notBetween(dateOperand(b), dateOperand(c)) : d.between(dateOperand(b), dateOperand(c)));
+            case DateTimeExp dt -> from != null
+                    ? (negate ? dt.notBetween(from, to) : dt.between(from, to))
+                    : (negate ? dt.notBetween(dateTimeOperand(b), dateTimeOperand(c)) : dt.between(dateTimeOperand(b), dateTimeOperand(c)));
+            case OffsetDateTimeExp odt -> from != null
+                    ? (negate ? odt.notBetween(from, to) : odt.between(from, to))
+                    : (negate ? odt.notBetween(offsetDateTimeOperand(b), offsetDateTimeOperand(c)) : odt.between(offsetDateTimeOperand(b), offsetDateTimeOperand(c)));
             case null, default -> throw new QLParserException(
                     "BETWEEN is not supported for a " + expTypeLabel(a) + " expression");
         };
+    }
+
+    /**
+     * Returns the value of a string literal, or null if the expression is anything else.
+     */
+    private static String temporalStr(Exp<?> exp) {
+        return exp instanceof StrScalarExp scalar ? scalar.reduce((Series<?>) null) : null;
     }
 
     public static Condition in(Exp<?> a, Object[] values, boolean negate) {
@@ -920,10 +935,7 @@ public class ExpParserUtils {
     }
 
     private static Condition timeRel(TimeExp a, Token op, Exp<?> b) {
-        TimeExp rhs = temporalStr(b) != null
-                ? Exp.$timeVal(LocalTime.parse(temporalStr(b)))
-                : asTimeOperand(b);
-
+        TimeExp rhs = timeOperand(b);
         return switch (op.getType()) {
             case ExpParser.GT -> a.gt(rhs);
             case ExpParser.GE -> a.ge(rhs);
@@ -936,10 +948,7 @@ public class ExpParserUtils {
     }
 
     private static Condition dateRel(DateExp a, Token op, Exp<?> b) {
-        DateExp rhs = temporalStr(b) != null
-                ? Exp.$dateVal(LocalDate.parse(temporalStr(b)))
-                : asDateOperand(b);
-
+        DateExp rhs = dateOperand(b);
         return switch (op.getType()) {
             case ExpParser.GT -> a.gt(rhs);
             case ExpParser.GE -> a.ge(rhs);
@@ -952,10 +961,7 @@ public class ExpParserUtils {
     }
 
     private static Condition dateTimeRel(DateTimeExp a, Token op, Exp<?> b) {
-        DateTimeExp rhs = temporalStr(b) != null
-                ? Exp.$dateTimeVal(LocalDateTime.parse(temporalStr(b)))
-                : asDateTimeOperand(b);
-
+        DateTimeExp rhs = dateTimeOperand(b);
         return switch (op.getType()) {
             case ExpParser.GT -> a.gt(rhs);
             case ExpParser.GE -> a.ge(rhs);
@@ -968,10 +974,7 @@ public class ExpParserUtils {
     }
 
     private static Condition offsetDateTimeRel(OffsetDateTimeExp a, Token op, Exp<?> b) {
-        OffsetDateTimeExp rhs = temporalStr(b) != null
-                ? Exp.$offsetDateTimeVal(OffsetDateTime.parse(temporalStr(b)))
-                : asOffsetOperand(b);
-
+        OffsetDateTimeExp rhs = offsetDateTimeOperand(b);
         return switch (op.getType()) {
             case ExpParser.GT -> a.gt(rhs);
             case ExpParser.GE -> a.ge(rhs);
@@ -983,15 +986,6 @@ public class ExpParserUtils {
         };
     }
 
-    /**
-     * Returns the value of a string literal on the right-hand side of a temporal relation, or null if the expression
-     * is anything else. The typed temporal relation rules accept an ISO-8601 string literal in place of a temporal
-     * expression, and so must the polymorphic one.
-     */
-    private static String temporalStr(Exp<?> exp) {
-        return exp instanceof StrScalarExp scalar ? scalar.reduce((Series<?>) null) : null;
-    }
-
     private static NumExp<?> numOperand(Exp<?> exp) {
         if (exp instanceof NumExp) {
             return (NumExp<?>) exp;
@@ -999,32 +993,40 @@ public class ExpParserUtils {
         throw operandMismatch(exp, "numeric");
     }
 
-    private static TimeExp asTimeOperand(Exp<?> exp) {
-        if (exp instanceof TimeExp) {
-            return (TimeExp) exp;
-        }
-        throw operandMismatch(exp, "time");
+    // The typed temporal relation rules accept an ISO-8601 string literal in place of a temporal expression, and so
+    // must the polymorphic one: each temporal operand is either an expression of the type or such a literal, which
+    // becomes the same typed scalar the "gt(String)" and friends of the receiver would build
+
+    private static TimeExp timeOperand(Exp<?> exp) {
+        return switch (exp) {
+            case TimeExp t -> t;
+            case StrScalarExp s -> Exp.$timeVal(LocalTime.parse(temporalStr(s)));
+            case null, default -> throw operandMismatch(exp, "time");
+        };
     }
 
-    private static DateExp asDateOperand(Exp<?> exp) {
-        if (exp instanceof DateExp) {
-            return (DateExp) exp;
-        }
-        throw operandMismatch(exp, "date");
+    private static DateExp dateOperand(Exp<?> exp) {
+        return switch (exp) {
+            case DateExp d -> d;
+            case StrScalarExp s -> Exp.$dateVal(LocalDate.parse(temporalStr(s)));
+            case null, default -> throw operandMismatch(exp, "date");
+        };
     }
 
-    private static DateTimeExp asDateTimeOperand(Exp<?> exp) {
-        if (exp instanceof DateTimeExp) {
-            return (DateTimeExp) exp;
-        }
-        throw operandMismatch(exp, "datetime");
+    private static DateTimeExp dateTimeOperand(Exp<?> exp) {
+        return switch (exp) {
+            case DateTimeExp dt -> dt;
+            case StrScalarExp s -> Exp.$dateTimeVal(LocalDateTime.parse(temporalStr(s)));
+            case null, default -> throw operandMismatch(exp, "datetime");
+        };
     }
 
-    private static OffsetDateTimeExp asOffsetOperand(Exp<?> exp) {
-        if (exp instanceof OffsetDateTimeExp) {
-            return (OffsetDateTimeExp) exp;
-        }
-        throw operandMismatch(exp, "offset datetime");
+    private static OffsetDateTimeExp offsetDateTimeOperand(Exp<?> exp) {
+        return switch (exp) {
+            case OffsetDateTimeExp odt -> odt;
+            case StrScalarExp s -> Exp.$offsetDateTimeVal(OffsetDateTime.parse(temporalStr(s)));
+            case null, default -> throw operandMismatch(exp, "offset datetime");
+        };
     }
 
     private static QLParserException operandMismatch(Exp<?> exp, String required) {

@@ -2,6 +2,7 @@ package org.dflib.ql;
 
 import org.dflib.Environment;
 import org.dflib.Exp;
+import org.dflib.ql.QLFunctionDescriptor.Arg;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,7 @@ import static org.dflib.Exp.$str;
 import static org.dflib.Exp.$strVal;
 import static org.dflib.Exp.count;
 import static org.dflib.Exp.parseExp;
+import static org.dflib.ql.IdentityFunctions.identity;
 import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.ANY;
 import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.NUMERIC;
 import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.OBJECT;
@@ -34,10 +36,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * dispatch rules rather than at a built-in's signature; the built-ins themselves are covered by
  * {@link PolymorphicBuiltinTest}.
  * <p>
- * The stand-ins are declared with {@code returningArgType} - a return type that follows an argument's type. No
- * built-in is written that way any more (each of them declares one fixed-return overload per receiver type instead),
- * but the declaration is still supported for explicit registrations, and it is the shortest way to produce a
- * polymorphic call site here.
+ * The stand-ins are registered by {@link IdentityFunctions}: one fixed-return overload per receiver type, the way
+ * every built-in is written.
  */
 public class PolymorphicDispatchTest {
 
@@ -47,20 +47,15 @@ public class PolymorphicDispatchTest {
     public void setUpFunctions() {
         this.originalFunctions = Environment.commonEnv().getQLFunctions();
 
-        Environment.setQLFunctions(QLFunctions.builder()
+        QLFunctions.Builder builder = QLFunctions.builder();
 
-                // returns its argument unchanged, so the type of a call to it is the type of the argument
-                .function("pmin", signature()
-                        .returningArgType(0)
-                        .arg(OBJECT)
-                        .as(args -> args.get(0)))
+        // returns its argument unchanged, so the type of a call to it is the type of the argument
+        identity(builder, "pmin");
 
-                // a polymorphic function of two arguments, an expression and a constant, like "plusDays(e, n)"
-                .function("plusLike", signature()
-                        .returningArgType(0)
-                        .arg(OBJECT)
-                        .constArg(NUMERIC)
-                        .as(args -> args.get(0)))
+        // a polymorphic function of two arguments, an expression and a constant, like "plusDays(e, n)"
+        identity(builder, "plusLike", new Arg(NUMERIC, true));
+
+        Environment.setQLFunctions(builder
 
                 // a fixed numeric return, to check that a polymorphic call nested in it stays untyped
                 .function("foo", signature()

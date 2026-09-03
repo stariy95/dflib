@@ -69,7 +69,7 @@ class DefaultQLFunctionsTest {
         List<Arg> argTypes = args.stream().map(Arg::of).toList();
 
         Exp<?> result = descriptor.expProducer().apply(args);
-        assertReturnTypeIsHonest(label + " called with " + argTypes, descriptor.returnType(argTypes), result);
+        assertReturnTypeIsHonest(label + " called with " + argTypes, descriptor.returnType(), result);
     }
 
     private static void assertReturnTypeIsHonest(String label, TypeClassifier declared, Exp<?> result) {
@@ -126,13 +126,13 @@ class DefaultQLFunctionsTest {
 
         assertEquals(60, names.size());
 
-        // 60 names, 159 descriptors. 27 names have exactly one; the rest are overload sets, most of them one
+        // 60 names, 158 descriptors. 28 names have exactly one; the rest are overload sets, most of them one
         // overload per receiver type: "year"/"month"/"day" and "hour".."millisecond" have 3 each (21), the 9
         // "plusX" have 3 each (27), "min" and "max" have 5 receivers x {unfiltered, filtered} (20), "avg" and
         // "median" 4 x 2 (16) and "quantile" 4 x 2 (8). "shift" has 8 receivers - the 7 typed ones plus an untyped
-        // one - x {no filler, filler} (16). The remaining 24 are arity overloads: "substr", "split", "count",
-        // "concat", "sum", "first" and the 4 temporal casts have 2 each; "vConcat" has 4
-        assertEquals(159, FUNCTIONS.descriptors().count());
+        // one - x {no filler, filler} (16). The remaining 22 are arity overloads: "substr", "split", "count",
+        // "sum", "first" and the 4 temporal casts have 2 each; "vConcat" has 4
+        assertEquals(158, FUNCTIONS.descriptors().count());
     }
 
     @Test
@@ -197,8 +197,9 @@ class DefaultQLFunctionsTest {
         assertEquals(0, resolve("count").args().length);
         assertFalse(resolve("count").isVarArgs());
 
+        // "concat" has no zero-arity overload: the vararg one takes an empty list
         assertEquals(0, resolve("concat").args().length);
-        assertFalse(resolve("concat").isVarArgs());
+        assertTrue(resolve("concat").isVarArgs());
 
         assertTrue(resolve("concat", $str("a"), $str("b"), $str("c")).isVarArgs());
         assertTrue(resolve("concat", $str("a")).isVarArgs());
@@ -280,9 +281,8 @@ class DefaultQLFunctionsTest {
     }
 
     /**
-     * A polymorphic call's effective return type is the classifier of its receiver. For these names that is not a
-     * {@code returningArgType} declaration but a consequence of resolution: the receiver picks the overload, and the
-     * overload's own fixed return is the receiver's type.
+     * A polymorphic call's effective return type is the classifier of its receiver, as a consequence of resolution:
+     * the receiver picks the overload, and the overload's own fixed return is the receiver's type.
      */
     @Test
     void polymorphicReturnFollowsReceiver() {
@@ -484,16 +484,13 @@ class DefaultQLFunctionsTest {
     }
 
     private static TypeClassifier effectiveReturnType(String name, Exp<?>... args) {
-        List<Arg> argTypes = Arrays.stream(args).map(Arg::of).toList();
-        return FUNCTIONS.function(name, argTypes).returnType(argTypes);
+        return resolve(name, args).returnType();
     }
 
     private static String label(QLFunctionDescriptor descriptor) {
         return descriptor.name() + Arrays.toString(descriptor.args())
                 + (descriptor.isVarArgs() ? "..." : "")
-                + " -> " + (descriptor.returnType() != null
-                ? descriptor.returnType()
-                : "type of arg " + descriptor.returnArgIndex());
+                + " -> " + descriptor.returnType();
     }
 
     /**

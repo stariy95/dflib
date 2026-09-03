@@ -264,7 +264,6 @@ public class StrExpTest {
             "split('a,b,c')",
             "split('a,b,c', )",
             "split(, ',')",
-            "split(time(1), ':')",
     })
     public void split_throws(String text) {
         assertThrows(QLParserException.class, () -> parseExp(text));

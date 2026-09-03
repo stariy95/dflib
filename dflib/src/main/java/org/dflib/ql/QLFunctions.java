@@ -11,109 +11,69 @@ import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.SequencedSet;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
+import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.COERCION;
 import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.NO_MATCH;
+import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.WILDCARD;
 
+/**
+ * @since 2.0.0
+ */
 public class QLFunctions {
-
-    /**
-     * The return types that a typed expression rule of the grammar can ask about. A function that may return one of
-     * these is claimed by a typed rule; anything else ({@code OBJECT}, {@code ANY}) is only reachable from the
-     * untyped expression position.
-     */
-    private static final EnumSet<TypeClassifier> TYPED_RETURNS = EnumSet.of(
-            TypeClassifier.NUMERIC,
-            TypeClassifier.STRING,
-            TypeClassifier.BOOLEAN,
-            TypeClassifier.DATE,
-            TypeClassifier.TIME,
-            TypeClassifier.DATETIME,
-            TypeClassifier.OFFSETDATETIME);
 
     private final Map<String, SequencedSet<QLFunctionDescriptor>> functions;
 
     /**
-     * Precomputed union of {@link QLFunctionDescriptor#possibleReturnTypes()} per function name, so that the parser
-     * can ask "may this name return T?" in O(1) on every call site it considers.
+     * Precomputed union of the return types of the overloads of each name, so that the parser can ask "may this
+     * name return T?" in O(1) on every call site it considers.
      */
     private final Map<String, EnumSet<TypeClassifier>> returnTypes;
 
+    /**
+     * Names whose overloads disagree on their return type, precomputed for the same reason.
+     */
     private final Set<String> polymorphicFunctions;
 
     /**
-     * Names that may return one of the {@link #TYPED_RETURNS}, precomputed so that the parser can ask in O(1)
-     * whether a typed expression rule claims a call site.
+     * Names that may return one of the {@link TypeClassifier#isTyped() typed} classifiers, precomputed so that the
+     * parser can ask in O(1) whether a typed expression rule claims a call site.
      */
     private final Set<String> typedReturnFunctions;
 
     private QLFunctions(Map<String, SequencedSet<QLFunctionDescriptor>> functions) {
         this.functions = functions;
-        this.returnTypes = returnTypes(functions);
-        this.polymorphicFunctions = polymorphicFunctions(functions);
-        this.typedReturnFunctions = typedReturnFunctions(this.returnTypes);
-    }
-
-    private static Set<String> typedReturnFunctions(Map<String, EnumSet<TypeClassifier>> returnTypes) {
-
-        Set<String> typed = new HashSet<>();
-        for (Map.Entry<String, EnumSet<TypeClassifier>> e : returnTypes.entrySet()) {
-            if (!Collections.disjoint(e.getValue(), TYPED_RETURNS)) {
-                typed.add(e.getKey());
-            }
-        }
-
-        return typed;
-    }
-
-    private static Map<String, EnumSet<TypeClassifier>> returnTypes(
-            Map<String, SequencedSet<QLFunctionDescriptor>> functions) {
-
-        Map<String, EnumSet<TypeClassifier>> types = new HashMap<>();
-        for (Map.Entry<String, SequencedSet<QLFunctionDescriptor>> e : functions.entrySet()) {
-            EnumSet<TypeClassifier> merged = EnumSet.noneOf(TypeClassifier.class);
-            for (QLFunctionDescriptor d : e.getValue()) {
-                merged.addAll(d.possibleReturnTypes());
-            }
-            types.put(e.getKey(), merged);
-        }
-
-        return types;
-    }
-
-    private static Set<String> polymorphicFunctions(Map<String, SequencedSet<QLFunctionDescriptor>> functions) {
-
-        Set<String> polymorphic = new HashSet<>();
+        this.returnTypes = new HashMap<>();
+        this.polymorphicFunctions = new HashSet<>();
+        this.typedReturnFunctions = new HashSet<>();
 
         for (Map.Entry<String, SequencedSet<QLFunctionDescriptor>> e : functions.entrySet()) {
 
-            Set<TypeClassifier> fixed = EnumSet.noneOf(TypeClassifier.class);
-            boolean isPolymorphic = false;
-
+            EnumSet<TypeClassifier> types = EnumSet.noneOf(TypeClassifier.class);
             for (QLFunctionDescriptor d : e.getValue()) {
-                if (d.returnArgIndex() != QLFunctionSignature.FIXED_RETURN) {
-                    isPolymorphic = true;
-                    break;
-                }
-                fixed.add(d.returnType());
+                types.add(d.returnType());
             }
 
-            if (isPolymorphic || fixed.size() > 1) {
-                polymorphic.add(e.getKey());
+            returnTypes.put(e.getKey(), types);
+
+            if (types.size() > 1) {
+                polymorphicFunctions.add(e.getKey());
+            }
+
+            if (types.stream().anyMatch(TypeClassifier::isTyped)) {
+                typedReturnFunctions.add(e.getKey());
             }
         }
-
-        return polymorphic;
     }
 
     /**
@@ -152,8 +112,8 @@ public class QLFunctions {
     }
 
     /**
-     * Returns true if the return type of a call to this name is not determined by the name alone: either some of
-     * its overloads return the type of one of their arguments, or different overloads return different types.
+     * Returns true if the return type of a call to this name is not determined by the name alone, i.e. different
+     * overloads of it return different types.
      */
     public boolean isPolymorphicFn(String fnName) {
         return polymorphicFunctions.contains(fnName);
@@ -172,37 +132,22 @@ public class QLFunctions {
             throw notFound(name, args);
         }
 
-        // prefer fixed arity over varargs, then the most specific match, collecting every candidate that is
-        // equally good, as such a tie may be an unresolvable ambiguity rather than a registration-order question
+        // collect every candidate that is equally good, as such a tie may be an unresolvable ambiguity rather than
+        // a registration-order question
         List<QLFunctionDescriptor> best = new ArrayList<>(2);
-        boolean bestVarArgs = false;
-        int bestCost = 0;
+        MatchCost bestCost = null;
 
         for (QLFunctionDescriptor d : descriptors) {
 
-            int cost = matchCost(d, args);
-            if (cost == NO_MATCH) {
+            MatchCost cost = MatchCost.of(d, args);
+            if (cost == null) {
                 continue;
             }
 
-            boolean varArgs = d.isVarArgs();
-
-            if (best.isEmpty()) {
-                best.add(d);
-                bestVarArgs = varArgs;
-                bestCost = cost;
-                continue;
-            }
-
-            int cmp = Boolean.compare(varArgs, bestVarArgs);
-            if (cmp == 0) {
-                cmp = Integer.compare(cost, bestCost);
-            }
-
+            int cmp = bestCost == null ? -1 : cost.compareTo(bestCost);
             if (cmp < 0) {
                 best.clear();
                 best.add(d);
-                bestVarArgs = varArgs;
                 bestCost = cost;
             } else if (cmp == 0) {
                 best.add(d);
@@ -214,10 +159,6 @@ public class QLFunctions {
         }
 
         if (best.size() > 1) {
-            best = preferWildcardAtUntypedArgs(args, best);
-        }
-
-        if (best.size() > 1) {
             checkAmbiguity(name, args, best);
         }
 
@@ -226,45 +167,59 @@ public class QLFunctions {
     }
 
     /**
-     * Narrows a set of equally specific candidates to those declaring an OBJECT parameter everywhere the actual
-     * argument is {@link TypeClassifier#ANY}. Such an overload is the one written to handle an argument of any type,
-     * so it is the more specific match for an argument whose type is only known at eval time - the same rule that
-     * makes an OBJECT parameter cheaper than a typed one for a single argument, applied where the per-argument costs
-     * happen to add up to a tie.
-     * <p>
-     * This is what makes {@code shift(a, 1, 'x')} over an untyped column resolve to the untyped-receiver overload
-     * rather than collide with the string one: the untyped overload pays a wildcard for the filler and the string
-     * one pays a wildcard for the receiver, and only the former can actually accept the receiver.
-     * <p>
-     * If no candidate qualifies - the ANY argument is disputed by typed overloads only - the set is returned
-     * unchanged, and the tie is reported as ambiguous.
+     * How well a list of arguments fits a descriptor, lower being more specific. Compared in the order of the
+     * components: a fixed arity beats varargs; then the fewer arguments passed to a typed parameter with their type
+     * only known at eval time the better, as such an argument may still be rejected by the producer; and only then
+     * the fewer arguments passed to an OBJECT parameter the better. The order of the last two is what makes an
+     * overload written to accept any type win over one that would only pass a typed check at eval time, however
+     * many of the other arguments the typed one matches exactly.
      */
-    private static List<QLFunctionDescriptor> preferWildcardAtUntypedArgs(
-            List<Arg> args,
-            List<QLFunctionDescriptor> candidates) {
+    private record MatchCost(boolean varArgs, int coercions, int wildcards) implements Comparable<MatchCost> {
 
-        List<QLFunctionDescriptor> wildcards = new ArrayList<>(candidates.size());
-        for (QLFunctionDescriptor d : candidates) {
-            if (declaresWildcardAtUntypedArgs(args, d)) {
-                wildcards.add(d);
+        private static final Comparator<MatchCost> ORDER = Comparator
+                .comparing(MatchCost::varArgs)
+                .thenComparingInt(MatchCost::coercions)
+                .thenComparingInt(MatchCost::wildcards);
+
+        /**
+         * Returns the cost of passing the arguments to the descriptor, or null if they can not be passed at all.
+         */
+        static MatchCost of(QLFunctionDescriptor descriptor, List<Arg> args) {
+
+            int declared = descriptor.args().length;
+
+            if (descriptor.isVarArgs()) {
+                // declared args of a vararg function are its leading typed parameters, and must all be present.
+                // Anything past them is unconstrained
+                if (args.size() < declared) {
+                    return null;
+                }
+            } else if (declared != args.size()) {
+                return null;
             }
+
+            int coercions = 0;
+            int wildcards = 0;
+
+            for (int i = 0; i < declared; i++) {
+                switch (Arg.matchCost(descriptor.args()[i], args.get(i))) {
+                    case NO_MATCH -> {
+                        return null;
+                    }
+                    case COERCION -> coercions++;
+                    case WILDCARD -> wildcards++;
+                    default -> {
+                    }
+                }
+            }
+
+            return new MatchCost(descriptor.isVarArgs(), coercions, wildcards);
         }
 
-        return wildcards.isEmpty() || wildcards.size() == candidates.size() ? candidates : wildcards;
-    }
-
-    private static boolean declaresWildcardAtUntypedArgs(List<Arg> args, QLFunctionDescriptor descriptor) {
-
-        Arg[] declared = descriptor.args();
-        int len = Math.min(args.size(), declared.length);
-
-        for (int i = 0; i < len; i++) {
-            if (args.get(i).type() == TypeClassifier.ANY && declared[i].type() != TypeClassifier.OBJECT) {
-                return false;
-            }
+        @Override
+        public int compareTo(MatchCost o) {
+            return ORDER.compare(this, o);
         }
-
-        return true;
     }
 
     private static IllegalArgumentException notFound(String name, List<Arg> args) {
@@ -309,58 +264,12 @@ public class QLFunctions {
     private static String castHint(String name, EnumSet<TypeClassifier> declared) {
 
         for (TypeClassifier t : declared) {
-            String cast = CAST_FUNCTIONS.get(t);
-            if (cast != null) {
-                return "Cast it, e.g. " + name + "(" + cast + "(..))";
+            if (t.isTyped()) {
+                return "Cast it, e.g. " + name + "(" + t.castFunction() + "(..))";
             }
         }
 
         return "Cast it to one of them.";
-    }
-
-    /**
-     * The QL cast function that produces an expression of each classifier. {@code OBJECT} and {@code ANY} are absent
-     * on purpose: neither is a type a caller can cast to.
-     */
-    private static final Map<TypeClassifier, String> CAST_FUNCTIONS = Map.of(
-            TypeClassifier.NUMERIC, "castAsInt",
-            TypeClassifier.STRING, "castAsStr",
-            TypeClassifier.BOOLEAN, "castAsBool",
-            TypeClassifier.DATE, "castAsDate",
-            TypeClassifier.TIME, "castAsTime",
-            TypeClassifier.DATETIME, "castAsDateTime",
-            TypeClassifier.OFFSETDATETIME, "castAsOffsetDateTime");
-
-    /**
-     * Returns the combined cost of passing the given arguments to the descriptor parameters. The lower the cost, the
-     * more specific the match. Returns {@link QLFunctionDescriptor.TypeClassifier#NO_MATCH} if the arguments can not
-     * be passed to this function at all.
-     */
-    private static int matchCost(QLFunctionDescriptor descriptor, List<Arg> args) {
-
-        int declared = descriptor.args().length;
-
-        if (descriptor.isVarArgs()) {
-            // declared args of a vararg function are its leading typed parameters, and must all be present.
-            // Anything past them is unconstrained
-            if (args.size() < declared) {
-                return NO_MATCH;
-            }
-        } else if (declared != args.size()) {
-            return NO_MATCH;
-        }
-
-        int cost = 0;
-        for (int i = 0; i < declared; i++) {
-            int argCost = Arg.matchCost(descriptor.args()[i], args.get(i));
-            if (argCost == NO_MATCH) {
-                return NO_MATCH;
-            }
-
-            cost += argCost;
-        }
-
-        return cost;
     }
 
     /**
@@ -378,7 +287,7 @@ public class QLFunctions {
      */
     public static class Builder {
 
-        private final Map<String, SequencedSet<QLFunctionDescriptor>> functions = new ConcurrentHashMap<>();
+        private final Map<String, SequencedSet<QLFunctionDescriptor>> functions = new LinkedHashMap<>();
 
         private boolean defaultFunctions = true;
 
@@ -386,23 +295,23 @@ public class QLFunctions {
         }
 
         public Builder function(String name, Udf0<?> function) {
-            return defineFunction(name, QLFunctionDescriptor.ofUdf0(function));
+            return function(name, QLFunctionSignature.udf0(function));
         }
 
         public Builder function(String name, Udf1<?, ?> function) {
-            return defineFunction(name, QLFunctionDescriptor.ofUdf1(function));
+            return function(name, QLFunctionSignature.udf1(function));
         }
 
         public Builder function(String name, Udf2<?, ?, ?> function) {
-            return defineFunction(name, QLFunctionDescriptor.ofUdf2(function));
+            return function(name, QLFunctionSignature.udf2(function));
         }
 
         public Builder function(String name, Udf3<?, ?, ?, ?> function) {
-            return defineFunction(name, QLFunctionDescriptor.ofUdf3(function));
+            return function(name, QLFunctionSignature.udf3(function));
         }
 
         public Builder function(String name, UdfN<?> function) {
-            return defineFunction(name, QLFunctionDescriptor.ofUdfN(function));
+            return function(name, QLFunctionSignature.udfN(function));
         }
 
         /**
@@ -410,27 +319,21 @@ public class QLFunctions {
          * method declared in the class becomes one signature of the function, so a single call registers a whole
          * overload set - one per receiver type and arity. See {@link QLFunction} for the rules such a class must
          * follow; violating any of them is reported from here.
-         *
-         * @since 2.0.0
          */
         public Builder function(String name, QLFunction function) {
             for (QLFunctionSignature s : QLFunctionSignature.reflectQLFunction(name, function)) {
-                defineFunction(name, new QLFunctionDescriptor(name, s));
+                function(name, s);
             }
 
             return this;
         }
 
         /**
-         * Registers a function described by an explicit signature. Package-private for now: this is how built-in
-         * functions are declared.
+         * Registers a function described by an explicit signature. Package-private for now: this is how the
+         * registry's tests declare functions of an arbitrary shape.
          */
         Builder function(String name, QLFunctionSignature signature) {
             return defineFunction(name, new QLFunctionDescriptor(name, signature));
-        }
-
-        private Builder defineFunction(String name, QLFunctionDescriptor.Builder builder) {
-            return defineFunction(name, builder.name(name).build());
         }
 
         private Builder defineFunction(String name, QLFunctionDescriptor descriptor) {
@@ -472,7 +375,8 @@ public class QLFunctions {
                 DefaultQLFunctions.register(all);
             }
 
-            functions.forEach((name, descriptors) -> descriptors.forEach(d -> all.defineFunction(name, d)));
+            functions.forEach((name, descriptors)
+                    -> descriptors.forEach(d -> all.defineFunction(name, d)));
             return new QLFunctions(all.functions);
         }
     }

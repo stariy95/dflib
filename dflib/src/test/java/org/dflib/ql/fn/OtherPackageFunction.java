@@ -3,7 +3,6 @@ package org.dflib.ql.fn;
 import org.dflib.Exp;
 import org.dflib.NumExp;
 import org.dflib.StrExp;
-import org.dflib.ql.Cast;
 import org.dflib.ql.QLFunction;
 
 /**
@@ -12,8 +11,8 @@ import org.dflib.ql.QLFunction;
  */
 public class OtherPackageFunction implements QLFunction {
 
-    public NumExp<Integer> call(@Cast StrExp e) {
-        return e.len();
+    public NumExp<Integer> call(Exp<?> e) {
+        return e.castAsStr().len();
     }
 
     public NumExp<?> call(NumExp<?> e, int offset) {

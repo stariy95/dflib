@@ -1,8 +1,6 @@
 package org.dflib.ql;
 
-import org.dflib.Condition;
 import org.dflib.Exp;
-import org.dflib.StrExp;
 import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
 
 import java.lang.reflect.Array;
@@ -14,28 +12,18 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Function;
 
 /**
  * Produces an expression by invoking one {@code call} overload of a {@link QLFunction}: it checks every expression
- * argument against the parameter type the overload declared, coerces the {@link Cast}-annotated ones, and unwraps
- * the implicit constant arguments to the declared Java type. This is the argument handling every function body would
- * otherwise have to repeat.
+ * argument against the parameter type the overload declared and unwraps the implicit constant arguments to the
+ * declared Java type. This is the argument handling every function body would otherwise have to repeat.
  * <p>
  * The checks are not redundant with function resolution. A parameter declared as a typed expression interface also
  * accepts an argument whose type is only known at eval time (the ANY classifier), which is exactly what an
  * {@code isInstance} check can fail on here.
  */
 class CallProducer implements Function<List<Exp<?>>, Exp<?>> {
-
-    /**
-     * The expression types a {@link Cast} parameter can coerce an untyped argument to. Only these two have a total
-     * cast from an arbitrary expression.
-     */
-    static final Map<Class<?>, Function<Exp<?>, Exp<?>>> CASTS = Map.of(
-            StrExp.class, Exp::castAsStr,
-            Condition.class, Exp::castAsBool);
 
     /**
      * Java types a non-expression (implicit constant) parameter may be declared as. A type variable bounded by
@@ -50,12 +38,6 @@ class CallProducer implements Function<List<Exp<?>>, Exp<?>> {
             Number.class,
             LocalDate.class, LocalTime.class, LocalDateTime.class, OffsetDateTime.class);
 
-    private static final Map<Class<?>, Class<?>> BOXED = Map.of(
-            boolean.class, Boolean.class,
-            int.class, Integer.class,
-            long.class, Long.class,
-            double.class, Double.class);
-
     private final String name;
     private final QLFunction function;
     private final Method method;
@@ -65,7 +47,6 @@ class CallProducer implements Function<List<Exp<?>>, Exp<?>> {
      */
     private final Class<?>[] paramTypes;
     private final boolean[] isExp;
-    private final boolean[] cast;
 
     /**
      * The component type of the trailing vararg array, or null for a fixed-arity overload.
@@ -86,13 +67,11 @@ class CallProducer implements Function<List<Exp<?>>, Exp<?>> {
 
         this.paramTypes = new Class<?>[declared];
         this.isExp = new boolean[declared];
-        this.cast = new boolean[declared];
 
         for (int i = 0; i < declared; i++) {
             Class<?> type = parameters[i].getType();
             paramTypes[i] = type;
             isExp[i] = Exp.class.isAssignableFrom(type);
-            cast[i] = parameters[i].isAnnotationPresent(Cast.class);
         }
     }
 
@@ -137,16 +116,10 @@ class CallProducer implements Function<List<Exp<?>>, Exp<?>> {
 
     private Exp<?> expArg(int i, Exp<?> arg) {
 
-        Class<?> declared = paramTypes[i];
-
-        if (declared.isInstance(arg)) {
+        // an argument of a known but different type never reaches here: it does not resolve to this overload. What
+        // can fail is an argument whose type is only known at eval time
+        if (paramTypes[i].isInstance(arg)) {
             return arg;
-        }
-
-        // a "@Cast" parameter coerces an argument whose type is only known at eval time. An argument of a known but
-        // different type never reaches here: it does not resolve to this overload
-        if (cast[i] && arg != null) {
-            return CASTS.get(declared).apply(arg);
         }
 
         throw wrongArg(i, arg, "");
@@ -169,8 +142,7 @@ class CallProducer implements Function<List<Exp<?>>, Exp<?>> {
             return requireNumber(i, arg, value).doubleValue();
         }
 
-        Class<?> boxed = BOXED.getOrDefault(declared, declared);
-        if (!boxed.isInstance(value)) {
+        if (!QLFunctionDescriptor.box(declared).isInstance(value)) {
             throw wrongArg(i, arg, "a constant ");
         }
 

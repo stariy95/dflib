@@ -67,8 +67,8 @@ import org.dflib.ql.fn.YearFunction;
  * against the expression interfaces they declare.
  * <p>
  * The declared signature and the producer must agree: for any arguments matching the signature, the classifier of
- * the produced expression must be the descriptor's effective return type. The parser casts the result to the type
- * the signature promised, so a mismatch is a {@code ClassCastException} inside generated code. Declaring the exact
+ * the produced expression must be the descriptor's return type. The parser casts the result to the type the
+ * signature promised, so a mismatch is a {@code ClassCastException} inside generated code. Declaring the exact
  * {@code Exp} subinterface a {@code call} overload returns is what makes this a compile-time property rather than a
  * convention. It is verified by {@code DefaultQLFunctionsTest}.
  * <p>
@@ -82,21 +82,20 @@ class DefaultQLFunctions {
     private DefaultQLFunctions() {
     }
 
-    static QLFunctions.Builder register(QLFunctions.Builder builder) {
-        builder = registerStringFunctions(builder);
-        builder = registerNumericFunctions(builder);
-        builder = registerBooleanFunctions(builder);
-        builder = registerCollectionFunctions(builder);
-        builder = registerCasts(builder);
-        builder = registerFieldFunctions(builder);
-        builder = registerTemporalArithmetic(builder);
-        builder = registerAggregates(builder);
-        builder = registerSpecialForms(builder);
-        return builder;
+    static void register(QLFunctions.Builder builder) {
+        registerStringFunctions(builder);
+        registerNumericFunctions(builder);
+        registerBooleanFunctions(builder);
+        registerCollectionFunctions(builder);
+        registerCasts(builder);
+        registerFieldFunctions(builder);
+        registerTemporalArithmetic(builder);
+        registerAggregates(builder);
+        registerSpecialForms(builder);
     }
 
-    private static QLFunctions.Builder registerStringFunctions(QLFunctions.Builder builder) {
-        return builder
+    private static void registerStringFunctions(QLFunctions.Builder builder) {
+        builder
                 .function("trim", new TrimFunction())
                 .function("lower", new LowerFunction())
                 .function("upper", new UpperFunction())
@@ -104,8 +103,8 @@ class DefaultQLFunctions {
                 .function("concat", new ConcatFunction());
     }
 
-    private static QLFunctions.Builder registerNumericFunctions(QLFunctions.Builder builder) {
-        return builder
+    private static void registerNumericFunctions(QLFunctions.Builder builder) {
+        builder
                 .function("len", new LenFunction())
                 .function("abs", new AbsFunction())
                 .function("sqrt", new SqrtFunction())
@@ -115,8 +114,8 @@ class DefaultQLFunctions {
                 .function("count", new CountFunction());
     }
 
-    private static QLFunctions.Builder registerBooleanFunctions(QLFunctions.Builder builder) {
-        return builder
+    private static void registerBooleanFunctions(QLFunctions.Builder builder) {
+        builder
                 .function("castAsBool", new CastAsBoolFunction())
                 .function("matches", new MatchesFunction())
                 .function("startsWith", new StartsWithFunction())
@@ -128,8 +127,8 @@ class DefaultQLFunctions {
      * Collection- and array-valued functions. None of these has a dedicated expression type, so they are all plain
      * OBJECT.
      */
-    private static QLFunctions.Builder registerCollectionFunctions(QLFunctions.Builder builder) {
-        return builder
+    private static void registerCollectionFunctions(QLFunctions.Builder builder) {
+        builder
                 .function("list", new ListFunction())
                 .function("set", new SetFunction())
                 .function("split", new SplitFunction());
@@ -140,8 +139,8 @@ class DefaultQLFunctions {
      * the cast argument is an untyped {@code expression}. Temporal casts additionally accept a constant format
      * string.
      */
-    private static QLFunctions.Builder registerCasts(QLFunctions.Builder builder) {
-        return builder
+    private static void registerCasts(QLFunctions.Builder builder) {
+        builder
                 .function("castAsInt", new CastAsIntFunction())
                 .function("castAsLong", new CastAsLongFunction())
                 .function("castAsBigint", new CastAsBigintFunction())
@@ -160,8 +159,8 @@ class DefaultQLFunctions {
      * and only the set of receivers they accept differs: "year"/"month"/"day" have no time receiver, and
      * "hour".."millisecond" have no date one.
      */
-    private static QLFunctions.Builder registerFieldFunctions(QLFunctions.Builder builder) {
-        return builder
+    private static void registerFieldFunctions(QLFunctions.Builder builder) {
+        builder
                 .function("year", new YearFunction())
                 .function("month", new MonthFunction())
                 .function("day", new DayFunction())
@@ -175,8 +174,8 @@ class DefaultQLFunctions {
      * "plusX" functions. Each returns the receiver's own type, so a name that has more than one receiver is
      * polymorphic even though every one of its overloads has a fixed return.
      */
-    private static QLFunctions.Builder registerTemporalArithmetic(QLFunctions.Builder builder) {
-        return builder
+    private static void registerTemporalArithmetic(QLFunctions.Builder builder) {
+        builder
                 .function("plusYears", new PlusYearsFunction())
                 .function("plusMonths", new PlusMonthsFunction())
                 .function("plusWeeks", new PlusWeeksFunction())
@@ -188,8 +187,8 @@ class DefaultQLFunctions {
                 .function("plusNanos", new PlusNanosFunction());
     }
 
-    private static QLFunctions.Builder registerAggregates(QLFunctions.Builder builder) {
-        return builder
+    private static void registerAggregates(QLFunctions.Builder builder) {
+        builder
 
                 // "min"/"max"/"avg"/"median"/"quantile" preserve the receiver type, so they are polymorphic across
                 // their receiver overloads. "sum"/"cumSum" are numeric-only, and have a fixed NUMERIC return: a
@@ -211,8 +210,8 @@ class DefaultQLFunctions {
                 .function("vConcat", new VConcatFunction());
     }
 
-    private static QLFunctions.Builder registerSpecialForms(QLFunctions.Builder builder) {
-        return builder
+    private static void registerSpecialForms(QLFunctions.Builder builder) {
+        builder
 
                 // "if" and "ifNull" produce IfExp/IfNullExp, which implement none of the typed Exp interfaces
                 .function("if", new IfFunction())

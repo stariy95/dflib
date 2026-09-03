@@ -13,7 +13,6 @@ import org.dflib.ql.QLFunctionDescriptor.TypeClassifier;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
-import java.util.EnumSet;
 import java.util.List;
 
 import static org.dflib.Exp.$bool;
@@ -28,10 +27,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class QLFunctionDescriptorTest {
 
-
     @Test
     void test() {
-        QLFunctionDescriptor descriptor = QLFunctionDescriptor.ofUdf1(new AdditionFn()).name("add").build();
+        QLFunctionDescriptor descriptor = new QLFunctionDescriptor("add", QLFunctionSignature.udf1(new AdditionFn()));
         assertNotNull(descriptor);
 
         Exp<?> fnCall = descriptor.expProducer().apply(List.of($int("a")));
@@ -40,7 +38,7 @@ class QLFunctionDescriptorTest {
 
     @Test
     void udfN() {
-        QLFunctionDescriptor descriptor = QLFunctionDescriptor.ofUdfN(new VarArgsFn()).name("vadd").build();
+        QLFunctionDescriptor descriptor = new QLFunctionDescriptor("vadd", QLFunctionSignature.udfN(new VarArgsFn()));
         assertNotNull(descriptor);
         assertTrue(descriptor.isVarArgs());
         assertEquals(0, descriptor.args().length);
@@ -57,11 +55,11 @@ class QLFunctionDescriptorTest {
         // the "Exp<X>" they extend. Otherwise such a function classifies as OBJECT and is never found
         assertEquals(
                 QLFunctionDescriptor.TypeClassifier.NUMERIC,
-                QLFunctionDescriptor.ofUdf1(new DecimalFn()).name("dec").build().returnType());
+                new QLFunctionDescriptor("dec", QLFunctionSignature.udf1(new DecimalFn())).returnType());
 
         assertEquals(
                 QLFunctionDescriptor.TypeClassifier.BOOLEAN,
-                QLFunctionDescriptor.ofUdf1(new ConditionFn()).name("cond").build().returnType());
+                new QLFunctionDescriptor("cond", QLFunctionSignature.udf1(new ConditionFn())).returnType());
     }
 
     @Test
@@ -70,7 +68,7 @@ class QLFunctionDescriptorTest {
         // only the expression layer is unwrapped: the value type of "Exp<List<String>>" is List, not String
         assertEquals(
                 QLFunctionDescriptor.TypeClassifier.OBJECT,
-                QLFunctionDescriptor.ofUdf1(new ListFn()).name("list").build().returnType());
+                new QLFunctionDescriptor("list", QLFunctionSignature.udf1(new ListFn())).returnType());
     }
 
     @Test
@@ -80,7 +78,7 @@ class QLFunctionDescriptorTest {
         // classify as OBJECT rather than leaking into the STRING namespace
         assertEquals(
                 QLFunctionDescriptor.TypeClassifier.OBJECT,
-                QLFunctionDescriptor.ofUdf1(new ArrayFn()).name("split").build().returnType());
+                new QLFunctionDescriptor("split", QLFunctionSignature.udf1(new ArrayFn())).returnType());
     }
 
     @Test
@@ -88,7 +86,7 @@ class QLFunctionDescriptorTest {
 
         // a covariant return makes javac emit a bridge "call" with the same erased parameters. The bridge carries
         // neither the generic types nor the parameter annotations, so picking it would silently drop @Constant
-        QLFunctionDescriptor descriptor = QLFunctionDescriptor.ofUdf2(new ConstArgNumFn()).name("scale").build();
+        QLFunctionDescriptor descriptor = new QLFunctionDescriptor("scale", QLFunctionSignature.udf2(new ConstArgNumFn()));
 
         assertEquals(QLFunctionDescriptor.TypeClassifier.NUMERIC, descriptor.returnType());
         assertArrayEquals(
@@ -150,6 +148,14 @@ class QLFunctionDescriptorTest {
     }
 
     @Test
+    void isTyped() {
+        for (TypeClassifier t : TypeClassifier.values()) {
+            assertEquals(t != TypeClassifier.OBJECT && t != TypeClassifier.ANY, t.isTyped(), t.name());
+            assertEquals(t.isTyped(), t.castFunction() != null, t.name());
+        }
+    }
+
+    @Test
     void returnType_Fixed() {
         QLFunctionDescriptor descriptor = new QLFunctionDescriptor("len", QLFunctionSignature.signature()
                 .returning(TypeClassifier.NUMERIC)
@@ -157,61 +163,6 @@ class QLFunctionDescriptorTest {
                 .as(args -> args.get(0).castAsStr().len()));
 
         assertEquals(TypeClassifier.NUMERIC, descriptor.returnType());
-        assertEquals(QLFunctionSignature.FIXED_RETURN, descriptor.returnArgIndex());
-
-        // the arguments do not affect a fixed return type
-        assertEquals(
-                TypeClassifier.NUMERIC,
-                descriptor.returnType(List.of(new QLFunctionDescriptor.Arg(TypeClassifier.DATE, false))));
-
-        assertEquals(EnumSet.of(TypeClassifier.NUMERIC), descriptor.possibleReturnTypes());
-    }
-
-    @Test
-    void returnType_Polymorphic() {
-        QLFunctionDescriptor descriptor = new QLFunctionDescriptor("shift", QLFunctionSignature.signature()
-                .returningArgType(0)
-                .arg(TypeClassifier.OBJECT)
-                .constArg(TypeClassifier.NUMERIC)
-                .as(args -> args.get(0)));
-
-        assertNull(descriptor.returnType());
-        assertEquals(0, descriptor.returnArgIndex());
-
-        assertEquals(TypeClassifier.DATE, descriptor.returnType(List.of(
-                new QLFunctionDescriptor.Arg(TypeClassifier.DATE, false),
-                new QLFunctionDescriptor.Arg(TypeClassifier.NUMERIC, true))));
-
-        assertEquals(TypeClassifier.STRING, descriptor.returnType(List.of(
-                new QLFunctionDescriptor.Arg(TypeClassifier.STRING, false),
-                new QLFunctionDescriptor.Arg(TypeClassifier.NUMERIC, true))));
-    }
-
-    @Test
-    void possibleReturnTypes_PolymorphicExcludesAny() {
-
-        // a polymorphic function may produce any concrete type. ANY is excluded: it is the absence of a type, and
-        // "possibleReturnTypes" exists to answer "can a rule expecting T parse this call?"
-        QLFunctionDescriptor descriptor = new QLFunctionDescriptor("shift", QLFunctionSignature.signature()
-                .returningArgType(0)
-                .arg(TypeClassifier.OBJECT)
-                .as(args -> args.get(0)));
-
-        assertEquals(
-                EnumSet.complementOf(EnumSet.of(TypeClassifier.ANY)),
-                descriptor.possibleReturnTypes());
-    }
-
-    @Test
-    void possibleReturnTypes_AnyReturn() {
-
-        // an explicitly ANY-returning function ("first", "if", "ifNull") satisfies no typed classifier
-        QLFunctionDescriptor descriptor = new QLFunctionDescriptor("first", QLFunctionSignature.signature()
-                .returning(TypeClassifier.ANY)
-                .arg(TypeClassifier.OBJECT)
-                .as(args -> args.get(0).first()));
-
-        assertEquals(EnumSet.of(TypeClassifier.ANY), descriptor.possibleReturnTypes());
     }
 
     @Test
@@ -237,7 +188,7 @@ class QLFunctionDescriptorTest {
     void reflect_ProducesTheSameDescriptorAsAnExplicitSignature() {
 
         // the reflective Udf path is implemented on top of the explicit one
-        QLFunctionDescriptor reflected = QLFunctionDescriptor.ofUdf2(new ConstArgNumFn()).name("scale").build();
+        QLFunctionDescriptor reflected = new QLFunctionDescriptor("scale", QLFunctionSignature.udf2(new ConstArgNumFn()));
 
         QLFunctionDescriptor explicit = new QLFunctionDescriptor("scale", QLFunctionSignature.signature()
                 .returning(TypeClassifier.NUMERIC)
@@ -247,7 +198,6 @@ class QLFunctionDescriptorTest {
 
         assertEquals(explicit, reflected);
         assertEquals(explicit.returnType(), reflected.returnType());
-        assertEquals(explicit.returnArgIndex(), reflected.returnArgIndex());
     }
 
     public static class ConstArgNumFn implements Udf2<Number, Integer, Number> {

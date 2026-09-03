@@ -376,9 +376,10 @@ class QLFunctionsTest {
     @Test
     void function_AnyArg_WildcardOverloadWinsATie() {
 
-        // "shift(a, 1, 'x')": the wildcard overload pays for the second argument what the typed one pays for the
-        // untyped first, so the per-argument costs add up to a tie. It is still not an ambiguity - only the
-        // wildcard overload is written to accept a receiver of any type, and the typed one would reject it
+        // "shift(a, 1, 'x')": the typed overload matches the second argument exactly but can only take the untyped
+        // first one on trust, while the wildcard overload takes both as wildcards. Passing an untyped argument to a
+        // typed parameter is the costlier match regardless of how many of the other arguments match exactly - only
+        // the wildcard overload is written to accept a receiver of any type, and the typed one would reject it
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("f", QLFunctionSignature.signature()
                         .returning(STRING).arg(STRING).arg(STRING).as(args -> args.get(0).castAsStr()))
@@ -578,19 +579,15 @@ class QLFunctionsTest {
     }
 
     @Test
-    void mayReturn_Polymorphic() {
-        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
-                .function("shift", QLFunctionSignature.signature()
-                        .returningArgType(0)
-                        .arg(OBJECT)
-                        .constArg(NUMERIC)
-                        .as(args -> args.get(0)))
-                .build();
+    void mayReturn_OverloadPerReceiver() {
 
-        // a function returning the type of its argument may return any concrete type, but never ANY: ANY is the
-        // absence of a type and no typed expression rule can consume it
+        // "shift" returns the type of its receiver, which it expresses as one overload per receiver type: the name
+        // may return every one of them, and the untyped receiver overload adds ANY
+        QLFunctions functions = IdentityFunctions.identity(
+                QLFunctions.builder().noDefaultFunctions(), "shift", constant(NUMERIC)).build();
+
         for (TypeClassifier t : TypeClassifier.values()) {
-            assertEquals(t != ANY, functions.mayReturn("shift", t), t.name());
+            assertEquals(t != OBJECT, functions.mayReturn("shift", t), t.name());
         }
     }
 
@@ -618,7 +615,7 @@ class QLFunctionsTest {
 
         // the question the grammar asks to decide whether a call site belongs to a typed rule or to the untyped
         // expression position: it is the union of "mayReturn" over the types that have a rule of their own
-        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+        QLFunctions.Builder builder = QLFunctions.builder().noDefaultFunctions()
                 .function("sum", new Int2SumFunction())
                 .function("split", QLFunctionSignature.signature()
                         .returning(OBJECT)
@@ -627,17 +624,12 @@ class QLFunctionsTest {
                 .function("first", QLFunctionSignature.signature()
                         .returning(ANY)
                         .arg(OBJECT)
-                        .as(args -> args.get(0).first()))
-                .function("shift", QLFunctionSignature.signature()
-                        .returningArgType(0)
-                        .arg(OBJECT)
-                        .constArg(NUMERIC)
-                        .as(args -> args.get(0)))
-                .build();
+                        .as(args -> args.get(0).first()));
+        QLFunctions functions = IdentityFunctions.identity(builder, "shift", constant(NUMERIC)).build();
 
         assertTrue(functions.hasTypedReturn("sum"));
 
-        // a polymorphic function may return any concrete type, so every typed rule claims it
+        // a polymorphic function has an overload per receiver type, so every typed rule claims it
         assertTrue(functions.hasTypedReturn("shift"));
 
         // neither a plain object nor a type known only at eval time has a rule of its own
@@ -649,7 +641,7 @@ class QLFunctionsTest {
 
     @Test
     void isPolymorphicFn() {
-        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+        QLFunctions.Builder builder = QLFunctions.builder().noDefaultFunctions()
                 // a single fixed return type
                 .function("trim", new ObjectArgFunction())
                 // two overloads, same fixed return type
@@ -657,13 +649,9 @@ class QLFunctionsTest {
                 .function("sum", new Int3SumFunction())
                 // two overloads with different fixed return types
                 .function("f", new ObjectArgFunction())
-                .function("f", new Int2SumFunction())
-                // returns the type of its argument
-                .function("shift", QLFunctionSignature.signature()
-                        .returningArgType(0)
-                        .arg(OBJECT)
-                        .as(args -> args.get(0)))
-                .build();
+                .function("f", new Int2SumFunction());
+        // returns the type of its argument: one overload per receiver type
+        QLFunctions functions = IdentityFunctions.identity(builder, "shift").build();
 
         assertFalse(functions.isPolymorphicFn("trim"));
         assertFalse(functions.isPolymorphicFn("sum"));
@@ -808,26 +796,6 @@ class QLFunctionsTest {
     }
 
     @Test
-    void signature_ReturningArgType() {
-        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
-                .function("shift", QLFunctionSignature.signature()
-                        .returningArgType(0)
-                        .arg(OBJECT)
-                        .constArg(NUMERIC)
-                        .as(args -> args.get(0)))
-                .build();
-
-        List<Arg> dateArgs = List.of(arg(DATE), constant(NUMERIC));
-        QLFunctionDescriptor descriptor = functions.function("shift", dateArgs);
-
-        assertNull(descriptor.returnType());
-        assertEquals(0, descriptor.returnArgIndex());
-        assertEquals(DATE, descriptor.returnType(dateArgs));
-        assertEquals(STRING, descriptor.returnType(List.of(arg(STRING), constant(NUMERIC))));
-        assertEquals(ANY, descriptor.returnType(List.of(arg(ANY), constant(NUMERIC))));
-    }
-
-    @Test
     void signature_DuplicateShapeRejected() {
 
         // the return type is not part of a descriptor's identity: two overloads with the same argument shape are
@@ -855,15 +823,6 @@ class QLFunctionsTest {
     void signature_ReturnTypeRequired() {
         assertThrows(IllegalArgumentException.class, () -> QLFunctions.builder().noDefaultFunctions()
                 .function("f", QLFunctionSignature.signature().arg(NUMERIC).as(args -> args.get(0))));
-    }
-
-    @Test
-    void signature_ReturnArgIndexOutOfRange() {
-        assertThrows(IllegalArgumentException.class, () -> QLFunctions.builder().noDefaultFunctions()
-                .function("f", QLFunctionSignature.signature()
-                        .returningArgType(1)
-                        .arg(NUMERIC)
-                        .as(args -> args.get(0))));
     }
 
     private static class BoolFunction implements Udf1<Object, Boolean> {

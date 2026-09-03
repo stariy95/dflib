@@ -31,12 +31,8 @@ import org.dflib.Exp;
  * <li><b>A parameter declared as a typed {@code Exp} interface only accepts that type.</b> An argument of another
  * known type does not resolve to this overload at all; an argument whose type is only known at eval time is passed in
  * and checked by the producer. A parameter declared as {@code Exp<?>} accepts anything, and the body must handle
- * anything.</li>
- *
- * <li><b>{@link Cast} on a typed parameter</b> additionally coerces an argument of an unknown type instead of
- * rejecting it: {@code @Cast StrExp} takes {@code castAsStr()} of it, {@code @Cast Condition} takes
- * {@code castAsBool()}. An argument of a known but different type is still rejected. Only these two parameter types
- * support {@code @Cast}, as they are the only ones with a total cast from any expression.</li>
+ * anything - a function that converts its receiver, like {@code len(e)}, declares {@code Exp<?>} and calls
+ * {@code castAsStr()} itself.</li>
  *
  * <li><b>A non-{@code Exp} parameter is an implicit constant argument</b> of its type's classifier: the caller must
  * pass a literal, and the producer unwraps it to the declared Java type. Allowed types are exactly {@code int},
@@ -48,8 +44,7 @@ import org.dflib.Exp;
  * {@link ConstantArgs#constantValue(Exp)}. The argument shape is the same either way.</li>
  *
  * <li><b>Trailing varargs</b> ({@code call(Exp<?>... exps)}) declare an unconstrained tail. Any parameters before it
- * are declared arguments that must be present and match. {@link Constant} and {@link Cast} on the vararg parameter
- * are rejected.</li>
+ * are declared arguments that must be present and match. {@link Constant} on the vararg parameter is rejected.</li>
  *
  * <li><b>No two overloads may share an argument shape</b> (the tuple of parameter classifiers and constancy). Such a
  * pair is unresolvable by the parser, and is reported as "already defined" when the registry is built. Note that

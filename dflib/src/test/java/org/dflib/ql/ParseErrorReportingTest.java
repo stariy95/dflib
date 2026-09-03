@@ -9,8 +9,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.stream.Stream;
 
-import static org.dflib.ql.QLFunctionDescriptor.TypeClassifier.OBJECT;
-import static org.dflib.ql.QLFunctionSignature.signature;
+import static org.dflib.ql.IdentityFunctions.identity;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -83,12 +82,7 @@ public class ParseErrorReportingTest {
         // expression it actually produced can tell whether it fits, and the cast at the call site reports it
         QLFunctions original = Environment.commonEnv().getQLFunctions();
         try {
-            Environment.setQLFunctions(QLFunctions.builder()
-                    .function("f", signature()
-                            .returningArgType(0)
-                            .arg(OBJECT)
-                            .as(args -> args.get(0)))
-                    .build());
+            Environment.setQLFunctions(identity(QLFunctions.builder(), "f").build());
 
             QLParserException num = assertThrows(QLParserException.class, () -> Exp.parseExp("f(str(a)) + 1"));
             assertEquals("f(...) at 1:0 returns a string expression; a numeric expression is required here",

@@ -8,22 +8,15 @@ import org.dflib.NumExp;
 import org.dflib.OffsetDateTimeExp;
 import org.dflib.StrExp;
 import org.dflib.TimeExp;
-import org.dflib.Udf0;
-import org.dflib.Udf1;
-import org.dflib.Udf2;
-import org.dflib.Udf3;
-import org.dflib.UdfN;
 import org.dflib.exp.ScalarExp;
 
 import java.lang.reflect.GenericArrayType;
-import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
 import java.util.Arrays;
-import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,68 +25,19 @@ import java.util.function.Function;
 public class QLFunctionDescriptor {
 
     final String name;
-
-    /**
-     * A return type that does not depend on the arguments, or null for a polymorphic function
-     * (see {@link #returnArgIndex}).
-     */
     final TypeClassifier returnType;
-
-    /**
-     * An index of the argument whose type is the return type of this function, or
-     * {@link QLFunctionSignature#FIXED_RETURN} if the return type is fixed.
-     */
-    final int returnArgIndex;
-
     final Arg[] args;
     final boolean varArgs;
     final Function<List<Exp<?>>, Exp<?>> fnExpProducer;
-
-    private final EnumSet<TypeClassifier> possibleReturnTypes;
 
     QLFunctionDescriptor(String name, QLFunctionSignature signature) {
         signature.validate(name);
 
         this.name = name;
         this.returnType = signature.returnType();
-        this.returnArgIndex = signature.returnArgIndex();
         this.args = signature.args();
         this.varArgs = signature.isVarArgs();
         this.fnExpProducer = signature.producer();
-        this.possibleReturnTypes = possibleReturnTypes(this.returnType);
-    }
-
-    private static EnumSet<TypeClassifier> possibleReturnTypes(TypeClassifier fixedReturnType) {
-
-        if (fixedReturnType != null) {
-            return EnumSet.of(fixedReturnType);
-        }
-
-        // A polymorphic function returns the type of one of its arguments, so statically it "may return" anything.
-        // ANY is excluded on purpose: it is not a type, but the absence of one, and a caller asking
-        // "may this name return T?" is always asking about a concrete T it knows how to consume. A polymorphic call
-        // that does resolve to ANY is reachable from the untyped expression position, which never asks.
-        return EnumSet.complementOf(EnumSet.of(TypeClassifier.ANY));
-    }
-
-    public static Builder ofUdf0(Udf0<?> function) {
-        return new Builder().udf0(function);
-    }
-
-    public static Builder ofUdf1(Udf1<?, ?> function) {
-        return new Builder().udf1(function);
-    }
-
-    public static Builder ofUdf2(Udf2<?, ?, ?> function) {
-        return new Builder().udf2(function);
-    }
-
-    public static Builder ofUdf3(Udf3<?, ?, ?, ?> function) {
-        return new Builder().udf3(function);
-    }
-
-    public static Builder ofUdfN(UdfN<?> function) {
-        return new Builder().udfN(function);
     }
 
     /**
@@ -118,37 +62,11 @@ public class QLFunctionDescriptor {
     }
 
     /**
-     * Returns the return type of this function if it does not depend on the arguments, null otherwise.
-     *
-     * @see #returnType(List)
+     * Returns the type of the expression a call to this function produces. A function whose result type depends on
+     * the receiver is registered as one descriptor per receiver type, each with its own return type.
      */
     public TypeClassifier returnType() {
         return returnType;
-    }
-
-    /**
-     * Returns the index of the argument whose type this function returns, or
-     * {@link QLFunctionSignature#FIXED_RETURN} for a function with a fixed return type.
-     */
-    public int returnArgIndex() {
-        return returnArgIndex;
-    }
-
-    /**
-     * Returns the effective return type of a call with the given arguments.
-     */
-    public TypeClassifier returnType(List<Arg> actualArgs) {
-        return returnArgIndex == QLFunctionSignature.FIXED_RETURN
-                ? returnType
-                : actualArgs.get(returnArgIndex).type();
-    }
-
-    /**
-     * Returns an over-approximation of the types this function may return, regardless of the arguments. Used by the
-     * parser to decide whether a call by this name can possibly be parsed as an expression of a given type.
-     */
-    public EnumSet<TypeClassifier> possibleReturnTypes() {
-        return EnumSet.copyOf(possibleReturnTypes);
     }
 
     public Arg[] args() {
@@ -169,82 +87,6 @@ public class QLFunctionDescriptor {
         result = 31 * result + Arrays.hashCode(args);
         result = 31 * result + Boolean.hashCode(varArgs);
         return result;
-    }
-
-    /**
-     * A builder of a descriptor for a reflectively described user function. It is a thin adapter over
-     * {@link QLFunctionSignature}, which is the single descriptor construction path.
-     */
-    public static class Builder {
-
-        String name;
-        QLFunctionSignature signature;
-
-        private Builder() {
-        }
-
-        public Builder udf0(Udf0<?> function) {
-            return signature(
-                    getCallMethodSafe(function), false,
-                    exps -> function.call());
-        }
-
-        @SuppressWarnings({"rawtypes", "unchecked"})
-        public Builder udf1(Udf1<?, ?> function) {
-            return signature(
-                    getCallMethodSafe(function, Exp.class), false,
-                    exps -> function.call((Exp) exps.getFirst()));
-        }
-
-        @SuppressWarnings({"rawtypes", "unchecked"})
-        public Builder udf2(Udf2<?, ?, ?> function) {
-            return signature(
-                    getCallMethodSafe(function, Exp.class, Exp.class), false,
-                    exps -> function.call((Exp) exps.getFirst(), (Exp) exps.get(1)));
-        }
-
-        @SuppressWarnings({"rawtypes", "unchecked"})
-        public Builder udf3(Udf3<?, ?, ?, ?> function) {
-            return signature(
-                    getCallMethodSafe(function, Exp.class, Exp.class, Exp.class), false,
-                    exps -> function.call((Exp) exps.getFirst(), (Exp) exps.get(1), (Exp) exps.get(2)));
-        }
-
-        public Builder udfN(UdfN<?> function) {
-            return signature(
-                    getCallMethodSafe(function, Exp[].class), true,
-                    exps -> function.call(exps.toArray(new Exp[0])));
-        }
-
-        public Builder name(String name) {
-            this.name = name;
-            return this;
-        }
-
-        private Builder signature(Method method, boolean varArgs, Function<List<Exp<?>>, Exp<?>> producer) {
-            this.signature = QLFunctionSignature.reflect(method, varArgs).as(producer);
-            return this;
-        }
-
-        QLFunctionDescriptor build() {
-            return new QLFunctionDescriptor(name, signature);
-        }
-    }
-
-    static private Method getCallMethodSafe(Object function, Class<?>... parameterTypes) {
-        Class<?> aClass = function.getClass();
-
-        for (Method m : aClass.getDeclaredMethods()) {
-            if ("call".equals(m.getName())
-                    && !m.isBridge()
-                    && !m.isSynthetic()
-                    && Arrays.equals(m.getParameterTypes(), parameterTypes)) {
-                return m;
-            }
-        }
-
-        throw new RuntimeException(new NoSuchMethodException(
-                aClass.getName() + ".call(" + Arrays.toString(parameterTypes) + ")"));
     }
 
     /**
@@ -296,7 +138,10 @@ public class QLFunctionDescriptor {
         };
     }
 
-    private static Class<?> box(Class<?> type) {
+    /**
+     * Returns the wrapper class of a primitive type, or the type itself if it is not a primitive.
+     */
+    static Class<?> box(Class<?> type) {
         return type.isPrimitive() ? BOXED_PRIMITIVES.getOrDefault(type, type) : type;
     }
 
@@ -360,28 +205,66 @@ public class QLFunctionDescriptor {
     }
 
     public enum TypeClassifier {
-        NUMERIC,
-        STRING,
-        BOOLEAN,
-        DATE,
-        TIME,
-        DATETIME,
-        OFFSETDATETIME,
+        NUMERIC("castAsInt"),
+        STRING("castAsStr"),
+        BOOLEAN("castAsBool"),
+        DATE("castAsDate"),
+        TIME("castAsTime"),
+        DATETIME("castAsDateTime"),
+        OFFSETDATETIME("castAsOffsetDateTime"),
 
         /**
          * A type that is known to be a plain Object.
          */
-        OBJECT,
+        OBJECT(null),
 
         /**
          * A type that is not known statically and is only resolved at eval time, e.g. an untyped column reference.
          */
-        ANY;
+        ANY(null);
 
         /**
          * A result indicating that an argument can not be passed as a declared parameter.
          */
         public static final int NO_MATCH = -1;
+
+        /**
+         * The cost of an argument whose type is exactly the declared one.
+         */
+        public static final int EXACT = 0;
+
+        /**
+         * The cost of an argument passed to an OBJECT parameter, i.e. one written to accept any type.
+         */
+        public static final int WILDCARD = 1;
+
+        /**
+         * The cost of an argument whose type is only known at eval time passed to a typed parameter: it resolves,
+         * but the producer may still reject it.
+         */
+        public static final int COERCION = 2;
+
+        private final String castFunction;
+
+        TypeClassifier(String castFunction) {
+            this.castFunction = castFunction;
+        }
+
+        /**
+         * Returns true for a classifier that names a concrete type the grammar has an expression rule for. OBJECT
+         * and ANY are not types but the absence of one.
+         */
+        public boolean isTyped() {
+            return castFunction != null;
+        }
+
+        /**
+         * Returns the name of the QL cast function producing an expression of this type, or null for OBJECT and
+         * ANY, which a caller can not cast to.
+         */
+        public String castFunction() {
+            return castFunction;
+        }
 
         /**
          * Classifies a declared Java type: a method return type, a parameter type or the value type of an
@@ -476,20 +359,21 @@ public class QLFunctionDescriptor {
 
         /**
          * Returns the cost of passing an argument of the {@code actual} type to a parameter declared as
-         * {@code declared}. Returns {@link #NO_MATCH} if an argument can not be passed at all.
+         * {@code declared}: {@link #EXACT}, {@link #WILDCARD} or {@link #COERCION}, or {@link #NO_MATCH} if the
+         * argument can not be passed at all.
          */
         public static int matchCost(TypeClassifier declared, TypeClassifier actual) {
 
             if (declared == actual) {
-                return 0; // an exact match
+                return EXACT;
             }
 
             if (declared == OBJECT) {
-                return 1; // the parameter is declared to accept an argument of any type
+                return WILDCARD;
             }
 
             if (actual == ANY) {
-                return 2; // the argument type is only known at eval time
+                return COERCION;
             }
 
             return NO_MATCH;

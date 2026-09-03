@@ -34,7 +34,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Tests the reflective registration of a {@link QLFunction}: one descriptor per public {@code call} overload
- * declared in the class, and a {@link CallProducer} that checks and unwraps the arguments before invoking it.
+ * declared in the class, and a {@link CallProducer} that checks and unwraps the arguments before invoking it. A
+ * function that accepts a receiver of any type declares {@code Exp<?>} and converts it itself, see
+ * {@link #publicClassInAnotherPackage_IsInvokable()}.
  */
 public class QLFunctionReflectionTest {
 
@@ -178,47 +180,7 @@ public class QLFunctionReflectionTest {
         assertEquals($col("a").first(), call(functions, "first", $col("a")));
     }
 
-    // 5. @Cast
-
-    @Test
-    public void cast_CoercesAnUntypedArg() {
-
-        QLFunctions functions = registry("len", new LenFunction());
-
-        // the argument type is only known at eval time, so it is coerced rather than rejected
-        assertEquals($col("a").castAsStr().len(), call(functions, "len", $col("a")));
-    }
-
-    @Test
-    public void cast_PassesATypedArgThrough() {
-        QLFunctions functions = registry("len", new LenFunction());
-        assertEquals($str("a").len(), call(functions, "len", $str("a")));
-    }
-
-    @Test
-    public void cast_RejectsADifferentlyTypedArg() {
-
-        QLFunctions functions = registry("len", new LenFunction());
-
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> call(functions, "len", $int("a")));
-        assertEquals("Function len([NUMERIC]) not found", e.getMessage());
-    }
-
-    @Test
-    public void cast_OnACondition() {
-
-        QLFunctions functions = registry("isTrue", new CastToConditionFunction());
-
-        assertEquals($col("a").castAsBool().not().not(), call(functions, "isTrue", $col("a")));
-        assertEquals($bool("a").not().not(), call(functions, "isTrue", $bool("a")));
-
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> call(functions, "isTrue", $int("a")));
-        assertEquals("Function isTrue([NUMERIC]) not found", e.getMessage());
-    }
-
-    // 6. varargs
+    // 5. varargs
 
     @Test
     public void varArgs() {
@@ -235,7 +197,7 @@ public class QLFunctionReflectionTest {
                 call(functions, "concat", $str("a"), $col("b"), $intVal(1)));
     }
 
-    // 7. a typed parameter checked by the producer
+    // 6. a typed parameter checked by the producer
 
     @Test
     public void typedParameter_RejectsAnUntypedArgAtProduceTime() {
@@ -248,7 +210,7 @@ public class QLFunctionReflectionTest {
         assertEquals("not() expects argument 1 to be BOOLEAN, got: " + $col("a").toQL(), e.getMessage());
     }
 
-    // 8. - 12. registration errors
+    // 7. - 12. registration errors
 
     @Test
     public void bareTypedExpReturn_Rejected() {
@@ -271,17 +233,6 @@ public class QLFunctionReflectionTest {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> builder.function("bad", new NonExpReturnFunction()));
         assertTrue(e.getMessage().contains("must return an Exp"), e.getMessage());
-    }
-
-    @Test
-    public void cast_OnAnUncastableType_Rejected() {
-
-        QLFunctions.Builder builder = QLFunctions.builder().noDefaultFunctions();
-
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> builder.function("bad", new CastOnNumExpFunction()));
-        assertTrue(e.getMessage().contains("@Cast is only supported for StrExp and Condition parameters"),
-                e.getMessage());
     }
 
     @Test
@@ -458,13 +409,6 @@ public class QLFunctionReflectionTest {
         }
     }
 
-    public static class LenFunction implements QLFunction {
-
-        public NumExp<Integer> call(@Cast StrExp e) {
-            return e.len();
-        }
-    }
-
     public static class ConcatFunction implements QLFunction {
 
         public StrExp call() {
@@ -473,13 +417,6 @@ public class QLFunctionReflectionTest {
 
         public StrExp call(Exp<?>... exps) {
             return Exp.concat((Object[]) exps);
-        }
-    }
-
-    public static class CastToConditionFunction implements QLFunction {
-
-        public Condition call(@Cast Condition c) {
-            return c.not().not();
         }
     }
 
@@ -508,13 +445,6 @@ public class QLFunctionReflectionTest {
 
         public String call(Exp<?> e) {
             return e.toQL();
-        }
-    }
-
-    public static class CastOnNumExpFunction implements QLFunction {
-
-        public NumExp<?> call(@Cast NumExp<?> e) {
-            return e.abs();
         }
     }
 
