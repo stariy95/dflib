@@ -1,9 +1,10 @@
 grammar Exp;
 
 // The grammar is untyped: every rule produces an "Exp<?>", and the operators check and dispatch on the types of the
-// parsed operands in "ExpParserUtils". Functions are not grammar rules either: a call is resolved by name and
-// argument types against the "QLFunctions" registry. Only the constructs that are not expression-to-expression
-// calls (column references, "array", parameters, operators, literals) are rules.
+// parsed operands in "ExpParserUtils"; literal text is converted to values in "Literals". Functions are not grammar
+// rules either: a call is resolved by name and argument types against the "QLFunctions" registry. Only the
+// constructs that are not expression-to-expression calls (column references, "array", parameters, operators,
+// literals) are rules.
 
 @header {
 import java.util.stream.Collectors;
@@ -11,6 +12,7 @@ import java.util.stream.Collectors;
 import org.dflib.*;
 
 import static org.dflib.ql.antlr4.ExpParserUtils.*;
+import static org.dflib.ql.antlr4.Literals.*;
 }
 
 @members {
@@ -160,7 +162,7 @@ scalar returns [Object value]
  */
 anyScalarList returns [Object[] value]
     : '(' values+=scalar (',' values+=scalar)* ')' { $value = $values.stream().map(a -> a.value).toArray(); }
-    | PARAMETER { $value = objArrayParam(paramSource); }
+    | PARAMETER { $value = paramSource.nextArray(); }
     ;
 
 /**

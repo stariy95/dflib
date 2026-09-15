@@ -1,5 +1,7 @@
 package org.dflib.ql.antlr4;
 
+import java.util.Collection;
+
 public class PositionalParamSource {
 
     final Object[] data;
@@ -27,4 +29,16 @@ public class PositionalParamSource {
         return type.cast(next);
     }
 
+    /**
+     * Returns the next parameter as an array, accepting either an array or a collection.
+     */
+    Object[] nextArray() {
+        Object next = next();
+        if (next instanceof Collection) {
+            return ((Collection<?>) next).toArray();
+        } else if (next instanceof Object[]) {
+            return (Object[]) next;
+        }
+        throw new RuntimeException("Expected array or collection parameter");
+    }
 }

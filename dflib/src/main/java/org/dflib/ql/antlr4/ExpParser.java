@@ -6,6 +6,7 @@ import java.util.stream.Collectors;
 import org.dflib.*;
 
 import static org.dflib.ql.antlr4.ExpParserUtils.*;
+import static org.dflib.ql.antlr4.Literals.*;
 
 import org.antlr.v4.runtime.atn.*;
 import org.antlr.v4.runtime.dfa.DFA;
@@ -1714,7 +1715,7 @@ public class ExpParser extends Parser {
 				{
 				setState(270);
 				match(PARAMETER);
-				 ((AnyScalarListContext)_localctx).value =  objArrayParam(paramSource); 
+				 ((AnyScalarListContext)_localctx).value =  paramSource.nextArray(); 
 				}
 				break;
 			default:
