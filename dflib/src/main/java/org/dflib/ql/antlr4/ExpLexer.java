@@ -1,18 +1,9 @@
 // Generated from org/dflib/ql/antlr4/Exp.g4 by ANTLR 4.13.2
 package org.dflib.ql.antlr4;
 
-import java.math.BigInteger;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.OffsetDateTime;
-import java.time.temporal.Temporal;
-import java.util.Arrays;
-import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 import org.dflib.*;
-import org.dflib.ql.TypeClassifier;
 
 import static org.dflib.ql.antlr4.ExpParserUtils.*;
 
@@ -115,6 +106,14 @@ public class ExpLexer extends Lexer {
 
 	public Vocabulary getVocabulary() {
 		return VOCABULARY;
+	}
+
+
+	// global state of the parser
+	PositionalParamSource paramSource;
+
+	public void setParameters(Object... params) {
+	    this.paramSource = new PositionalParamSource(params);
 	}
 
 

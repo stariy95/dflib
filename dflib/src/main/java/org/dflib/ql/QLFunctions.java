@@ -10,13 +10,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.SequencedSet;
 import java.util.stream.Stream;
 
@@ -32,33 +29,9 @@ import static org.dflib.ql.TypeClassifier.WILDCARD;
 public class QLFunctions {
 
     private final Map<String, SequencedSet<QLFunctionDescriptor>> functions;
-    private final Map<String, EnumSet<TypeClassifier>> returnTypes;
-    private final Set<String> polymorphicFunctions;
-    private final Set<String> typedReturnFunctions;
 
     private QLFunctions(Map<String, SequencedSet<QLFunctionDescriptor>> functions) {
         this.functions = functions;
-        this.returnTypes = new HashMap<>();
-        this.polymorphicFunctions = new HashSet<>();
-        this.typedReturnFunctions = new HashSet<>();
-
-        for (Map.Entry<String, SequencedSet<QLFunctionDescriptor>> e : functions.entrySet()) {
-
-            EnumSet<TypeClassifier> types = EnumSet.noneOf(TypeClassifier.class);
-            for (QLFunctionDescriptor d : e.getValue()) {
-                types.add(d.returnType());
-            }
-
-            returnTypes.put(e.getKey(), types);
-
-            if (types.size() > 1) {
-                polymorphicFunctions.add(e.getKey());
-            }
-
-            if (types.stream().anyMatch(TypeClassifier::isTyped)) {
-                typedReturnFunctions.add(e.getKey());
-            }
-        }
     }
 
     /**
@@ -74,28 +47,6 @@ public class QLFunctions {
      */
     public boolean isFn(String fnName) {
         return functions.containsKey(fnName);
-    }
-
-    /**
-     * Returns true if some overload of the function may produce an expression of the given type.
-     */
-    public boolean mayReturn(String fnName, TypeClassifier type) {
-        EnumSet<TypeClassifier> types = returnTypes.get(fnName);
-        return types != null && types.contains(type);
-    }
-
-    /**
-     * Returns true if some overload of the function returns one of the types the grammar has a dedicated rule for.
-     */
-    public boolean hasTypedReturn(String fnName) {
-        return typedReturnFunctions.contains(fnName);
-    }
-
-    /**
-     * Returns true if the overloads of the function return different types.
-     */
-    public boolean isPolymorphicFn(String fnName) {
-        return polymorphicFunctions.contains(fnName);
     }
 
     /**

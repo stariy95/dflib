@@ -20,9 +20,10 @@ import static org.dflib.ql.TypeClassifier.NUMERIC;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * The "fnRelation" grammar rule: a comparison whose left-hand side is a call of a polymorphic function.
+ * Comparisons whose left-hand side is a call of a polymorphic function: the comparison is built by dispatching on the
+ * type of the expression the call produced.
  */
-public class FnRelationTest {
+public class CallComparisonTest {
 
     private QLFunctions originalFunctions;
 

@@ -12,25 +12,59 @@ import java.util.stream.Stream;
 import static org.dflib.ql.IdentityFunctions.identity;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 public class ParseErrorReportingTest {
 
     @ParameterizedTest
     @MethodSource
-    public void syntaxError_MessageUnchanged(String text, String expectedMessage) {
+    public void syntaxError(String text, String expectedMessagePrefix) {
+        QLParserException e = assertThrows(QLParserException.class, () -> Exp.parseExp(text));
+        assertTrue(e.getMessage().startsWith(expectedMessagePrefix), e.getMessage());
+    }
+
+    // the "expecting" token lists that follow are left out, as they change with every keyword added to the grammar
+    static Stream<Arguments> syntaxError() {
+        return Stream.of(
+                arguments("str(1) in ()", "line 1:11 mismatched input ')' expecting"),
+                arguments("split(, ',')", "line 1:6 extraneous input ',' expecting"),
+                arguments("int(1) +", "line 1:8 mismatched input '<EOF>' expecting"),
+
+                // ordering comparisons, "between" and "in" do not chain
+                arguments("1 < 2 < 3", "line 1:6 mismatched input '<' expecting"),
+                arguments("int(a) > 1 in (true)", "line 1:11 mismatched input 'in' expecting")
+        );
+    }
+
+    /**
+     * The grammar is untyped, so a type mismatch is not a syntax error, but an error reported by the operator.
+     */
+    @ParameterizedTest
+    @MethodSource
+    public void semanticError_OperandType(String text, String expectedMessage) {
         QLParserException e = assertThrows(QLParserException.class, () -> Exp.parseExp(text));
         assertEquals(expectedMessage, e.getMessage());
     }
 
-    static Stream<Arguments> syntaxError_MessageUnchanged() {
+    static Stream<Arguments> semanticError_OperandType() {
         return Stream.of(
-                arguments("str(1) in ()", "line 1:11 mismatched input ')' expecting {'?', STRING_LITERAL}"),
-                arguments("'hello' > 'world'", "line 1:8 mismatched input '>' expecting {<EOF>, 'as'}"),
-                arguments("split(, ',')", "line 1:6 no viable alternative at input 'split(,'"),
-                arguments("int(1) +", "line 1:8 no viable alternative at input 'int(1)+'"),
-                arguments("int(1) = null",
-                        "line 1:7 mismatched input '=' expecting {<EOF>, '+', '-', '*', '/', '%', 'as'}")
+                arguments("'hello' > 'world'", "Operator '>' at 1:8 is not supported for a string expression: 'hello'"),
+                arguments("'hello' > 1", "Operator '>' at 1:8 is not supported for a string expression: 'hello'"),
+                arguments("bool(a) in (true)", "Operator 'in' at 1:8 is not supported for a boolean expression: a"),
+                arguments("int(1) = null", "Operator '=' at 1:7 expects a numeric operand, got a generic one: null"),
+                arguments("str(a) + 1", "Operator '+' at 1:7 expects a numeric operand, got a string one: a"),
+                arguments("int(a) and int(b)", "Operator 'and' at 1:7 expects a boolean operand, got a numeric one: a"),
+                arguments("not int(a)", "Operator 'not' at 1:0 expects a boolean operand, got a numeric one: a"),
+                arguments("bool(a) = 1", "Operator '=' at 1:8 expects a boolean operand, got a numeric one: 1"),
+                arguments("date(a) > 5", "Operator '>' at 1:8 expects a date operand, got a numeric one: 5"),
+                arguments("a between 1 and 5", "Operator 'between' at 1:2 is not supported for a generic expression: a"),
+                arguments("str(1) in (1, 2)",
+                        "Operator 'in' at 1:7 expects a list of string values for a string expression, got: 1"),
+                arguments("int(1) not in ('a')",
+                        "Operator 'in' at 1:11 expects a list of numeric values for a numeric expression, got: a"),
+                arguments("date(1) in (1)",
+                        "Operator 'in' at 1:8 expects a list of string values for a date expression, got: 1")
         );
     }
 
@@ -65,12 +99,10 @@ public class ParseErrorReportingTest {
             Environment.setQLFunctions(identity(QLFunctions.builder(), "f").build());
 
             QLParserException num = assertThrows(QLParserException.class, () -> Exp.parseExp("f(str(a)) + 1"));
-            assertEquals("f(...) at 1:0 returns a string expression; a numeric expression is required here",
-                    num.getMessage());
+            assertEquals("Operator '+' at 1:10 expects a numeric operand, got a string one: a", num.getMessage());
 
             QLParserException date = assertThrows(QLParserException.class, () -> Exp.parseExp("date(a) > f(str(b))"));
-            assertEquals("f(...) at 1:10 returns a string expression; a date expression is required here",
-                    date.getMessage());
+            assertEquals("Operator '>' at 1:8 expects a date operand, got a string one: b", date.getMessage());
         } finally {
             Environment.setQLFunctions(original);
         }

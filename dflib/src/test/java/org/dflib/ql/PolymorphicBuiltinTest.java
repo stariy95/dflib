@@ -52,11 +52,11 @@ public class PolymorphicBuiltinTest {
 
     @ParameterizedTest
     @MethodSource
-    public void typedContinuation(String text, Exp<?> expected) {
+    public void operatorAfterCall(String text, Exp<?> expected) {
         assertEquals(expected, parseExp(text));
     }
 
-    static Stream<Arguments> typedContinuation() {
+    static Stream<Arguments> operatorAfterCall() {
         return Stream.of(
                 arguments("min(int(a)) + 1", $int("a").min().add($intVal(1))),
                 arguments("avg(int(a)) * 2 > 5", $int("a").avg().mul($intVal(2)).gt($intVal(5))),
@@ -70,7 +70,7 @@ public class PolymorphicBuiltinTest {
     }
 
     @Test
-    public void fnRelation_parameterRhs() {
+    public void comparison_parameterRhs() {
         LocalDateTime v = LocalDateTime.of(2024, 1, 2, 3, 4);
         assertEquals(
                 $dateTime("a").plusDays(1).gt($dateTimeVal(v)),

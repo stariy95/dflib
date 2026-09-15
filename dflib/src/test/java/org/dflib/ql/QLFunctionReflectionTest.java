@@ -73,13 +73,6 @@ public class QLFunctionReflectionTest {
         assertEquals($int("a").min(), call(functions, "min", $int("a")));
         assertEquals($str("a").min(), call(functions, "min", $str("a")));
         assertEquals($date("a").min(), call(functions, "min", $date("a")));
-
-        assertTrue(functions.mayReturn("min", TypeClassifier.NUMERIC));
-        assertTrue(functions.mayReturn("min", TypeClassifier.STRING));
-        assertTrue(functions.mayReturn("min", TypeClassifier.DATE));
-        assertFalse(functions.mayReturn("min", TypeClassifier.TIME));
-        assertFalse(functions.mayReturn("min", TypeClassifier.OBJECT));
-        assertTrue(functions.isPolymorphicFn("min"));
     }
 
     @Test
@@ -165,14 +158,6 @@ public class QLFunctionReflectionTest {
         QLFunctions functions = registry("first", new FirstFunction());
 
         assertEquals(TypeClassifier.OBJECT, functions.descriptors().findFirst().orElseThrow().returnType());
-        assertTrue(functions.mayReturn("first", TypeClassifier.OBJECT));
-
-        for (TypeClassifier t : List.of(TypeClassifier.NUMERIC, TypeClassifier.STRING, TypeClassifier.BOOLEAN,
-                TypeClassifier.DATE, TypeClassifier.TIME, TypeClassifier.DATETIME, TypeClassifier.OFFSETDATETIME)) {
-            assertFalse(functions.mayReturn("first", t), t.name());
-        }
-
-        assertFalse(functions.hasTypedReturn("first"));
         assertEquals($col("a").first(), call(functions, "first", $col("a")));
     }
 

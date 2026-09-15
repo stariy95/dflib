@@ -65,7 +65,7 @@ class DefaultQLFunctionsTest {
         TypeClassifier actual = TypeClassifier.classify(result);
 
         if (declared == TypeClassifier.ANY || declared == TypeClassifier.OBJECT) {
-            // an untyped declaration must not produce a typed result, as a typed rule would never see it
+            // an untyped declaration must not produce a typed result, or the declared return type would misdescribe it
             assertTrue(actual == TypeClassifier.ANY || actual == TypeClassifier.OBJECT,
                     () -> label + " is declared untyped but produces a " + actual + ": "
                             + result.getClass().getName());
@@ -117,37 +117,6 @@ class DefaultQLFunctionsTest {
         assertTrue(FUNCTIONS.isFn("rowNum"));
         assertTrue(FUNCTIONS.isFn("if"));
         assertFalse(FUNCTIONS.isFn("noSuchFunction"));
-    }
-
-    @Test
-    void isPolymorphicFn() {
-        assertTrue(FUNCTIONS.isPolymorphicFn("min"));
-        assertTrue(FUNCTIONS.isPolymorphicFn("max"));
-        assertTrue(FUNCTIONS.isPolymorphicFn("avg"));
-        assertTrue(FUNCTIONS.isPolymorphicFn("median"));
-        assertTrue(FUNCTIONS.isPolymorphicFn("quantile"));
-        assertTrue(FUNCTIONS.isPolymorphicFn("plusDays"));
-        assertTrue(FUNCTIONS.isPolymorphicFn("shift"));
-
-        assertFalse(FUNCTIONS.isPolymorphicFn("sum"));
-        assertFalse(FUNCTIONS.isPolymorphicFn("cumSum"));
-        assertFalse(FUNCTIONS.isPolymorphicFn("count"));
-        assertFalse(FUNCTIONS.isPolymorphicFn("year"));
-        assertFalse(FUNCTIONS.isPolymorphicFn("castAsDate"));
-        assertFalse(FUNCTIONS.isPolymorphicFn("concat"));
-        assertFalse(FUNCTIONS.isPolymorphicFn("first"));
-        assertFalse(FUNCTIONS.isPolymorphicFn("vConcat"));
-    }
-
-    @Test
-    void untypedFunctionsClaimNoTypedRule() {
-        for (String name : List.of("first", "last", "if", "ifNull", "vConcat")) {
-            for (TypeClassifier t : TypeClassifier.values()) {
-                if (t != TypeClassifier.ANY && t != TypeClassifier.OBJECT) {
-                    assertFalse(FUNCTIONS.mayReturn(name, t), name + " may return " + t);
-                }
-            }
-        }
     }
 
     @Test
