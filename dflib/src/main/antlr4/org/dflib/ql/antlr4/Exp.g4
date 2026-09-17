@@ -154,7 +154,7 @@ scalar returns [Object value]
     : boolScalar { $value = $boolScalar.value; }
     | numScalar { $value = $numScalar.value; }
     | strScalar { $value = $strScalar.value; }
-    | PARAMETER { $value = paramSource.next(); }
+    | PARAMETER { $value = paramSource.next($PARAMETER); }
     ;
 
 /**
@@ -162,7 +162,7 @@ scalar returns [Object value]
  */
 anyScalarList returns [Object[] value]
     : '(' values+=scalar (',' values+=scalar)* ')' { $value = $values.stream().map(a -> a.value).toArray(); }
-    | PARAMETER { $value = paramSource.nextArray(); }
+    | PARAMETER { $value = paramSource.nextArray($PARAMETER); }
     ;
 
 /**
@@ -224,7 +224,7 @@ column returns [Exp<?> exp]
 columnId returns [Object id]
     : integerScalar { $id = $integerScalar.value; }
     | identifier { $id = $identifier.id; }
-    | PARAMETER { $id = paramSource.next(); }
+    | PARAMETER { $id = paramSource.next($PARAMETER); }
     ;
 
 /**
@@ -234,7 +234,7 @@ columnId returns [Object id]
 identifier returns [String id]
     : IDENTIFIER { $id = $text; }
     | QUOTED_IDENTIFIER { $id = unescapeIdentifier($text.substring(1, $text.length() - 1)); }
-    | fnName { $id = $fnName.id; }
+    | keywordAsIdentifier { $id = $keywordAsIdentifier.id; }
     ;
 
 /// **Aggregate expressions**
@@ -251,7 +251,7 @@ array returns [Exp<?> exp]
  * Rule that lets the keywords of the grammar be used where an identifier is expected, e.g. as a column name.
  */
 //@ doc:inline
-fnName returns [String id]
+keywordAsIdentifier returns [String id]
     : (
     BOOL
     | INT

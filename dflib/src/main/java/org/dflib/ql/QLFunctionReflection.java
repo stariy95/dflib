@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.function.Function;
 
 /**
- * Builds function descriptors by reflecting on {@code Udf} lambdas and {@link QLFunction} classes.
+ * Builds function descriptors by reflecting on {@code Udf} objects and {@link QLFunction} classes.
  */
 class QLFunctionReflection {
 
@@ -58,6 +58,10 @@ class QLFunctionReflection {
                 exps -> function.call(exps.toArray(new Exp[0])));
     }
 
+    /**
+     * Describes a Udf by the generic parameter types of its {@code call} method. A lambda has none (its parameters
+     * are erased to a plain {@code Exp}), so a lambda registers as accepting arguments of any type.
+     */
     private static QLFunctionDescriptor reflect(
             String name,
             Method method,
@@ -71,12 +75,7 @@ class QLFunctionReflection {
             }
         }
 
-        return new QLFunctionDescriptor(
-                name,
-                TypeClassifier.classify(method.getGenericReturnType()),
-                args,
-                varArgs,
-                producer);
+        return new QLFunctionDescriptor(name, args, varArgs, producer);
     }
 
     /**
@@ -102,8 +101,8 @@ class QLFunctionReflection {
             }
         }
 
-        throw new RuntimeException(new NoSuchMethodException(
-                type.getName() + ".call(" + Arrays.toString(parameterTypes) + ")"));
+        throw new IllegalStateException("No 'call' method with parameters " + Arrays.toString(parameterTypes)
+                + " in " + type.getName());
     }
 
     /**
@@ -114,8 +113,7 @@ class QLFunctionReflection {
             .<QLFunctionDescriptor>comparingInt(d -> d.args().size())
             .thenComparing(QLFunctionReflection::argTypeOrdinals, Arrays::compare)
             .thenComparing(QLFunctionReflection::argConstancy, Arrays::compare)
-            .thenComparing(QLFunctionDescriptor::varArgs)
-            .thenComparingInt(d -> d.returnType().ordinal());
+            .thenComparing(QLFunctionDescriptor::varArgs);
 
     static List<QLFunctionDescriptor> qlFunction(String name, QLFunction function) {
 
@@ -150,6 +148,11 @@ class QLFunctionReflection {
 
     private static QLFunctionDescriptor reflectCall(String name, QLFunction function, Method method) {
 
+        if (!Exp.class.isAssignableFrom(method.getReturnType())) {
+            throw new IllegalArgumentException("A QLFunction 'call' method must return an Exp, got "
+                    + method.getReturnType().getName() + ": " + method);
+        }
+
         Parameter[] parameters = method.getParameters();
         boolean varArgs = method.isVarArgs();
         int declared = varArgs ? parameters.length - 1 : parameters.length;
@@ -160,40 +163,14 @@ class QLFunctionReflection {
         }
 
         if (varArgs) {
-            Class<?> component = parameters[parameters.length - 1].getType().getComponentType();
-            if (component == null || !Exp.class.isAssignableFrom(component)) {
+            // the resolver does not check the types of the vararg tail, so only an untyped "Exp<?>..." is allowed
+            if (parameters[parameters.length - 1].getType().getComponentType() != Exp.class) {
                 throw new IllegalArgumentException(
-                        "A vararg parameter of a QLFunction must be an Exp array: " + method);
+                        "A vararg parameter of a QLFunction must be an Exp<?> array: " + method);
             }
         }
 
-        return new QLFunctionDescriptor(
-                name,
-                returnClassifier(method),
-                args,
-                varArgs,
-                new CallProducer(name, function, method));
-    }
-
-    private static TypeClassifier returnClassifier(Method method) {
-
-        Class<?> raw = method.getReturnType();
-        if (!Exp.class.isAssignableFrom(raw)) {
-            throw new IllegalArgumentException(
-                    "A QLFunction 'call' method must return an Exp, got " + raw.getName() + ": " + method);
-        }
-
-        Type generic = method.getGenericReturnType();
-        TypeClassifier classifier = TypeClassifier.classify(generic);
-
-        // "Exp<String>" would classify as STRING without producing a StrExp, and the parser's cast would fail
-        if (raw == Exp.class && classifier.isTyped()) {
-            throw new IllegalArgumentException("A QLFunction 'call' method returning " + generic
-                    + " would claim to produce " + classifier + " while producing a bare Exp. Declare the Exp"
-                    + " subinterface actually produced (e.g. StrExp), or Exp<?>: " + method);
-        }
-
-        return classifier;
+        return new QLFunctionDescriptor(name, args, varArgs, new CallProducer(name, function, method));
     }
 
     private static QLFunctionArg callArg(Method method, Parameter parameter) {

@@ -4,11 +4,11 @@ import org.dflib.Exp;
 import org.dflib.exp.ScalarExp;
 
 /**
- * Function argument description
+ * A description of a function argument or a declared parameter: its type and whether it is (or must be) a constant.
  */
-public record QLFunctionArg(TypeClassifier type, boolean constant) {
+record QLFunctionArg(TypeClassifier type, boolean constant) {
 
-    public static QLFunctionArg of(Exp<?> exp) {
+    static QLFunctionArg of(Exp<?> exp) {
         return new QLFunctionArg(TypeClassifier.classify(exp), exp instanceof ScalarExp);
     }
 
@@ -16,7 +16,7 @@ public record QLFunctionArg(TypeClassifier type, boolean constant) {
      * Returns the cost of passing the argument to a declared parameter or {@link TypeClassifier#NO_MATCH}
      * if it can not be passed at all.
      */
-    public static int matchCost(QLFunctionArg declared, QLFunctionArg actual) {
+    static int matchCost(QLFunctionArg declared, QLFunctionArg actual) {
         if (declared.constant() && !actual.constant()) {
             return TypeClassifier.NO_MATCH;
         }

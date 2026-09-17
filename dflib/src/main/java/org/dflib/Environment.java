@@ -126,7 +126,7 @@ public class Environment {
 
     /**
      * Sets the registry of functions recognized by the QL parser, e.g.
-     * {@code setQLFunctions(QLFunctions.builder().function("myFn", udf).build())}.
+     * {@code setQLFunctions(QLFunctions.builder().function("myFn", Udf1.of(e -> e.castAsStr().trim())).build())}.
      *
      * @since 2.0.0
      */
@@ -188,7 +188,7 @@ public class Environment {
     /**
      * @since 2.0.0
      */
-    public QLFunctions getQLFunctions() {
+    public QLFunctions qlFunctions() {
         return qlFunctions;
     }
 

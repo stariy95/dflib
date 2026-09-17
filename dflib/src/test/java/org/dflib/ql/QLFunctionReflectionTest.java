@@ -7,7 +7,10 @@ import org.dflib.Environment;
 import org.dflib.Exp;
 import org.dflib.NumExp;
 import org.dflib.StrExp;
+import org.dflib.Udf0;
 import org.dflib.Udf1;
+import org.dflib.Udf2;
+import org.dflib.UdfN;
 import org.dflib.ql.fn.OtherPackageFunction;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +22,7 @@ import java.util.List;
 import static org.dflib.Exp.$bool;
 import static org.dflib.Exp.$col;
 import static org.dflib.Exp.$date;
+import static org.dflib.Exp.$decimal;
 import static org.dflib.Exp.$doubleVal;
 import static org.dflib.Exp.$int;
 import static org.dflib.Exp.$intVal;
@@ -26,12 +30,11 @@ import static org.dflib.Exp.$str;
 import static org.dflib.Exp.$strVal;
 import static org.dflib.Exp.parseExp;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Reflective registration of a {@link QLFunction}.
+ * Reflective registration of {@link QLFunction} classes and {@code Udf} objects.
  */
 public class QLFunctionReflectionTest {
 
@@ -39,7 +42,7 @@ public class QLFunctionReflectionTest {
 
     @BeforeEach
     public void saveFunctions() {
-        this.originalFunctions = Environment.commonEnv().getQLFunctions();
+        this.originalFunctions = Environment.commonEnv().qlFunctions();
     }
 
     @AfterEach
@@ -52,15 +55,11 @@ public class QLFunctionReflectionTest {
     }
 
     private static Exp<?> call(QLFunctions functions, String name, Exp<?>... args) {
-        List<Exp<?>> exps = Arrays.asList(args);
-        List<QLFunctionArg> descriptors = exps.stream().map(QLFunctionArg::of).toList();
-        return functions.function(name, descriptors).expProducer().apply(exps);
+        return functions.call(name, Arrays.asList(args));
     }
 
     private static List<String> shapes(QLFunctions functions) {
-        return functions.descriptors()
-                .map(d -> d.returnType() + " " + d.args().toString() + (d.varArgs() ? "..." : ""))
-                .toList();
+        return functions.descriptors().map(QLFunctionDescriptor::shape).toList();
     }
 
     @Test
@@ -80,11 +79,9 @@ public class QLFunctionReflectionTest {
 
         QLFunctions functions = registry("plusDays", new PlusDaysFunction());
 
-        QLFunctionDescriptor d = functions.function("plusDays",
-                List.of(new QLFunctionArg(TypeClassifier.DATE, false), new QLFunctionArg(TypeClassifier.NUMERIC, true)));
-        assertEquals("[DATE, const NUMERIC]", d.args().toString());
-
+        assertEquals(List.of("plusDays(DATE, const NUMERIC)"), shapes(functions));
         assertEquals($date("a").plusDays(3), call(functions, "plusDays", $date("a"), $intVal(3)));
+        assertEquals($date("a").plusDays(3), call(functions, "plusDays", $date("a"), Exp.$longVal(3L)));
     }
 
     @Test
@@ -104,7 +101,8 @@ public class QLFunctionReflectionTest {
 
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> call(functions, "plusDays", $date("a"), $int("b")));
-        assertEquals("Function plusDays([DATE, NUMERIC]) not found", e.getMessage());
+        assertEquals("No overload of plusDays matches plusDays(DATE, NUMERIC). Available: plusDays(DATE, const NUMERIC)",
+                e.getMessage());
     }
 
     @Test
@@ -130,8 +128,7 @@ public class QLFunctionReflectionTest {
 
         QLFunctions functions = registry("shift", new ObjectFillerFunction());
 
-        assertEquals("[OBJECT, const NUMERIC, const OBJECT]",
-                functions.descriptors().findFirst().orElseThrow().args().toString());
+        assertEquals(List.of("shift(OBJECT, const NUMERIC, const OBJECT)"), shapes(functions));
 
         assertEquals($col("a").shift(1, "x"), call(functions, "shift", $col("a"), $intVal(1), $strVal("x")));
         assertEquals($col("a").shift(1, 5), call(functions, "shift", $col("a"), $intVal(1), $intVal(5)));
@@ -146,19 +143,18 @@ public class QLFunctionReflectionTest {
 
         QLFunctions functions = registry("shift", new ShiftFunction());
 
-        assertEquals("[NUMERIC, const NUMERIC, const NUMERIC]",
-                functions.descriptors().findFirst().orElseThrow().args().toString());
-
+        assertEquals(List.of("shift(NUMERIC, const NUMERIC, const NUMERIC)"), shapes(functions));
         assertEquals($int("a").shift(2, 0), call(functions, "shift", $int("a"), $intVal(2), $intVal(0)));
     }
 
     @Test
-    public void genericExpReturn_IsObject() {
+    public void expOfATypeVariable_AcceptsAnything() {
 
         QLFunctions functions = registry("first", new FirstFunction());
 
-        assertEquals(TypeClassifier.OBJECT, functions.descriptors().findFirst().orElseThrow().returnType());
+        assertEquals(List.of("first(OBJECT)"), shapes(functions));
         assertEquals($col("a").first(), call(functions, "first", $col("a")));
+        assertEquals($int("a").first(), call(functions, "first", $int("a")));
     }
 
     @Test
@@ -166,36 +162,46 @@ public class QLFunctionReflectionTest {
 
         QLFunctions functions = registry("concat", new ConcatFunction());
 
-        assertEquals(2, functions.descriptors().count());
+        assertEquals(List.of("concat()", "concat(...)"), shapes(functions));
 
         assertEquals(Exp.concat(), call(functions, "concat"));
-
         assertEquals(Exp.concat($str("a")), call(functions, "concat", $str("a")));
         assertEquals(Exp.concat($str("a"), $col("b"), $intVal(1)),
                 call(functions, "concat", $str("a"), $col("b"), $intVal(1)));
     }
 
     @Test
-    public void typedParameter_RejectsAnUntypedArgAtProduceTime() {
+    public void varArgs_TypedComponent_Rejected() {
+
+        QLFunctions.Builder builder = QLFunctions.builder().noDefaultFunctions();
+
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> builder.function("bad", new TypedVarArgsFunction()));
+        assertTrue(e.getMessage().contains("must be an Exp<?> array"), e.getMessage());
+    }
+
+    @Test
+    public void typedParameter_RejectsAnUntypedArg() {
 
         QLFunctions functions = registry("not", new NotFunction());
 
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> call(functions, "not", $col("a")));
-        assertEquals("not() expects argument 1 to be BOOLEAN, got: " + $col("a").toQL(), e.getMessage());
+        assertEquals("No overload of not matches not(OBJECT). Available: not(BOOLEAN)."
+                + " Argument 1 is untyped; cast it to one of [BOOLEAN], e.g. castAsBool(..)", e.getMessage());
     }
 
     @Test
-    public void bareTypedExpReturn_Rejected() {
+    public void narrowExpParameter_RejectsAWiderArgAtProduceTime() {
 
-        QLFunctions.Builder builder = QLFunctions.builder().noDefaultFunctions();
+        // "DecimalExp" classifies as NUMERIC, so the resolver accepts any NumExp, and the producer has to check
+        QLFunctions functions = registry("dec", new DecimalFunction());
+
+        assertEquals($decimal("a").abs(), call(functions, "dec", $decimal("a")));
 
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> builder.function("bad", new BareExpReturnFunction()));
-        assertTrue(e.getMessage().contains("would claim to produce STRING while producing a bare Exp"),
-                e.getMessage());
-        assertTrue(e.getMessage().contains("Declare the Exp subinterface actually produced (e.g. StrExp), or Exp<?>"),
-                e.getMessage());
+                () -> call(functions, "dec", $int("a")));
+        assertEquals("dec() expects argument 1 to be a DecimalExp, got: a", e.getMessage());
     }
 
     @Test
@@ -255,20 +261,17 @@ public class QLFunctionReflectionTest {
 
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> builder.function("dup", new SameShapeFunction()));
-        assertEquals("Function dup([NUMERIC]) already defined", e.getMessage());
+        assertEquals("Function dup(NUMERIC) already defined", e.getMessage());
     }
 
     @Test
     public void overloadOrder_IsDeterministic() {
         assertEquals(
-                List.of("NUMERIC [NUMERIC]", "STRING [STRING]", "DATE [DATE]"),
+                List.of("min(NUMERIC)", "min(STRING)", "min(DATE)"),
                 shapes(registry("min", new MinFunction())));
 
         assertEquals(
-                List.of("NUMERIC []",
-                        "NUMERIC [NUMERIC]",
-                        "STRING [STRING]",
-                        "NUMERIC [NUMERIC, const NUMERIC]"),
+                List.of("mixed()", "mixed(NUMERIC)", "mixed(STRING)", "mixed(NUMERIC, const NUMERIC)"),
                 shapes(registry("mixed", new MixedArityFunction())));
 
         assertEquals(shapes(registry("mixed", new MixedArityFunction())),
@@ -285,6 +288,36 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
+    public void bodyException_AnyRuntimeExceptionIsPositioned() {
+
+        Environment.setQLFunctions(QLFunctions.builder()
+                .function("state", new StateFunction())
+                .function("npe", new NpeFunction())
+                .function("regex", new RegexFunction())
+                .build());
+
+        assertEquals("1:4 not ready",
+                assertThrows(QLParserException.class, () -> parseExp("1 + state(int(a))")).getMessage());
+
+        // no message: the exception class stands in for it
+        assertEquals("2:0 NullPointerException",
+                assertThrows(QLParserException.class, () -> parseExp("1 +\nnpe(int(a))")).getMessage());
+
+        // a library exception from the body
+        assertTrue(assertThrows(QLParserException.class, () -> parseExp("regex(str(a), '[')")).getMessage()
+                .startsWith("1:0 Unclosed character class"));
+    }
+
+    @Test
+    public void bodyException_CheckedExceptionIsWrappedAndPositioned() {
+
+        Environment.setQLFunctions(QLFunctions.builder().function("io", new CheckedFunction()).build());
+
+        assertEquals("1:4 Error calling io(): disk is full",
+                assertThrows(QLParserException.class, () -> parseExp("1 + io(int(a))")).getMessage());
+    }
+
+    @Test
     public void publicClassInAnotherPackage_IsInvokable() {
 
         QLFunctions functions = registry("other", new OtherPackageFunction());
@@ -295,6 +328,57 @@ public class QLFunctionReflectionTest {
         assertEquals($int("a").shift(2), call(functions, "other", $int("a"), $intVal(2)));
         assertEquals(Exp.concat($str("a"), $str("b"), $str("c")),
                 call(functions, "other", $str("a"), $str("b"), $str("c")));
+    }
+
+    // Udf objects
+
+    @Test
+    public void udf_TypedByItsGenericSignature() {
+
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                .function("f0", new CountUdf())
+                .function("f1", new IntUdf())
+                .function("f2", new IntStrUdf())
+                .function("fN", new VarArgsUdf())
+                .build();
+
+        assertEquals(List.of("f0()", "f1(NUMERIC)", "f2(NUMERIC, STRING)", "fN(...)"), shapes(functions));
+
+        assertEquals(Exp.count(), call(functions, "f0"));
+        assertEquals($int("a").castAsInt(), call(functions, "f1", $int("a")));
+        assertEquals(Exp.concat($int("a"), $str("b")), call(functions, "f2", $int("a"), $str("b")));
+        assertEquals($int("a").add($int("b")), call(functions, "fN", $int("a"), $int("b")));
+
+        assertThrows(IllegalArgumentException.class, () -> call(functions, "f1", $str("a")));
+        assertThrows(IllegalArgumentException.class, () -> call(functions, "f1", $col("a")));
+    }
+
+    @Test
+    public void udf_CovariantReturn() {
+
+        // the bridge "call" emitted for a covariant return carries no generic types and must be skipped
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions().function("scale", new CovariantUdf()).build();
+
+        assertEquals(List.of("scale(NUMERIC, NUMERIC)"), shapes(functions));
+    }
+
+    @Test
+    public void udf_Lambda_IsUntyped() {
+
+        // a lambda's "call" is erased to "Exp call(Exp)", so it accepts arguments of any type
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                .function("f0", Udf0.of(Exp::count))
+                .function("f1", Udf1.of(e -> e.castAsStr().trim()))
+                .function("f2", Udf2.of((a, b) -> Exp.concat(a, b)))
+                .function("fN", UdfN.of(Exp::concat))
+                .build();
+
+        assertEquals(List.of("f0()", "f1(OBJECT)", "f2(OBJECT, OBJECT)", "fN(...)"), shapes(functions));
+
+        assertEquals($col("a").castAsStr().trim(), call(functions, "f1", $col("a")));
+        assertEquals($int("a").castAsStr().trim(), call(functions, "f1", $int("a")));
+        assertEquals(Exp.concat($int("a"), $str("b")), call(functions, "f2", $int("a"), $str("b")));
+        assertEquals(Exp.concat($int("a"), $str("b"), $col("c")), call(functions, "fN", $int("a"), $str("b"), $col("c")));
     }
 
     public static class MinFunction implements QLFunction {
@@ -385,10 +469,24 @@ public class QLFunctionReflectionTest {
         }
     }
 
+    public static class TypedVarArgsFunction implements QLFunction {
+
+        public StrExp call(StrExp... exps) {
+            return Exp.concat((Object[]) exps);
+        }
+    }
+
     public static class NotFunction implements QLFunction {
 
         public Condition call(Condition c) {
             return c.not();
+        }
+    }
+
+    public static class DecimalFunction implements QLFunction {
+
+        public NumExp<?> call(DecimalExp e) {
+            return e.abs();
         }
     }
 
@@ -399,10 +497,31 @@ public class QLFunctionReflectionTest {
         }
     }
 
-    public static class BareExpReturnFunction implements QLFunction {
+    public static class StateFunction implements QLFunction {
 
-        public Exp<String> call(Exp<?> e) {
-            return e.castAsStr();
+        public NumExp<?> call(NumExp<?> e) {
+            throw new IllegalStateException("not ready");
+        }
+    }
+
+    public static class NpeFunction implements QLFunction {
+
+        public NumExp<?> call(NumExp<?> e) {
+            throw new NullPointerException();
+        }
+    }
+
+    public static class RegexFunction implements QLFunction {
+
+        public Condition call(StrExp e, String regex) {
+            return e.matches(regex);
+        }
+    }
+
+    public static class CheckedFunction implements QLFunction {
+
+        public NumExp<?> call(NumExp<?> e) throws java.io.IOException {
+            throw new java.io.IOException("disk is full");
         }
     }
 
@@ -450,6 +569,47 @@ public class QLFunctionReflectionTest {
 
         public DecimalExp call(DecimalExp e) {
             return e;
+        }
+    }
+
+    public static class CountUdf implements Udf0<Integer> {
+        @Override
+        public Exp<Integer> call() {
+            return Exp.count();
+        }
+    }
+
+    public static class IntUdf implements Udf1<Integer, Integer> {
+        @Override
+        public Exp<Integer> call(Exp<Integer> exp) {
+            return exp.castAsInt();
+        }
+    }
+
+    public static class IntStrUdf implements Udf2<Integer, String, String> {
+        @Override
+        public Exp<String> call(Exp<Integer> a, Exp<String> b) {
+            return Exp.concat(a, b);
+        }
+    }
+
+    public static class VarArgsUdf implements UdfN<Number> {
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        @Override
+        public NumExp<Number> call(Exp<?>... exps) {
+            NumExp<Number> result = (NumExp) exps[0];
+            for (int i = 1; i < exps.length; i++) {
+                result = result.add((NumExp) exps[i]);
+            }
+            return result;
+        }
+    }
+
+    public static class CovariantUdf implements Udf2<Number, Integer, Number> {
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        @Override
+        public NumExp<Number> call(Exp<Number> exp, Exp<Integer> scale) {
+            return (NumExp) exp.castAsDecimal();
         }
     }
 }

@@ -40,14 +40,14 @@ public class ExpParser extends Parser {
 		RULE_scalar = 17, RULE_anyScalarList = 18, RULE_boolScalar = 19, RULE_numScalar = 20, 
 		RULE_integerScalar = 21, RULE_floatingPointScalar = 22, RULE_strScalar = 23, 
 		RULE_column = 24, RULE_columnId = 25, RULE_identifier = 26, RULE_array = 27, 
-		RULE_fnName = 28;
+		RULE_keywordAsIdentifier = 28;
 	private static String[] makeRuleNames() {
 		return new String[] {
 			"expRoot", "expSingle", "expArray", "sorterRoot", "sorterSingle", "sorterArray", 
 			"expression", "orExp", "andExp", "notExp", "eqExp", "cmpExp", "addExp", 
 			"mulExp", "unaryExp", "primary", "fnCall", "scalar", "anyScalarList", 
 			"boolScalar", "numScalar", "integerScalar", "floatingPointScalar", "strScalar", 
-			"column", "columnId", "identifier", "array", "fnName"
+			"column", "columnId", "identifier", "array", "keywordAsIdentifier"
 		};
 	}
 	public static final String[] ruleNames = makeRuleNames();
@@ -1550,6 +1550,7 @@ public class ExpParser extends Parser {
 		public BoolScalarContext boolScalar;
 		public NumScalarContext numScalar;
 		public StrScalarContext strScalar;
+		public Token PARAMETER;
 		public BoolScalarContext boolScalar() {
 			return getRuleContext(BoolScalarContext.class,0);
 		}
@@ -1616,8 +1617,8 @@ public class ExpParser extends Parser {
 				enterOuterAlt(_localctx, 4);
 				{
 				setState(254);
-				match(PARAMETER);
-				 ((ScalarContext)_localctx).value =  paramSource.next(); 
+				((ScalarContext)_localctx).PARAMETER = match(PARAMETER);
+				 ((ScalarContext)_localctx).value =  paramSource.next(((ScalarContext)_localctx).PARAMETER); 
 				}
 				break;
 			default:
@@ -1640,6 +1641,7 @@ public class ExpParser extends Parser {
 		public Object[] value;
 		public ScalarContext scalar;
 		public List<ScalarContext> values = new ArrayList<ScalarContext>();
+		public Token PARAMETER;
 		public TerminalNode LP() { return getToken(ExpParser.LP, 0); }
 		public TerminalNode RP() { return getToken(ExpParser.RP, 0); }
 		public List<ScalarContext> scalar() {
@@ -1714,8 +1716,8 @@ public class ExpParser extends Parser {
 				enterOuterAlt(_localctx, 2);
 				{
 				setState(270);
-				match(PARAMETER);
-				 ((AnyScalarListContext)_localctx).value =  paramSource.nextArray(); 
+				((AnyScalarListContext)_localctx).PARAMETER = match(PARAMETER);
+				 ((AnyScalarListContext)_localctx).value =  paramSource.nextArray(((AnyScalarListContext)_localctx).PARAMETER); 
 				}
 				break;
 			default:
@@ -2101,6 +2103,7 @@ public class ExpParser extends Parser {
 		public Object id;
 		public IntegerScalarContext integerScalar;
 		public IdentifierContext identifier;
+		public Token PARAMETER;
 		public IntegerScalarContext integerScalar() {
 			return getRuleContext(IntegerScalarContext.class,0);
 		}
@@ -2171,8 +2174,8 @@ public class ExpParser extends Parser {
 				enterOuterAlt(_localctx, 3);
 				{
 				setState(314);
-				match(PARAMETER);
-				 ((ColumnIdContext)_localctx).id =  paramSource.next(); 
+				((ColumnIdContext)_localctx).PARAMETER = match(PARAMETER);
+				 ((ColumnIdContext)_localctx).id =  paramSource.next(((ColumnIdContext)_localctx).PARAMETER); 
 				}
 				break;
 			default:
@@ -2193,11 +2196,11 @@ public class ExpParser extends Parser {
 	@SuppressWarnings("CheckReturnValue")
 	public static class IdentifierContext extends ParserRuleContext {
 		public String id;
-		public FnNameContext fnName;
+		public KeywordAsIdentifierContext keywordAsIdentifier;
 		public TerminalNode IDENTIFIER() { return getToken(ExpParser.IDENTIFIER, 0); }
 		public TerminalNode QUOTED_IDENTIFIER() { return getToken(ExpParser.QUOTED_IDENTIFIER, 0); }
-		public FnNameContext fnName() {
-			return getRuleContext(FnNameContext.class,0);
+		public KeywordAsIdentifierContext keywordAsIdentifier() {
+			return getRuleContext(KeywordAsIdentifierContext.class,0);
 		}
 		public IdentifierContext(ParserRuleContext parent, int invokingState) {
 			super(parent, invokingState);
@@ -2260,8 +2263,8 @@ public class ExpParser extends Parser {
 				enterOuterAlt(_localctx, 3);
 				{
 				setState(322);
-				((IdentifierContext)_localctx).fnName = fnName();
-				 ((IdentifierContext)_localctx).id =  ((IdentifierContext)_localctx).fnName.id; 
+				((IdentifierContext)_localctx).keywordAsIdentifier = keywordAsIdentifier();
+				 ((IdentifierContext)_localctx).id =  ((IdentifierContext)_localctx).keywordAsIdentifier.id; 
 				}
 				break;
 			default:
@@ -2346,7 +2349,7 @@ public class ExpParser extends Parser {
 	}
 
 	@SuppressWarnings("CheckReturnValue")
-	public static class FnNameContext extends ParserRuleContext {
+	public static class KeywordAsIdentifierContext extends ParserRuleContext {
 		public String id;
 		public TerminalNode BOOL() { return getToken(ExpParser.BOOL, 0); }
 		public TerminalNode INT() { return getToken(ExpParser.INT, 0); }
@@ -2364,28 +2367,28 @@ public class ExpParser extends Parser {
 		public TerminalNode ARRAY() { return getToken(ExpParser.ARRAY, 0); }
 		public TerminalNode ASC() { return getToken(ExpParser.ASC, 0); }
 		public TerminalNode DESC() { return getToken(ExpParser.DESC, 0); }
-		public FnNameContext(ParserRuleContext parent, int invokingState) {
+		public KeywordAsIdentifierContext(ParserRuleContext parent, int invokingState) {
 			super(parent, invokingState);
 		}
-		@Override public int getRuleIndex() { return RULE_fnName; }
+		@Override public int getRuleIndex() { return RULE_keywordAsIdentifier; }
 		@Override
 		public void enterRule(ParseTreeListener listener) {
-			if ( listener instanceof ExpListener ) ((ExpListener)listener).enterFnName(this);
+			if ( listener instanceof ExpListener ) ((ExpListener)listener).enterKeywordAsIdentifier(this);
 		}
 		@Override
 		public void exitRule(ParseTreeListener listener) {
-			if ( listener instanceof ExpListener ) ((ExpListener)listener).exitFnName(this);
+			if ( listener instanceof ExpListener ) ((ExpListener)listener).exitKeywordAsIdentifier(this);
 		}
 		@Override
 		public <T> T accept(ParseTreeVisitor<? extends T> visitor) {
-			if ( visitor instanceof ExpVisitor ) return ((ExpVisitor<? extends T>)visitor).visitFnName(this);
+			if ( visitor instanceof ExpVisitor ) return ((ExpVisitor<? extends T>)visitor).visitKeywordAsIdentifier(this);
 			else return visitor.visitChildren(this);
 		}
 	}
 
-	public final FnNameContext fnName() throws RecognitionException {
-		FnNameContext _localctx = new FnNameContext(_ctx, getState());
-		enterRule(_localctx, 56, RULE_fnName);
+	public final KeywordAsIdentifierContext keywordAsIdentifier() throws RecognitionException {
+		KeywordAsIdentifierContext _localctx = new KeywordAsIdentifierContext(_ctx, getState());
+		enterRule(_localctx, 56, RULE_keywordAsIdentifier);
 		int _la;
 		try {
 			enterOuterAlt(_localctx, 1);
@@ -2400,7 +2403,7 @@ public class ExpParser extends Parser {
 				_errHandler.reportMatch(this);
 				consume();
 			}
-			 ((FnNameContext)_localctx).id =  _input.getText(_localctx.start, _input.LT(-1)); 
+			 ((KeywordAsIdentifierContext)_localctx).id =  _input.getText(_localctx.start, _input.LT(-1)); 
 			}
 		}
 		catch (RecognitionException re) {

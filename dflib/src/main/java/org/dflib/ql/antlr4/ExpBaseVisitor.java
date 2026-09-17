@@ -222,5 +222,5 @@ public class ExpBaseVisitor<T> extends AbstractParseTreeVisitor<T> implements Ex
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitFnName(ExpParser.FnNameContext ctx) { return visitChildren(ctx); }
+	@Override public T visitKeywordAsIdentifier(ExpParser.KeywordAsIdentifierContext ctx) { return visitChildren(ctx); }
 }

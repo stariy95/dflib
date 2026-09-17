@@ -296,13 +296,13 @@ public interface ExpListener extends ParseTreeListener {
 	 */
 	void exitArray(ExpParser.ArrayContext ctx);
 	/**
-	 * Enter a parse tree produced by {@link ExpParser#fnName}.
+	 * Enter a parse tree produced by {@link ExpParser#keywordAsIdentifier}.
 	 * @param ctx the parse tree
 	 */
-	void enterFnName(ExpParser.FnNameContext ctx);
+	void enterKeywordAsIdentifier(ExpParser.KeywordAsIdentifierContext ctx);
 	/**
-	 * Exit a parse tree produced by {@link ExpParser#fnName}.
+	 * Exit a parse tree produced by {@link ExpParser#keywordAsIdentifier}.
 	 * @param ctx the parse tree
 	 */
-	void exitFnName(ExpParser.FnNameContext ctx);
+	void exitKeywordAsIdentifier(ExpParser.KeywordAsIdentifierContext ctx);
 }

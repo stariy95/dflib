@@ -1,11 +1,13 @@
 package org.dflib.ql;
 
 import org.dflib.Exp;
+import org.dflib.Series;
+import org.dflib.exp.ScalarExp;
 
-import java.lang.reflect.Array;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -14,8 +16,10 @@ import java.util.List;
 import java.util.function.Function;
 
 /**
- * Produces an expression by invoking one {@code call} overload of a {@link QLFunction}, checking the expression
- * arguments against the declared parameter types and unwrapping the constant ones.
+ * Produces an expression by invoking one {@code call} overload of a {@link QLFunction}, unwrapping the constant
+ * arguments to the declared parameter types. The resolver has already matched the argument types against the
+ * declared ones, so the only checks left here are the ones it can not express: an integer parameter given a
+ * fractional constant, and an expression parameter narrower than its classifier (e.g. {@code DecimalExp}).
  */
 class CallProducer implements Function<List<Exp<?>>, Exp<?>> {
 
@@ -36,28 +40,20 @@ class CallProducer implements Function<List<Exp<?>>, Exp<?>> {
     private final QLFunction function;
     private final Method method;
     private final Class<?>[] paramTypes;
-    private final boolean[] isExp;
-    private final Class<?> varArgComponent;
+    private final boolean varArgs;
 
     CallProducer(String name, QLFunction function, Method method) {
         this.name = name;
         this.function = function;
         this.method = method;
+        this.varArgs = method.isVarArgs();
 
         Parameter[] parameters = method.getParameters();
-        int declared = method.isVarArgs() ? parameters.length - 1 : parameters.length;
-
-        this.varArgComponent = method.isVarArgs()
-                ? parameters[parameters.length - 1].getType().getComponentType()
-                : null;
+        int declared = varArgs ? parameters.length - 1 : parameters.length;
 
         this.paramTypes = new Class<?>[declared];
-        this.isExp = new boolean[declared];
-
         for (int i = 0; i < declared; i++) {
-            Class<?> type = parameters[i].getType();
-            paramTypes[i] = type;
-            isExp[i] = Exp.class.isAssignableFrom(type);
+            paramTypes[i] = parameters[i].getType();
         }
     }
 
@@ -65,20 +61,14 @@ class CallProducer implements Function<List<Exp<?>>, Exp<?>> {
     public Exp<?> apply(List<Exp<?>> args) {
 
         int declared = paramTypes.length;
-        Object[] values = new Object[declared + (varArgComponent != null ? 1 : 0)];
+        Object[] values = new Object[declared + (varArgs ? 1 : 0)];
 
         for (int i = 0; i < declared; i++) {
-            Exp<?> arg = args.get(i);
-            values[i] = isExp[i] ? expArg(i, arg) : constantArg(i, arg);
+            values[i] = Exp.class.isAssignableFrom(paramTypes[i]) ? expArg(i, args.get(i)) : constantArg(i, args.get(i));
         }
 
-        if (varArgComponent != null) {
-            int tail = args.size() - declared;
-            Object array = Array.newInstance(varArgComponent, tail);
-            for (int i = 0; i < tail; i++) {
-                Array.set(array, i, args.get(declared + i));
-            }
-            values[declared] = array;
+        if (varArgs) {
+            values[declared] = args.subList(declared, args.size()).toArray(new Exp[0]);
         }
 
         try {
@@ -104,48 +94,35 @@ class CallProducer implements Function<List<Exp<?>>, Exp<?>> {
             return arg;
         }
 
-        throw wrongArg(i, arg, "");
+        throw new IllegalArgumentException(name + "() expects argument " + (i + 1) + " to be a "
+                + paramTypes[i].getSimpleName() + ", got: " + arg.toQL());
     }
 
     private Object constantArg(int i, Exp<?> arg) {
 
         Class<?> declared = paramTypes[i];
-        Object value = ConstantArgs.constantValue(arg);
-
-        if (declared == Object.class) {
-            return value;
-        }
+        Object value = ((ScalarExp<?>) arg).reduce((Series<?>) null);
 
         if (declared == int.class || declared == Integer.class) {
-            return ConstantArgs.toInt(requireNumber(i, arg, value), arg);
+            return integerConstant((Number) value, arg).intValue();
         }
 
         if (declared == long.class || declared == Long.class) {
-            return ConstantArgs.toLong(requireNumber(i, arg, value), arg);
+            return integerConstant((Number) value, arg).longValue();
         }
 
         if (declared == double.class || declared == Double.class) {
-            return requireNumber(i, arg, value).doubleValue();
-        }
-
-        Class<?> boxed = declared == boolean.class ? Boolean.class : declared;
-        if (!boxed.isInstance(value)) {
-            throw wrongArg(i, arg, "a constant ");
+            return ((Number) value).doubleValue();
         }
 
         return value;
     }
 
-    private Number requireNumber(int i, Exp<?> arg, Object value) {
-        if (value instanceof Number n) {
+    private static Number integerConstant(Number n, Exp<?> exp) {
+        if (n instanceof Integer || n instanceof Long || n instanceof Short || n instanceof Byte || n instanceof BigInteger) {
             return n;
         }
 
-        throw wrongArg(i, arg, "a constant ");
-    }
-
-    private IllegalArgumentException wrongArg(int i, Exp<?> arg, String qualifier) {
-        return new IllegalArgumentException(name + "() expects argument " + (i + 1) + " to be " + qualifier
-                + TypeClassifier.classify(paramTypes[i]) + ", got: " + (arg != null ? arg.toQL() : "null"));
+        throw new IllegalArgumentException("Not an integer constant: " + exp.toQL());
     }
 }

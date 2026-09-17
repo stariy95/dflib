@@ -71,22 +71,32 @@ public class ParseErrorReportingTest {
     @Test
     public void semanticError_UnknownFunction() {
         QLParserException e = assertThrows(QLParserException.class, () -> Exp.parseExp("foo(1, 2)"));
-        assertEquals("Unknown function `foo` at 1:0", e.getMessage());
+        assertEquals("1:0 Unknown function: foo", e.getMessage());
+
+        QLParserException nested = assertThrows(QLParserException.class, () -> Exp.parseExp("1 + foo(1, 2)"));
+        assertEquals("1:4 Unknown function: foo", nested.getMessage());
     }
 
     @Test
     public void semanticError_NoMatchingOverload() {
+        String substrOverloads = "Available: substr(OBJECT, const NUMERIC), substr(OBJECT, const NUMERIC, const NUMERIC)";
+
         QLParserException e = assertThrows(QLParserException.class, () -> Exp.parseExp("substr('example')"));
-        assertEquals("1:0 Function substr([const STRING]) not found", e.getMessage());
+        assertEquals("1:0 No overload of substr matches substr(const STRING). " + substrOverloads, e.getMessage());
 
         QLParserException nested = assertThrows(QLParserException.class, () -> Exp.parseExp("len(substr('a'))"));
-        assertEquals("1:4 Function substr([const STRING]) not found", nested.getMessage());
+        assertEquals("1:4 No overload of substr matches substr(const STRING). " + substrOverloads, nested.getMessage());
+
+        QLParserException nonConst = assertThrows(QLParserException.class, () -> Exp.parseExp("substr(a, int(b))"));
+        assertEquals("1:0 No overload of substr matches substr(OBJECT, NUMERIC). " + substrOverloads,
+                nonConst.getMessage());
     }
 
     @Test
     public void semanticError_ProducerRejectsArgument() {
         QLParserException e = assertThrows(QLParserException.class, () -> Exp.parseExp("year(str(a))"));
-        assertEquals("1:0 Function year([STRING]) not found", e.getMessage());
+        assertEquals("1:0 No overload of year matches year(STRING)."
+                + " Available: year(DATE), year(DATETIME), year(OFFSETDATETIME)", e.getMessage());
 
         QLParserException scale = assertThrows(QLParserException.class, () -> Exp.parseExp("scale(int(a), 1.5)"));
         assertEquals("1:0 Not an integer constant: 1.5", scale.getMessage());
@@ -94,7 +104,7 @@ public class ParseErrorReportingTest {
 
     @Test
     public void semanticError_WrongReturnType() {
-        QLFunctions original = Environment.commonEnv().getQLFunctions();
+        QLFunctions original = Environment.commonEnv().qlFunctions();
         try {
             Environment.setQLFunctions(identity(QLFunctions.builder(), "f").build());
 

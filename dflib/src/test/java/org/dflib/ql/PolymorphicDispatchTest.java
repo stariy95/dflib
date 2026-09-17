@@ -6,25 +6,29 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
 import static org.dflib.Exp.$bool;
 import static org.dflib.Exp.$col;
 import static org.dflib.Exp.$date;
+import static org.dflib.Exp.$dateTime;
+import static org.dflib.Exp.$dateTimeVal;
 import static org.dflib.Exp.$int;
 import static org.dflib.Exp.$intVal;
 import static org.dflib.Exp.$str;
 import static org.dflib.Exp.$strVal;
-import static org.dflib.Exp.count;
 import static org.dflib.Exp.parseExp;
+import static org.dflib.ql.DescriptorBuilder.descriptor;
 import static org.dflib.ql.IdentityFunctions.identity;
-import static org.dflib.ql.TypeClassifier.ANY;
 import static org.dflib.ql.TypeClassifier.NUMERIC;
 import static org.dflib.ql.TypeClassifier.OBJECT;
-import static org.dflib.ql.DescriptorBuilder.descriptor;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Calls of polymorphic functions in various syntactic positions: the function is resolved by its argument types, and
- * the surrounding operator is then checked against the type of the result.
+ * the surrounding operator is then checked against the type of the result. "pmin" and "plusLike" are identity
+ * functions with one overload per receiver type, standing in for the built-ins like "min" and "plusDays".
  */
 public class PolymorphicDispatchTest {
 
@@ -32,21 +36,15 @@ public class PolymorphicDispatchTest {
 
     @BeforeEach
     public void setUpFunctions() {
-        this.originalFunctions = Environment.commonEnv().getQLFunctions();
+        this.originalFunctions = Environment.commonEnv().qlFunctions();
 
         QLFunctions.Builder builder = QLFunctions.builder();
         identity(builder, "pmin");
         identity(builder, "plusLike", new QLFunctionArg(NUMERIC, true));
 
         Environment.setQLFunctions(builder
-                .function(descriptor("foo")
-                        .returning(NUMERIC)
-                        .arg(OBJECT)
-                        .as(args -> args.get(0).castAsInt()))
-                .function(descriptor("anyLike")
-                        .returning(ANY)
-                        .arg(OBJECT)
-                        .as(args -> args.get(0).first()))
+                .function(descriptor("foo").arg(OBJECT).as(args -> args.get(0).castAsInt()))
+                .function(descriptor("anyLike").arg(OBJECT).as(args -> args.get(0).first()))
                 .build());
     }
 
@@ -56,27 +54,11 @@ public class PolymorphicDispatchTest {
     }
 
     @Test
-    public void fixedReturn() {
-        assertEquals($int("a").abs(), parseExp("abs(int(a))"));
-        assertEquals($int("a").abs().sum(), parseExp("sum(abs(int(a)))"));
-        assertEquals($int("a").abs().castAsDecimal().scale(2), parseExp("scale(abs(int(a)), 2)"));
-        assertEquals(count($col("x").castAsBool()), parseExp("count(castAsBool(x))"));
-        assertEquals($int("a").abs().shift(1), parseExp("shift(abs(int(a)), 1)"));
-        assertEquals(Exp.ifExp($col("a").castAsBool(), $intVal(1), $intVal(2)),
-                parseExp("if(castAsBool(a), 1, 2)"));
-    }
-
-    @Test
-    public void noTypedReturn() {
-        assertEquals($str("a").split(","), parseExp("split(str(a), ',')"));
-        assertEquals($col("a").first(), parseExp("anyLike(a)"));
-    }
-
-    @Test
     public void polymorphic_Bare() {
         assertEquals($str("a"), parseExp("pmin(str(a))"));
         assertEquals($int("a"), parseExp("pmin(int(a))"));
         assertEquals($col("a").first(), parseExp("pmin(anyLike(a))"));
+        assertEquals($col("a").first(), parseExp("anyLike(a)"));
     }
 
     @Test
@@ -98,21 +80,39 @@ public class PolymorphicDispatchTest {
     public void polymorphic_Parenthesized() {
         assertEquals($int("a").add($intVal(1)), parseExp("(pmin(int(a))) + 1"));
         assertEquals($intVal(1).add($int("a").mul($intVal(2))), parseExp("1 + (pmin(int(a))) * 2"));
+        assertEquals($int("a").gt($intVal(5)), parseExp("(pmin(int(a))) > 5"));
     }
 
     @Test
     public void polymorphic_Comparison() {
         assertEquals($int("a").gt($intVal(5)), parseExp("pmin(int(a)) > 5"));
+        assertEquals($int("a").le($intVal(5)), parseExp("plusLike(int(a), 1) <= 5"));
+        assertEquals($int("a").ne($intVal(5)), parseExp("plusLike(int(a), 1) != 5"));
         assertEquals($str("a").eq($strVal("x")), parseExp("pmin(str(a)) = 'x'"));
-        assertEquals($date("a").between("2024-01-01", "2024-12-31"),
-                parseExp("pmin(date(a)) between '2024-01-01' and '2024-12-31'"));
+        assertEquals($date("a").gt("2024-01-01"), parseExp("pmin(date(a)) > '2024-01-01'"));
         assertEquals($col("x").eq($col("y")), parseExp("pmin(x) = pmin(y)"));
-        assertEquals($int("a").notIn(1, 2), parseExp("pmin(int(a)) not in (1, 2)"));
     }
 
     @Test
-    public void polymorphic_ParenthesizedComparison() {
-        assertEquals($int("a").gt($intVal(5)), parseExp("(pmin(int(a))) > 5"));
+    public void polymorphic_ComparisonWithAParameter() {
+        LocalDateTime dt = LocalDateTime.of(2024, 1, 2, 3, 4, 5);
+        assertEquals($dateTime("a").gt($dateTimeVal(dt)), parseExp("plusLike(dateTime(a), 1) > ?", dt));
+    }
+
+    @Test
+    public void polymorphic_Between() {
+        assertEquals($int("a").between($intVal(1), $intVal(5)), parseExp("plusLike(int(a), 1) between 1 and 5"));
+        assertEquals($int("a").notBetween($intVal(1), $intVal(5)),
+                parseExp("plusLike(int(a), 1) not between 1 and 5"));
+        assertEquals($date("a").between("2024-01-01", "2024-12-31"),
+                parseExp("pmin(date(a)) between '2024-01-01' and '2024-12-31'"));
+    }
+
+    @Test
+    public void polymorphic_In() {
+        assertEquals($str("a").in("x", "y"), parseExp("pmin(str(a)) in ('x', 'y')"));
+        assertEquals($int("a").notIn(1, 2), parseExp("plusLike(int(a), 1) not in (1, 2)"));
+        assertEquals($date("a").in(LocalDate.parse("2024-01-01")), parseExp("pmin(date(a)) in ('2024-01-01')"));
     }
 
     @Test

@@ -10,6 +10,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.time.LocalDateTime;
 import java.util.stream.Stream;
 
+import static org.dflib.Exp.$boolVal;
 import static org.dflib.Exp.$col;
 import static org.dflib.Exp.$dateTimeVal;
 import static org.dflib.Exp.$int;
@@ -34,25 +35,19 @@ public class FixedReturnFunctionTest {
         assertEquals($dateTimeVal(ldt).hour(), parseExp("hour(?)", ldt));
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"year(null)", "hour(null)"})
-    public void fieldFn_null_throws(String text) {
-        QLParserException e = assertThrows(QLParserException.class, () -> parseExp(text));
-        assertEquals("1:0 Function " + text.substring(0, text.indexOf('('))
-                + "([const OBJECT]) not found", e.getMessage());
-    }
-
     @Test
-    public void fieldFn_nullParameter_throws() {
-        QLParserException e = assertThrows(QLParserException.class,
-                () -> parseExp("month(?)", new Object[]{null}));
-        assertEquals("1:0 Function month([const OBJECT]) not found", e.getMessage());
-    }
+    public void fieldFn_null_throws() {
+        QLParserException year = assertThrows(QLParserException.class, () -> parseExp("year(null)"));
+        assertEquals("1:0 No overload of year matches year(const OBJECT)."
+                + " Available: year(DATE), year(DATETIME), year(OFFSETDATETIME)."
+                + " Argument 1 is untyped; cast it to one of [DATE, DATETIME, OFFSETDATETIME], e.g. castAsDate(..)",
+                year.getMessage());
 
-    @Test
-    public void count_untypedColumn() {
-        QLParserException e = assertThrows(QLParserException.class, () -> parseExp("count(a)"));
-        assertEquals("1:0 count() expects argument 1 to be BOOLEAN, got: a", e.getMessage());
+        QLParserException hour = assertThrows(QLParserException.class, () -> parseExp("hour(?)", new Object[]{null}));
+        assertEquals("1:0 No overload of hour matches hour(const OBJECT)."
+                + " Available: hour(TIME), hour(DATETIME), hour(OFFSETDATETIME)."
+                + " Argument 1 is untyped; cast it to one of [TIME, DATETIME, OFFSETDATETIME], e.g. castAsTime(..)",
+                hour.getMessage());
     }
 
     @ParameterizedTest
@@ -70,7 +65,13 @@ public class FixedReturnFunctionTest {
                 arguments("year(castAsDate('2020-01-01'))", $strVal("2020-01-01").castAsDate().year()),
                 arguments("abs(int(x)) > count()", $int("x").abs().gt(count())),
                 arguments("cumSum(int(a)) > scale(int(b), 2)",
-                        $int("a").cumSum().gt($int("b").castAsDecimal().scale(2)))
+                        $int("a").cumSum().gt($int("b").castAsDecimal().scale(2))),
+                arguments("count(castAsBool(a))", count($col("a").castAsBool())),
+                arguments("castAsBool(a) = true", $col("a").castAsBool().eq($boolVal(true))),
+                arguments("shift(abs(int(a)), 1)", $int("a").abs().shift(1)),
+                arguments("abs(abs(int(a)))", $int("a").abs().abs()),
+                arguments("if(castAsBool(a), abs(int(b)), 0)",
+                        Exp.ifExp($col("a").castAsBool(), $int("b").abs(), Exp.$val(0)))
         );
     }
 

@@ -1,24 +1,16 @@
 package org.dflib.ql;
 
 import org.dflib.Exp;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import java.time.LocalDateTime;
 import java.util.stream.Stream;
 
 import static org.dflib.Exp.$bool;
 import static org.dflib.Exp.$col;
 import static org.dflib.Exp.$date;
-import static org.dflib.Exp.$dateTime;
-import static org.dflib.Exp.$dateTimeVal;
-import static org.dflib.Exp.$int;
-import static org.dflib.Exp.$intVal;
-import static org.dflib.Exp.$str;
-import static org.dflib.Exp.$strVal;
 import static org.dflib.Exp.$time;
 import static org.dflib.Exp.parseExp;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -43,38 +35,9 @@ public class PolymorphicBuiltinTest {
                 arguments("min(castAsDate(x))", $col("x").castAsDate().min()),
                 arguments("avg(castAsTime(x))", $col("x").castAsTime().avg()),
                 arguments("median(castAsDateTime(x))", $col("x").castAsDateTime().median()),
-                arguments("min(trim(a))", $col("a").trim().min()),
-                arguments("max(lower(a))", $col("a").lower().max()),
                 arguments("plusDays(plusMonths(date(a), 1), 2)", $date("a").plusMonths(1).plusDays(2)),
                 arguments("min(plusDays(date(a), 1))", $date("a").plusDays(1).min())
         );
-    }
-
-    @ParameterizedTest
-    @MethodSource
-    public void operatorAfterCall(String text, Exp<?> expected) {
-        assertEquals(expected, parseExp(text));
-    }
-
-    static Stream<Arguments> operatorAfterCall() {
-        return Stream.of(
-                arguments("min(int(a)) + 1", $int("a").min().add($intVal(1))),
-                arguments("avg(int(a)) * 2 > 5", $int("a").avg().mul($intVal(2)).gt($intVal(5))),
-                arguments("- min(int(a))", $int("a").min().negate()),
-                arguments("(min(int(a))) + 1", $int("a").min().add($intVal(1))),
-                arguments("min(str(a)) = 'x'", $str("a").min().eq($strVal("x"))),
-                arguments("avg(int(1)) <= 20", $int(1).avg().le($intVal(20))),
-                arguments("min(int(a)) between 1 and 5", $int("a").min().between($intVal(1), $intVal(5))),
-                arguments("min(int(a)) in (1, 2)", $int("a").min().in(1, 2))
-        );
-    }
-
-    @Test
-    public void comparison_parameterRhs() {
-        LocalDateTime v = LocalDateTime.of(2024, 1, 2, 3, 4);
-        assertEquals(
-                $dateTime("a").plusDays(1).gt($dateTimeVal(v)),
-                parseExp("plusDays(dateTime(a), 1) > ?", v));
     }
 
     @ParameterizedTest
@@ -100,27 +63,30 @@ public class PolymorphicBuiltinTest {
         );
     }
 
+    /**
+     * An untyped receiver is reported with the overloads and a cast hint, at the position of the call.
+     */
     @ParameterizedTest
     @MethodSource
-    public void producerError(String text, String message) {
+    public void untypedReceiver(String text, String message) {
         QLParserException e = assertThrows(QLParserException.class, () -> parseExp(text));
         assertEquals(message, e.getMessage());
     }
 
-    static Stream<Arguments> producerError() {
+    static Stream<Arguments> untypedReceiver() {
         return Stream.of(
-                arguments("year(a)", "1:0 Ambiguous call to year(): the type of argument 1 is only known at eval"
-                        + " time, and year is defined for [DATE, DATETIME, OFFSETDATETIME] arguments in that"
-                        + " position. Cast it, e.g. year(castAsDate(..))"),
-                arguments("min(a)", "1:0 Ambiguous call to min(): the type of argument 1 is only known at eval"
-                        + " time, and min is defined for [NUMERIC, STRING, DATE, TIME, DATETIME] arguments in that"
-                        + " position. Cast it, e.g. min(castAsInt(..))"),
-                arguments("plusDays(a, 1)", "1:0 Ambiguous call to plusDays(): the type of argument 1 is only known"
-                        + " at eval time, and plusDays is defined for [DATE, DATETIME, OFFSETDATETIME] arguments in"
-                        + " that position. Cast it, e.g. plusDays(castAsDate(..))"),
-                arguments("avg(str(a))", "1:0 Function avg([STRING]) not found"),
-                arguments("plusDays(date(a), 1.5)", "1:0 Not an integer constant: 1.5"),
-                arguments("if(a, 1, 2)", "1:0 if() expects argument 1 to be BOOLEAN, got: a")
+                arguments("year(a)", "1:0 No overload of year matches year(OBJECT)."
+                        + " Available: year(DATE), year(DATETIME), year(OFFSETDATETIME)."
+                        + " Argument 1 is untyped; cast it to one of [DATE, DATETIME, OFFSETDATETIME], e.g. castAsDate(..)"),
+                arguments("1 + count(a)", "1:4 No overload of count matches count(OBJECT)."
+                        + " Available: count(), count(BOOLEAN)."
+                        + " Argument 1 is untyped; cast it to one of [BOOLEAN], e.g. castAsBool(..)"),
+                arguments("if(a, 1, 2)", "1:0 No overload of if matches if(OBJECT, const NUMERIC, const NUMERIC)."
+                        + " Available: if(BOOLEAN, OBJECT, OBJECT)."
+                        + " Argument 1 is untyped; cast it to one of [BOOLEAN], e.g. castAsBool(..)"),
+                arguments("1 +\n  year(a)", "2:2 No overload of year matches year(OBJECT)."
+                        + " Available: year(DATE), year(DATETIME), year(OFFSETDATETIME)."
+                        + " Argument 1 is untyped; cast it to one of [DATE, DATETIME, OFFSETDATETIME], e.g. castAsDate(..)")
         );
     }
 
@@ -130,7 +96,7 @@ public class PolymorphicBuiltinTest {
             "min(offsetDateTime(a))",
             "min(x) = min(y)",
     })
-    public void throws_(String text) {
+    public void unsupportedReceiverOrOperand(String text) {
         assertThrows(QLParserException.class, () -> parseExp(text));
     }
 

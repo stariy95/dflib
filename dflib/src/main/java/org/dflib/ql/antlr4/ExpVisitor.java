@@ -187,9 +187,9 @@ public interface ExpVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitArray(ExpParser.ArrayContext ctx);
 	/**
-	 * Visit a parse tree produced by {@link ExpParser#fnName}.
+	 * Visit a parse tree produced by {@link ExpParser#keywordAsIdentifier}.
 	 * @param ctx the parse tree
 	 * @return the visitor result
 	 */
-	T visitFnName(ExpParser.FnNameContext ctx);
+	T visitKeywordAsIdentifier(ExpParser.KeywordAsIdentifierContext ctx);
 }

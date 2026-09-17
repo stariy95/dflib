@@ -12,7 +12,6 @@ import org.dflib.Series;
 import org.dflib.StrExp;
 import org.dflib.TimeExp;
 import org.dflib.exp.str.StrScalarExp;
-import org.dflib.ql.QLFunctionArg;
 import org.dflib.ql.QLFunctions;
 import org.dflib.ql.QLParserException;
 
@@ -28,7 +27,6 @@ import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.IntFunction;
-import java.util.stream.Collectors;
 
 /**
  * Actions of the QL grammar that build expressions. The grammar is untyped, so the operators check the types of
@@ -81,6 +79,13 @@ class ExpParserUtils {
      * Builds a column reference of the type named by the keyword token.
      */
     public static Exp<?> col(Token type, Object columnId) {
+
+        if (!(columnId instanceof Integer || columnId instanceof String)) {
+            throw new QLParserException("Column '" + type.getText() + "(..)' at " + position(type)
+                    + " expects an integer index or a string name, got: "
+                    + (columnId != null ? columnId + " (" + columnId.getClass().getSimpleName() + ")" : "null"));
+        }
+
         return switch (type.getType()) {
             case ExpParser.INT -> col(columnId, Exp::$int, Exp::$int);
             case ExpParser.LONG -> col(columnId, Exp::$long, Exp::$long);
@@ -127,27 +132,18 @@ class ExpParserUtils {
     // Functions
 
     /**
-     * Resolves a function call against the registry and builds its expression. Resolution and argument errors are
-     * reported as a positioned {@link QLParserException}.
+     * Resolves a function call against the registry and builds its expression. Resolution and argument errors, and
+     * anything thrown by the function body, are reported as a {@link QLParserException} positioned at the call.
      */
     public static Exp<?> fn(Token name, List<Exp<?>> args) {
-
-        QLFunctions functions = Environment.commonEnv().getQLFunctions();
-        if (!functions.isFn(name.getText())) {
-            throw new QLParserException("Unknown function `" + name.getText() + "` at " + position(name));
-        }
-
-        List<QLFunctionArg> argDescriptors = args.stream()
-                .map(QLFunctionArg::of)
-                .collect(Collectors.toList());
-
         try {
-            return functions
-                    .function(name.getText(), argDescriptors)
-                    .expProducer()
-                    .apply(args);
-        } catch (IllegalArgumentException e) {
-            throw new QLParserException(position(name) + " " + e.getMessage(), e);
+            return Environment.commonEnv().qlFunctions().call(name.getText(), args);
+        } catch (QLParserException e) {
+            // a nested call already reported its own position
+            throw e;
+        } catch (RuntimeException e) {
+            String message = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            throw new QLParserException(position(name) + " " + message, e);
         }
     }
 

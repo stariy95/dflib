@@ -12,7 +12,6 @@ import java.util.function.Function;
 class DescriptorBuilder {
 
     private final String name;
-    private TypeClassifier returnType;
     private final List<QLFunctionArg> args = new ArrayList<>();
     private boolean varArgs;
 
@@ -22,11 +21,6 @@ class DescriptorBuilder {
 
     static DescriptorBuilder descriptor(String name) {
         return new DescriptorBuilder(name);
-    }
-
-    DescriptorBuilder returning(TypeClassifier type) {
-        this.returnType = type;
-        return this;
     }
 
     DescriptorBuilder arg(TypeClassifier type) {
@@ -48,6 +42,6 @@ class DescriptorBuilder {
     }
 
     QLFunctionDescriptor as(Function<List<Exp<?>>, Exp<?>> producer) {
-        return new QLFunctionDescriptor(name, returnType, args, varArgs, producer);
+        return new QLFunctionDescriptor(name, args, varArgs, producer);
     }
 }

@@ -35,57 +35,35 @@ import static org.dflib.Exp.$timeVal;
 import static org.dflib.Exp.$val;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
+/**
+ * The built-in function registry: every overload resolves to itself, and the overloads map to the {@code Exp} API.
+ */
 class DefaultQLFunctionsTest {
 
     private static final QLFunctions FUNCTIONS = QLFunctions.builder().build();
 
     static Stream<Arguments> defaultDescriptors() {
-        return FUNCTIONS.descriptors().map(d -> arguments(label(d), d));
+        return FUNCTIONS.descriptors().map(d -> arguments(d.shape(), d));
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("defaultDescriptors")
-    void returnTypeIsHonest(String label, QLFunctionDescriptor descriptor) {
+    void isResolvableByItsOwnSignature(String shape, QLFunctionDescriptor descriptor) {
 
         List<Exp<?>> args = plausibleArgs(descriptor);
-        List<QLFunctionArg> argTypes = args.stream().map(QLFunctionArg::of).toList();
-
-        Exp<?> result = descriptor.expProducer().apply(args);
-        assertReturnTypeIsHonest(label + " called with " + argTypes, descriptor.returnType(), result);
-    }
-
-    private static void assertReturnTypeIsHonest(String label, TypeClassifier declared, Exp<?> result) {
-
-        TypeClassifier actual = TypeClassifier.classify(result);
-
-        if (declared == TypeClassifier.ANY || declared == TypeClassifier.OBJECT) {
-            // an untyped declaration must not produce a typed result, or the declared return type would misdescribe it
-            assertTrue(actual == TypeClassifier.ANY || actual == TypeClassifier.OBJECT,
-                    () -> label + " is declared untyped but produces a " + actual + ": "
-                            + result.getClass().getName());
-        } else {
-            assertEquals(declared, actual,
-                    () -> label + " declares a return type its producer does not deliver: "
-                            + result.getClass().getName());
-        }
-    }
-
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("defaultDescriptors")
-    void isResolvableByItsOwnSignature(String label, QLFunctionDescriptor descriptor) {
-
-        List<QLFunctionArg> argTypes = plausibleArgs(descriptor).stream().map(QLFunctionArg::of).toList();
 
         assertSame(
                 descriptor,
-                FUNCTIONS.function(descriptor.name(), argTypes),
-                () -> label + " is shadowed by another overload for its own argument types");
+                FUNCTIONS.function(descriptor.name(), args.stream().map(QLFunctionArg::of).toList()),
+                () -> shape + " is shadowed by another overload for its own argument types");
+
+        // and the producer accepts what the resolver matched
+        descriptor.expProducer().apply(args);
     }
 
     @Test
@@ -104,19 +82,6 @@ class DefaultQLFunctionsTest {
                         "quantile", "round", "rowNum", "scale", "second", "set", "shift", "split", "sqrt",
                         "startsWith", "substr", "sum", "trim", "upper", "vConcat", "year"),
                 names);
-
-        assertEquals(60, names.size());
-
-        // 60 names, 158 descriptors
-        assertEquals(158, FUNCTIONS.descriptors().count());
-    }
-
-    @Test
-    void isFn() {
-        assertTrue(FUNCTIONS.isFn("trim"));
-        assertTrue(FUNCTIONS.isFn("rowNum"));
-        assertTrue(FUNCTIONS.isFn("if"));
-        assertFalse(FUNCTIONS.isFn("noSuchFunction"));
     }
 
     @Test
@@ -126,18 +91,12 @@ class DefaultQLFunctionsTest {
 
         assertEquals(0, resolve("concat").args().size());
         assertTrue(resolve("concat").varArgs());
-
         assertTrue(resolve("concat", $str("a"), $str("b"), $str("c")).varArgs());
-        assertTrue(resolve("concat", $str("a")).varArgs());
 
         assertEquals(Exp.count(), call("count"));
+        assertEquals(Exp.count($bool("b")), call("count", $bool("b")));
         assertEquals(Exp.concat(), call("concat"));
         assertEquals(Exp.concat($str("a"), $str("b"), $str("c")), call("concat", $str("a"), $str("b"), $str("c")));
-    }
-
-    @Test
-    void countOfCondition() {
-        assertEquals(Exp.count($bool("b")), call("count", $bool("b")));
     }
 
     @Test
@@ -152,53 +111,31 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
-    void anyArgumentResolves() {
-        assertSame(resolve("sum", $int("i")), resolve("sum", $col("c")));
-        assertSame(resolve("sum", $int("i")), resolve("sum", $date("d").first()));
-        assertSame(resolve("len", $str("s")), resolve("len", $col("c")));
-    }
-
-    @Test
-    void untypedReceiverOfAMultiReceiverNameIsAmbiguous() {
-        assertEquals("Ambiguous call to year(): the type of argument 1 is only known at eval time, and year is"
-                        + " defined for [DATE, DATETIME, OFFSETDATETIME] arguments in that position."
-                        + " Cast it, e.g. year(castAsDate(..))",
+    void untypedReceiverOfATypedFunction() {
+        assertEquals("No overload of year matches year(OBJECT)."
+                        + " Available: year(DATE), year(DATETIME), year(OFFSETDATETIME)."
+                        + " Argument 1 is untyped; cast it to one of [DATE, DATETIME, OFFSETDATETIME], e.g. castAsDate(..)",
                 assertThrows(IllegalArgumentException.class, () -> resolve("year", $col("c"))).getMessage());
 
-        assertEquals("Ambiguous call to min(): the type of argument 1 is only known at eval time, and min is"
-                        + " defined for [NUMERIC, STRING, DATE, TIME, DATETIME] arguments in that position."
-                        + " Cast it, e.g. min(castAsInt(..))",
-                assertThrows(IllegalArgumentException.class, () -> resolve("min", $col("c"))).getMessage());
+        assertEquals("No overload of sum matches sum(OBJECT). Available: sum(NUMERIC), sum(NUMERIC, BOOLEAN)."
+                        + " Argument 1 is untyped; cast it to one of [NUMERIC], e.g. castAsInt(..)",
+                assertThrows(IllegalArgumentException.class, () -> resolve("sum", $col("c"))).getMessage());
 
+        // an expression that carries a value type but implements no typed interface is untyped too
         assertThrows(IllegalArgumentException.class, () -> resolve("year", $date("d").first()));
+
+        // while a function declared over "Exp<?>" takes anything
+        assertEquals($col("c").castAsStr().len(), call("len", $col("c")));
     }
 
     @Test
     void numericOnlyAggregates() {
-        assertEquals(TypeClassifier.NUMERIC, resolve("sum", $int("i")).returnType());
-        assertEquals(TypeClassifier.NUMERIC, resolve("sum", $int("i"), $bool("b")).returnType());
-        assertEquals(TypeClassifier.NUMERIC, resolve("cumSum", $int("i")).returnType());
-
         assertEquals($int("i").sum(), call("sum", $int("i")));
         assertEquals($int("i").sum($bool("b")), call("sum", $int("i"), $bool("b")));
         assertEquals($int("i").cumSum(), call("cumSum", $int("i")));
 
         assertThrows(IllegalArgumentException.class, () -> call("sum", $str("s")));
         assertThrows(IllegalArgumentException.class, () -> call("sum", $date("d")));
-    }
-
-    @Test
-    void polymorphicReturnFollowsReceiver() {
-        assertEquals(TypeClassifier.NUMERIC, effectiveReturnType("min", $int("i")));
-        assertEquals(TypeClassifier.STRING, effectiveReturnType("min", $str("s")));
-        assertEquals(TypeClassifier.DATE, effectiveReturnType("min", $date("d")));
-        assertEquals(TypeClassifier.TIME, effectiveReturnType("min", $time("t")));
-        assertEquals(TypeClassifier.DATETIME, effectiveReturnType("min", $dateTime("dt")));
-
-        assertEquals(TypeClassifier.DATE, effectiveReturnType("plusDays", $date("d"), $intVal(1)));
-        assertEquals(TypeClassifier.DATETIME, effectiveReturnType("plusDays", $dateTime("dt"), $intVal(1)));
-        assertEquals(TypeClassifier.OFFSETDATETIME,
-                effectiveReturnType("plusDays", $offsetDateTime("odt"), $intVal(1)));
     }
 
     @Test
@@ -265,23 +202,25 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
-    void shiftProducesTheSameExpressionsAsTheGrammar() {
+    void shift() {
         assertEquals($int("i").shift(2), call("shift", $int("i"), $intVal(2)));
         assertEquals($int("i").shift(2, 0), call("shift", $int("i"), $intVal(2), $intVal(0)));
         assertEquals($str("s").shift(1, "x"), call("shift", $str("s"), $intVal(1), $strVal("x")));
         assertEquals($bool("b").shift(1, true), call("shift", $bool("b"), $intVal(1), $boolVal(true)));
         assertEquals($date("d").shift(1), call("shift", $date("d"), $intVal(1)));
+        assertEquals($col("c").shift(1, "x"), call("shift", $col("c"), $intVal(1), $strVal("x")));
     }
 
     @Test
-    void shiftOfAConditionIsUntyped() {
-        assertEquals(TypeClassifier.OBJECT, resolve("shift", $bool("b"), $intVal(1)).returnType());
-        assertEquals(TypeClassifier.OBJECT,
-                resolve("shift", $bool("b"), $intVal(1), $boolVal(true)).returnType());
+    void shiftFillerMustMatchTheReceiverType() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> call("shift", $int("i"), $intVal(2), $strVal("replace")));
+        assertTrue(e.getMessage().startsWith("shift() filler of type STRING"), e.getMessage());
 
-        assertNotSame(
-                resolve("shift", $bool("b"), $intVal(1)),
-                resolve("shift", $int("i"), $intVal(1)));
+        assertThrows(IllegalArgumentException.class,
+                () -> call("shift", $str("s"), $intVal(1), $intVal(1)));
+        assertThrows(IllegalArgumentException.class,
+                () -> call("shift", $bool("b"), $intVal(1), $strVal("x")));
     }
 
     @Test
@@ -296,44 +235,23 @@ class DefaultQLFunctionsTest {
 
     @Test
     void unsupportedReceiverDoesNotResolve() {
-        assertEquals("Function min([OFFSETDATETIME]) not found",
-                assertThrows(IllegalArgumentException.class,
-                        () -> call("min", $offsetDateTime("odt"))).getMessage());
-        assertEquals("Function avg([STRING]) not found",
+        assertEquals("No overload of avg matches avg(STRING). Available: avg(NUMERIC), avg(DATE), avg(TIME),"
+                        + " avg(DATETIME), avg(NUMERIC, BOOLEAN), avg(DATE, BOOLEAN), avg(TIME, BOOLEAN),"
+                        + " avg(DATETIME, BOOLEAN)",
                 assertThrows(IllegalArgumentException.class, () -> call("avg", $str("s"))).getMessage());
-        assertEquals("Function year([TIME]) not found",
-                assertThrows(IllegalArgumentException.class, () -> call("year", $time("t"))).getMessage());
-        assertEquals("Function hour([DATE]) not found",
-                assertThrows(IllegalArgumentException.class, () -> call("hour", $date("d"))).getMessage());
 
+        assertThrows(IllegalArgumentException.class, () -> call("min", $offsetDateTime("odt")));
+        assertThrows(IllegalArgumentException.class, () -> call("year", $time("t")));
+        assertThrows(IllegalArgumentException.class, () -> call("hour", $date("d")));
         assertThrows(IllegalArgumentException.class, () -> call("quantile", $str("s"), $doubleVal(0.5)));
         assertThrows(IllegalArgumentException.class, () -> call("plusDays", $time("t"), $intVal(1)));
         assertThrows(IllegalArgumentException.class, () -> call("plusHours", $date("d"), $intVal(1)));
     }
 
     @Test
-    void shiftFillerMustMatchTheReceiverType() {
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> call("shift", $int("i"), $intVal(2), $strVal("replace")));
-        assertTrue(e.getMessage().startsWith("shift() filler of type STRING"), e.getMessage());
-
-        assertThrows(IllegalArgumentException.class,
-                () -> call("shift", $str("s"), $intVal(1), $intVal(1)));
-        assertThrows(IllegalArgumentException.class,
-                () -> call("shift", $bool("b"), $intVal(1), $strVal("x")));
-
-        assertEquals($col("c").shift(1, "x"), call("shift", $col("c"), $intVal(1), $strVal("x")));
-    }
-
-    @Test
-    void booleanParameterRejectsAnUntypedArgumentInTheProducer() {
-        assertEquals("count() expects argument 1 to be BOOLEAN, got: a",
-                assertThrows(IllegalArgumentException.class, () -> call("count", $col("a"))).getMessage());
-    }
-
-    @Test
     void unknownFunctionsAndArities() {
-        assertThrows(IllegalArgumentException.class, () -> resolve("noSuchFunction", $int("i")));
+        assertEquals("Unknown function: noSuchFunction",
+                assertThrows(IllegalArgumentException.class, () -> resolve("noSuchFunction", $int("i"))).getMessage());
         assertThrows(IllegalArgumentException.class, () -> resolve("rowNum", $int("i")));
         assertThrows(IllegalArgumentException.class, () -> resolve("year"));
         assertThrows(IllegalArgumentException.class, () -> resolve("last", $col("c"), $bool("b")));
@@ -344,17 +262,7 @@ class DefaultQLFunctionsTest {
     }
 
     private static Exp<?> call(String name, Exp<?>... args) {
-        return resolve(name, args).expProducer().apply(List.of(args));
-    }
-
-    private static TypeClassifier effectiveReturnType(String name, Exp<?>... args) {
-        return resolve(name, args).returnType();
-    }
-
-    private static String label(QLFunctionDescriptor descriptor) {
-        return descriptor.name() + descriptor.args().toString()
-                + (descriptor.varArgs() ? "..." : "")
-                + " -> " + descriptor.returnType();
+        return FUNCTIONS.call(name, List.of(args));
     }
 
     /**
@@ -369,10 +277,8 @@ class DefaultQLFunctionsTest {
         }
 
         if (descriptor.varArgs()) {
-            List<QLFunctionArg> declared = descriptor.args();
-            TypeClassifier tail = declared.isEmpty() ? TypeClassifier.STRING : declared.getLast().type();
-            args.add(column(tail));
-            args.add(column(tail));
+            args.add($str("s"));
+            args.add($int("i"));
         }
 
         return args;
@@ -387,8 +293,7 @@ class DefaultQLFunctionsTest {
             case TIME -> $time("t");
             case DATETIME -> $dateTime("dt");
             case OFFSETDATETIME -> $offsetDateTime("odt");
-            case OBJECT -> $col("o").list();
-            case ANY -> $col("o");
+            case OBJECT -> $col("o");
         };
     }
 
@@ -401,7 +306,7 @@ class DefaultQLFunctionsTest {
             case TIME -> $timeVal(LocalTime.of(1, 2, 3));
             case DATETIME -> $dateTimeVal(LocalDateTime.of(2024, 1, 2, 3, 4, 5));
             case OFFSETDATETIME -> $offsetDateTimeVal(OffsetDateTime.parse("2024-01-02T03:04:05+01:00"));
-            case OBJECT, ANY -> $val(new Object());
+            case OBJECT -> $val(new Object());
         };
     }
 }

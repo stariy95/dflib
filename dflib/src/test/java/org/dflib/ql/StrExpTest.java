@@ -3,7 +3,6 @@ package org.dflib.ql;
 import org.dflib.Condition;
 import org.dflib.Exp;
 import org.dflib.StrExp;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -179,12 +178,6 @@ public class StrExpTest {
         Exp<?> exp = parseExp(text);
         assertInstanceOf(StrExp.class, exp);
         assertEquals(expected, exp);
-    }
-
-    @Test
-    public void test() {
-        Exp<?> exp = parseExp("substr('example', 2)");
-        assertInstanceOf(StrExp.class, exp);
     }
 
     static Stream<Arguments> function_returnsStrExp() {

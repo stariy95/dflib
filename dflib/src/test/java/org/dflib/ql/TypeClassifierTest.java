@@ -9,6 +9,8 @@ import org.dflib.NumExp;
 import org.dflib.OffsetDateTimeExp;
 import org.dflib.StrExp;
 import org.dflib.TimeExp;
+import org.dflib.exp.flow.IfExp;
+import org.dflib.exp.flow.IfNullExp;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -19,11 +21,20 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.List;
 
+import static org.dflib.Exp.$bool;
+import static org.dflib.Exp.$col;
+import static org.dflib.Exp.$date;
+import static org.dflib.Exp.$dateTime;
+import static org.dflib.Exp.$int;
+import static org.dflib.Exp.$intVal;
+import static org.dflib.Exp.$offsetDateTime;
+import static org.dflib.Exp.$str;
+import static org.dflib.Exp.$time;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests of {@link TypeClassifier#classify(Type)}.
+ * Tests of {@link TypeClassifier#classify(Type)} and {@link TypeClassifier#classify(Exp)}.
  */
 class TypeClassifierTest {
 
@@ -166,8 +177,56 @@ class TypeClassifierTest {
         assertEquals(TypeClassifier.NUMERIC, returnOf("varargs"));
     }
 
+    @Test
+    void rawExp_IsObject() {
+        // what a lambda's erased "call" method looks like
+        assertEquals(TypeClassifier.OBJECT, paramOf("rawExp", 0));
+        assertEquals(TypeClassifier.OBJECT, returnOf("rawExp"));
+    }
+
+    @Test
+    void classifyExp_TypedInterfaces() {
+        assertEquals(TypeClassifier.NUMERIC, TypeClassifier.classify($int("a")));
+        assertEquals(TypeClassifier.NUMERIC, TypeClassifier.classify($intVal(1)));
+        assertEquals(TypeClassifier.STRING, TypeClassifier.classify($str("a")));
+        assertEquals(TypeClassifier.BOOLEAN, TypeClassifier.classify($bool("a")));
+        assertEquals(TypeClassifier.DATE, TypeClassifier.classify($date("a")));
+        assertEquals(TypeClassifier.TIME, TypeClassifier.classify($time("a")));
+        assertEquals(TypeClassifier.DATETIME, TypeClassifier.classify($dateTime("a")));
+        assertEquals(TypeClassifier.OFFSETDATETIME, TypeClassifier.classify($offsetDateTime("a")));
+    }
+
+    @Test
+    void classifyExp_NoTypedInterface_IsObject() {
+
+        // whatever the value type of the expression
+        assertEquals(TypeClassifier.OBJECT, TypeClassifier.classify($date("a").first()));
+        assertEquals(TypeClassifier.OBJECT, TypeClassifier.classify($int("a").last()));
+        assertEquals(TypeClassifier.OBJECT, TypeClassifier.classify(new IfNullExp<>($int("a"), $int("b"))));
+        assertEquals(TypeClassifier.OBJECT, TypeClassifier.classify(new IfExp<>($bool("c"), $int("a"), $int("b"))));
+
+        assertEquals(TypeClassifier.OBJECT, TypeClassifier.classify($col("a")));
+        assertEquals(TypeClassifier.OBJECT, TypeClassifier.classify($str("a").split(',')));
+        assertEquals(TypeClassifier.OBJECT, TypeClassifier.classify($col("a").list()));
+        assertEquals(TypeClassifier.OBJECT, TypeClassifier.classify(Exp.$val(new Object())));
+        assertEquals(TypeClassifier.OBJECT, TypeClassifier.classify(Exp.$val(null)));
+        assertEquals(TypeClassifier.OBJECT, TypeClassifier.classify((Exp<?>) null));
+    }
+
+    @Test
+    void isTyped() {
+        for (TypeClassifier t : TypeClassifier.values()) {
+            assertEquals(t != TypeClassifier.OBJECT, t.isTyped(), t.name());
+            assertEquals(t.isTyped(), t.castFunction() != null, t.name());
+        }
+    }
+
     @SuppressWarnings({"rawtypes", "unused"})
     static class Fixtures {
+
+        Exp rawExp(Exp e) {
+            return e;
+        }
 
         NumExp<?> numWildcard(NumExp<?> e) {
             return e;

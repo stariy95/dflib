@@ -1,12 +1,12 @@
 package org.dflib.ql;
 
+import org.dflib.Exp;
 import org.dflib.Udf0;
 import org.dflib.Udf1;
 import org.dflib.Udf2;
 import org.dflib.Udf3;
 import org.dflib.UdfN;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -15,14 +15,17 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.SequencedSet;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static org.dflib.ql.TypeClassifier.COERCION;
 import static org.dflib.ql.TypeClassifier.NO_MATCH;
 import static org.dflib.ql.TypeClassifier.WILDCARD;
 
 /**
- * A registry of functions recognized by the QL parser.
+ * A registry of functions recognized by the QL parser. A function call is resolved by name and by the types of its
+ * arguments: an argument must be an expression of the declared type ({@code max(int(a))}), or of any type if the
+ * parameter is declared as a plain {@code Exp} ({@code trim(a)}). An untyped expression, such as a bare column
+ * reference, has to be cast explicitly to be passed to a typed parameter ({@code max(castAsInt(a))}).
  *
  * @since 2.0.0
  */
@@ -43,94 +46,79 @@ public class QLFunctions {
     }
 
     /**
-     * Returns true if a function with this name is registered, regardless of its arity or return type.
+     * Resolves a function call by its name and argument types and builds the call expression.
+     *
+     * @throws IllegalArgumentException if the function is unknown, no overload matches the arguments, or the
+     *                                  matching overload rejects them
      */
-    public boolean isFn(String fnName) {
-        return functions.containsKey(fnName);
+    public Exp<?> call(String name, List<Exp<?>> args) {
+        return function(name, args.stream().map(QLFunctionArg::of).toList()).expProducer().apply(args);
     }
 
     /**
-     * Resolves a function by its name and argument types, preferring a fixed arity over varargs, then the most
-     * specific argument match, then the registration order. A tie caused by an argument whose type is only known
-     * at eval time is reported as ambiguous.
+     * Resolves a function by its name and argument types, preferring a fixed arity over varargs, then the fewest
+     * arguments passed to untyped parameters, then the registration order.
      */
-    public QLFunctionDescriptor function(String name, List<QLFunctionArg> args) {
+    QLFunctionDescriptor function(String name, List<QLFunctionArg> args) {
 
         SequencedSet<QLFunctionDescriptor> descriptors = functions.get(name);
         if (descriptors == null) {
-            throw notFound(name, args);
+            throw new IllegalArgumentException("Unknown function: " + name);
         }
 
-        List<QLFunctionDescriptor> best = new ArrayList<>(2);
+        QLFunctionDescriptor best = null;
         MatchCost bestCost = null;
 
         for (QLFunctionDescriptor d : descriptors) {
-
             MatchCost cost = MatchCost.of(d, args);
-            if (cost == null) {
-                continue;
-            }
-
-            int cmp = bestCost == null ? -1 : cost.compareTo(bestCost);
-            if (cmp < 0) {
-                best.clear();
-                best.add(d);
+            if (cost != null && (bestCost == null || cost.compareTo(bestCost) < 0)) {
+                best = d;
                 bestCost = cost;
-            } else if (cmp == 0) {
-                best.add(d);
             }
         }
 
-        if (best.isEmpty()) {
-            throw notFound(name, args);
+        if (best == null) {
+            throw notFound(name, args, descriptors);
         }
 
-        if (best.size() > 1) {
-            checkAmbiguity(name, args, best);
-        }
+        return best;
+    }
 
-        return best.getFirst();
+    Stream<QLFunctionDescriptor> descriptors() {
+        return functions.values().stream().flatMap(Collection::stream);
     }
 
     /**
      * How well the arguments fit a descriptor, lower being better: a fixed arity beats varargs, then fewer
-     * eval-time coercions, then fewer wildcard matches.
+     * arguments passed to untyped parameters.
      */
-    private record MatchCost(boolean varArgs, int coercions, int wildcards) implements Comparable<MatchCost> {
+    private record MatchCost(boolean varArgs, int wildcards) implements Comparable<MatchCost> {
 
         private static final Comparator<MatchCost> ORDER = Comparator
                 .comparing(MatchCost::varArgs)
-                .thenComparingInt(MatchCost::coercions)
                 .thenComparingInt(MatchCost::wildcards);
 
         static MatchCost of(QLFunctionDescriptor descriptor, List<QLFunctionArg> args) {
 
             int declared = descriptor.args().size();
 
-            if (descriptor.varArgs()) {
-                if (args.size() < declared) {
-                    return null;
-                }
-            } else if (declared != args.size()) {
+            if (descriptor.varArgs() ? args.size() < declared : args.size() != declared) {
                 return null;
             }
 
-            int coercions = 0;
             int wildcards = 0;
-
             for (int i = 0; i < declared; i++) {
                 switch (QLFunctionArg.matchCost(descriptor.args().get(i), args.get(i))) {
                     case NO_MATCH -> {
                         return null;
                     }
-                    case COERCION -> coercions++;
                     case WILDCARD -> wildcards++;
                     default -> {
                     }
                 }
             }
 
-            return new MatchCost(descriptor.varArgs(), coercions, wildcards);
+            return new MatchCost(descriptor.varArgs(), wildcards);
         }
 
         @Override
@@ -139,55 +127,54 @@ public class QLFunctions {
         }
     }
 
-    private static IllegalArgumentException notFound(String name, List<QLFunctionArg> args) {
-        return new IllegalArgumentException("Function " + name + "(" + args + ") not found");
-    }
-
     /**
-     * Throws if equally good candidates disagree on the declared type of a parameter whose argument is ANY.
+     * Builds an error listing the registered overloads, and for an untyped argument in a position where the
+     * overloads expect typed ones, the casts that would make it match.
      */
-    private static void checkAmbiguity(String name, List<QLFunctionArg> args, List<QLFunctionDescriptor> candidates) {
+    private static IllegalArgumentException notFound(
+            String name,
+            List<QLFunctionArg> args,
+            Collection<QLFunctionDescriptor> descriptors) {
 
-        int len = args.size();
-        for (int i = 0; i < len; i++) {
+        StringBuilder message = new StringBuilder("No overload of ")
+                .append(name)
+                .append(" matches ")
+                .append(QLFunctionDescriptor.shape(name, args, false))
+                .append(". Available: ")
+                .append(descriptors.stream().map(QLFunctionDescriptor::shape).collect(Collectors.joining(", ")));
 
-            if (args.get(i).type() != TypeClassifier.ANY) {
+        for (int i = 0; i < args.size(); i++) {
+
+            if (args.get(i).type().isTyped()) {
                 continue;
             }
 
-            EnumSet<TypeClassifier> declared = EnumSet.noneOf(TypeClassifier.class);
-            for (QLFunctionDescriptor d : candidates) {
-                if (i < d.args().size()) {
-                    declared.add(d.args().get(i).type());
+            EnumSet<TypeClassifier> expected = EnumSet.noneOf(TypeClassifier.class);
+            for (QLFunctionDescriptor d : descriptors) {
+                if (i < d.args().size() && d.args().get(i).type().isTyped()) {
+                    expected.add(d.args().get(i).type());
                 }
             }
 
-            if (declared.size() > 1) {
-                throw new IllegalArgumentException("Ambiguous call to " + name + "(): the type of argument "
-                        + (i + 1) + " is only known at eval time, and " + name + " is defined for " + declared
-                        + " arguments in that position. " + castHint(name, declared));
-            }
-        }
-    }
-
-    private static String castHint(String name, EnumSet<TypeClassifier> declared) {
-
-        for (TypeClassifier t : declared) {
-            if (t.isTyped()) {
-                return "Cast it, e.g. " + name + "(" + t.castFunction() + "(..))";
+            if (!expected.isEmpty()) {
+                message.append(". Argument ")
+                        .append(i + 1)
+                        .append(" is untyped; cast it to one of ")
+                        .append(expected)
+                        .append(", e.g. ")
+                        .append(expected.iterator().next().castFunction())
+                        .append("(..)");
             }
         }
 
-        return "Cast it to one of them.";
-    }
-
-    Stream<QLFunctionDescriptor> descriptors() {
-        return functions.values().stream().flatMap(Collection::stream);
+        return new IllegalArgumentException(message.toString());
     }
 
     /**
-     * A builder of a function registry. Registering a function with the same name and argument types as another
-     * one, a built-in included, is an error reported from {@link #build()}.
+     * A builder of a function registry. A function is registered as a {@link QLFunction} class, or as a
+     * {@code Udf0..UdfN} object; a lambda needs a type to be reflected on, so it is registered via
+     * {@code Udf1.of(e -> ..)}, {@code Udf2.of(..)}, etc. Registering a function with the same name and argument
+     * types as another one, a built-in included, is an error reported from {@link #build()}.
      */
     public static class Builder {
 
@@ -231,19 +218,11 @@ public class QLFunctions {
 
         Builder function(QLFunctionDescriptor descriptor) {
             String name = descriptor.name();
-            boolean hasSameDescriptor = !functions.computeIfAbsent(name, n -> new LinkedHashSet<>()).add(descriptor);
-            if (hasSameDescriptor) {
-                throw new IllegalArgumentException("Function " + name + "(" + descriptor.args() + ") already defined");
+            boolean added = functions.computeIfAbsent(name, n -> new LinkedHashSet<>()).add(descriptor);
+            if (!added) {
+                throw new IllegalArgumentException("Function " + descriptor.shape() + " already defined");
             }
 
-            return this;
-        }
-
-        /**
-         * Includes the built-in functions in the registry. This is the default.
-         */
-        public Builder defaultFunctions() {
-            this.defaultFunctions = true;
             return this;
         }
 
@@ -263,8 +242,7 @@ public class QLFunctions {
                 DefaultQLFunctions.register(builder);
             }
 
-            functions.values()
-                    .forEach(descriptors -> descriptors.forEach(builder::function));
+            functions.values().forEach(descriptors -> descriptors.forEach(builder::function));
             return new QLFunctions(builder.functions);
         }
     }

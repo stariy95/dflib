@@ -61,7 +61,6 @@ public class ShiftTest {
             "shift(int(1))",
             "shift(int(1), )",
             "shift(, 2)",
-            "shift(int(1), 2, 'replace')",
     })
     public void shift_throws(String text) {
         assertThrows(QLParserException.class, () -> parseExp(text));

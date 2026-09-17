@@ -2,27 +2,34 @@ package org.dflib.ql;
 
 import org.dflib.Environment;
 import org.dflib.Exp;
+import org.dflib.StrExp;
 import org.dflib.Udf1;
+import org.dflib.Udf2;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.dflib.Exp.$col;
 import static org.dflib.Exp.$int;
 import static org.dflib.Exp.$intVal;
+import static org.dflib.Exp.$str;
 import static org.dflib.Exp.parseExp;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * Registration of custom functions next to the built-ins.
+ */
 public class CustomFunctionTest {
 
     private QLFunctions originalFunctions;
 
     @BeforeEach
     public void saveFunctions() {
-        this.originalFunctions = Environment.commonEnv().getQLFunctions();
+        this.originalFunctions = Environment.commonEnv().qlFunctions();
     }
 
     @AfterEach
@@ -44,11 +51,15 @@ public class CustomFunctionTest {
     }
 
     @Test
-    public void builder_SeedsBuiltIns() {
-        QLFunctions functions = QLFunctions.builder().build();
+    public void customFunction_Lambda() {
 
-        assertTrue(functions.isFn("abs"));
-        assertTrue(functions.isFn("trim"));
+        Environment.setQLFunctions(QLFunctions.builder()
+                .function("clean", Udf1.of(e -> e.castAsStr().trim().lower()))
+                .function("pair", Udf2.of((a, b) -> Exp.concat(a, "-", b)))
+                .build());
+
+        assertEquals($col("a").castAsStr().trim().lower(), parseExp("clean(a)"));
+        assertEquals(Exp.concat($int("a"), "-", $str("b")), parseExp("pair(int(a), str(b))"));
     }
 
     @Test
@@ -58,8 +69,11 @@ public class CustomFunctionTest {
                 .function("twice", new TwiceFunction())
                 .build();
 
-        assertTrue(functions.isFn("twice"));
-        assertFalse(functions.isFn("abs"));
+        assertEquals(new TwiceFunction().call($int("a")), functions.call("twice", List.of($int("a"))));
+
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> functions.call("abs", List.of($int("a"))));
+        assertEquals("Unknown function: abs", e.getMessage());
     }
 
     @Test
@@ -69,13 +83,37 @@ public class CustomFunctionTest {
         QLFunctions.Builder builder = QLFunctions.builder().function("trim", new TrimFunction());
 
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class, builder::build);
-        assertTrue(e.getMessage().contains("already defined"), e.getMessage());
+        assertEquals("Function trim(OBJECT) already defined", e.getMessage());
 
-        assertTrue(QLFunctions.builder()
+        assertEquals(new TrimFunction().call($col("a")), QLFunctions.builder()
                 .noDefaultFunctions()
                 .function("trim", new TrimFunction())
                 .build()
-                .isFn("trim"));
+                .call("trim", List.of($col("a"))));
+    }
+
+    @Test
+    public void customOverload_MoreSpecificThanABuiltIn_Wins() {
+
+        // the built-in "trim" is declared over "Exp<?>", so a "StrExp" overload is a better match for a string
+        Environment.setQLFunctions(QLFunctions.builder()
+                .function("trim", new StrTrimFunction())
+                .build());
+
+        assertEquals(new StrTrimFunction().call($str("a")), parseExp("trim(str(a))"));
+        assertEquals($col("a").trim(), parseExp("trim(a)"));
+    }
+
+    @Test
+    public void customOverload_TiedWithABuiltIn_Loses() {
+
+        // "vConcat(str(a), ',')" matches the built-in "vConcat(Exp<?>, const String)" and the custom
+        // "vConcat(StrExp, const Object)" with one wildcard each, and the built-in is registered first
+        Environment.setQLFunctions(QLFunctions.builder()
+                .function("vConcat", new StrVConcatFunction())
+                .build());
+
+        assertEquals($str("a").vConcat(null, ",", "", ""), parseExp("vConcat(str(a), ',')"));
     }
 
     private static class TwiceFunction implements Udf1<Integer, Integer> {
@@ -89,6 +127,19 @@ public class CustomFunctionTest {
         @Override
         public Exp<String> call(Exp<Object> exp) {
             return exp.castAsStr().trim();
+        }
+    }
+
+    private static class StrTrimFunction implements Udf1<String, String> {
+        @Override
+        public Exp<String> call(Exp<String> exp) {
+            return exp.castAsStr().trim().upper();
+        }
+    }
+
+    public static class StrVConcatFunction implements QLFunction {
+        public Exp<?> call(StrExp e, Object delimiter) {
+            return e.vConcat(null, String.valueOf(delimiter), "<", ">");
         }
     }
 }

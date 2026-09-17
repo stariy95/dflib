@@ -361,13 +361,13 @@ public class ExpBaseListener implements ExpListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void enterFnName(ExpParser.FnNameContext ctx) { }
+	@Override public void enterKeywordAsIdentifier(ExpParser.KeywordAsIdentifierContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void exitFnName(ExpParser.FnNameContext ctx) { }
+	@Override public void exitKeywordAsIdentifier(ExpParser.KeywordAsIdentifierContext ctx) { }
 
 	/**
 	 * {@inheritDoc}
