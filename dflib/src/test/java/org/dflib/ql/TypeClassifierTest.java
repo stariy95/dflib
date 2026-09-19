@@ -31,6 +31,8 @@ import static org.dflib.Exp.$offsetDateTime;
 import static org.dflib.Exp.$str;
 import static org.dflib.Exp.$time;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -219,6 +221,28 @@ class TypeClassifierTest {
             assertEquals(t != TypeClassifier.OBJECT, t.isTyped(), t.name());
             assertEquals(t.isTyped(), t.castFunction() != null, t.name());
         }
+    }
+
+    @Test
+    void cast() {
+        assertEquals($col("a").castAsStr(), TypeClassifier.STRING.cast($col("a")));
+        assertEquals($col("a").castAsBool(), TypeClassifier.BOOLEAN.cast($col("a")));
+        assertEquals($col("a").castAsDate(), TypeClassifier.DATE.cast($col("a")));
+        assertEquals($col("a").castAsTime(), TypeClassifier.TIME.cast($col("a")));
+        assertEquals($col("a").castAsDateTime(), TypeClassifier.DATETIME.cast($col("a")));
+        assertEquals($col("a").castAsOffsetDateTime(), TypeClassifier.OFFSETDATETIME.cast($col("a")));
+
+        // the cast result is an expression of the classifier's type
+        for (TypeClassifier t : TypeClassifier.values()) {
+            if (t.canCast()) {
+                assertEquals(t, TypeClassifier.classify(t.cast($col("a"))), t.name());
+            }
+        }
+
+        // no cast for OBJECT, and none for NUMERIC until "castAsNumber" is available
+        assertFalse(TypeClassifier.OBJECT.canCast());
+        assertFalse(TypeClassifier.NUMERIC.canCast());
+        assertThrows(IllegalStateException.class, () -> TypeClassifier.NUMERIC.cast($col("a")));
     }
 
     @SuppressWarnings({"rawtypes", "unused"})

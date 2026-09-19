@@ -11,6 +11,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.dflib.Exp.$col;
+import static org.dflib.Exp.$intVal;
+import static org.dflib.Exp.$str;
 import static org.dflib.ql.DescriptorBuilder.descriptor;
 import static org.dflib.ql.TypeClassifier.BOOLEAN;
 import static org.dflib.ql.TypeClassifier.DATE;
@@ -75,41 +78,109 @@ class QLFunctionsTest {
     }
 
     @Test
-    void function_UntypedArg_DoesNotMatchTypedParam() {
+    void function_UntypedArg_IsCastToTheParamType() {
+        QLFunctions functions = registry()
+                .function(descriptor("f").arg(STRING).as(args -> args.get(0)))
+                .function(descriptor("g").arg(BOOLEAN).constArg(NUMERIC).as(args -> args.get(0)))
+                .function(descriptor("h").arg(DATE).arg(OBJECT).as(args -> args.get(0)))
+                .build();
+
+        assertEquals(List.of(arg(STRING)), functions.function("f", List.of(arg(OBJECT))).args());
+        assertEquals($col("a").castAsStr(), functions.call("f", List.of($col("a"))));
+        assertEquals($str("a"), functions.call("f", List.of($str("a"))));
+
+        assertEquals($col("a").castAsBool(), functions.call("g", List.of($col("a"), $intVal(1))));
+        assertEquals($col("a").castAsDate(), functions.call("h", List.of($col("a"), $col("b"))));
+    }
+
+    @Test
+    void function_UntypedArg_NotCastToAConstantParam() {
+        QLFunctions functions = registry()
+                .function(descriptor("f").arg(OBJECT).constArg(STRING).as(args -> args.get(0)))
+                .build();
+
+        assertEquals("No overload of f matches f(OBJECT, const OBJECT). Available: f(OBJECT, const STRING)."
+                        + " Argument 2 is untyped; cast it to one of [STRING], e.g. castAsStr(..)",
+                notFound(functions, "f", arg(OBJECT), constant(OBJECT)));
+    }
+
+    @Test
+    void function_UntypedArg_NotCastToATypeWithoutACast() {
+
+        // NUMERIC has no cast until "castAsNumber" is available
         QLFunctions functions = registry()
                 .function(descriptor("f").arg(NUMERIC).as(args -> args.get(0)))
                 .function(descriptor("f").arg(DATE).as(args -> args.get(0)))
                 .build();
 
-        assertNotNull(functions.function("f", List.of(arg(NUMERIC))));
-        assertNotNull(functions.function("f", List.of(arg(DATE))));
+        assertEquals(List.of(arg(DATE)), functions.function("f", List.of(arg(OBJECT))).args());
 
-        assertEquals("No overload of f matches f(OBJECT). Available: f(NUMERIC), f(DATE)."
-                        + " Argument 1 is untyped; cast it to one of [NUMERIC, DATE], e.g. castAsInt(..)",
-                notFound(functions, "f", arg(OBJECT)));
+        QLFunctions numOnly = registry()
+                .function(descriptor("f").arg(NUMERIC).as(args -> args.get(0)))
+                .build();
+
+        assertEquals("No overload of f matches f(OBJECT). Available: f(NUMERIC)."
+                        + " Argument 1 is untyped; cast it to one of [NUMERIC], e.g. castAsInt(..)",
+                notFound(numOnly, "f", arg(OBJECT)));
     }
 
     @Test
-    void function_UntypedArg_CastHintPerPosition() {
+    void function_UntypedArg_WildcardOverloadPreferredOverACast() {
+        QLFunctions functions = registry()
+                .function(descriptor("f").arg(STRING).arg(STRING).as(args -> args.get(0)))
+                .function(descriptor("f").arg(OBJECT).arg(OBJECT).as(args -> args.get(1)))
+                .build();
+
+        // "shift(a, 1, 'x')": one cast costs more than any number of wildcard matches
+        assertEquals(List.of(arg(OBJECT), arg(OBJECT)), functions.function("f", List.of(arg(OBJECT), arg(STRING))).args());
+        assertEquals(List.of(arg(STRING), arg(STRING)), functions.function("f", List.of(arg(STRING), arg(STRING))).args());
+    }
+
+    @Test
+    void function_UntypedArg_Ambiguous() {
+        QLFunctions functions = registry()
+                .function(descriptor("f").arg(STRING).as(args -> args.get(0)))
+                .function(descriptor("f").arg(DATE).as(args -> args.get(0)))
+                .build();
+
+        assertEquals("Ambiguous call to f(OBJECT): argument 1 is untyped and f is defined for [STRING, DATE]"
+                        + " in that position. Cast it explicitly, e.g. f(castAsStr(..))",
+                notFound(functions, "f", arg(OBJECT)));
+
+        // an untyped overload takes the untyped argument without a cast, and resolves the ambiguity
+        QLFunctions withWildcard = registry()
+                .function(descriptor("f").arg(STRING).as(args -> args.get(0)))
+                .function(descriptor("f").arg(DATE).as(args -> args.get(0)))
+                .function(descriptor("f").arg(OBJECT).as(args -> args.get(0)))
+                .build();
+
+        assertEquals(List.of(arg(OBJECT)), withWildcard.function("f", List.of(arg(OBJECT))).args());
+    }
+
+    @Test
+    void function_UntypedArg_AmbiguityReportedAtItsOwnPosition() {
         QLFunctions functions = registry()
                 .function(descriptor("f").arg(BOOLEAN).arg(DATE).as(args -> args.get(0)))
                 .function(descriptor("f").arg(BOOLEAN).arg(STRING).as(args -> args.get(0)))
                 .build();
 
-        assertEquals("No overload of f matches f(OBJECT, OBJECT). Available: f(BOOLEAN, DATE), f(BOOLEAN, STRING)."
-                        + " Argument 1 is untyped; cast it to one of [BOOLEAN], e.g. castAsBool(..)."
-                        + " Argument 2 is untyped; cast it to one of [STRING, DATE], e.g. castAsStr(..)",
+        assertEquals("Ambiguous call to f(OBJECT, OBJECT): argument 2 is untyped and f is defined for [STRING, DATE]"
+                        + " in that position. Cast it explicitly, e.g. f(castAsStr(..))",
                 notFound(functions, "f", arg(OBJECT), arg(OBJECT)));
+
+        assertEquals(List.of(arg(BOOLEAN), arg(DATE)),
+                functions.function("f", List.of(arg(OBJECT), arg(DATE))).args());
     }
 
     @Test
-    void function_UntypedArg_NoCastHintForAnUntypedParam() {
+    void function_UntypedArg_TieAwayFromTheCastIsNotAmbiguous() {
         QLFunctions functions = registry()
-                .function(descriptor("f").arg(OBJECT).constArg(NUMERIC).as(args -> args.get(0)))
+                .function(descriptor("f").arg(DATE).arg(STRING).arg(OBJECT).as(args -> args.get(0)))
+                .function(descriptor("f").arg(DATE).arg(OBJECT).arg(STRING).as(args -> args.get(0)))
                 .build();
 
-        assertEquals("No overload of f matches f(OBJECT, NUMERIC). Available: f(OBJECT, const NUMERIC)",
-                notFound(functions, "f", arg(OBJECT), arg(NUMERIC)));
+        assertEquals(List.of(arg(DATE), arg(STRING), arg(OBJECT)),
+                functions.function("f", List.of(arg(OBJECT), arg(STRING), arg(STRING))).args());
     }
 
     @Test

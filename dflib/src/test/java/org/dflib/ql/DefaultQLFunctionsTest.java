@@ -111,21 +111,41 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
-    void untypedReceiverOfATypedFunction() {
-        assertEquals("No overload of year matches year(OBJECT)."
-                        + " Available: year(DATE), year(DATETIME), year(OFFSETDATETIME)."
-                        + " Argument 1 is untyped; cast it to one of [DATE, DATETIME, OFFSETDATETIME], e.g. castAsDate(..)",
+    void untypedReceiverOfATypedFunction_IsCast() {
+        assertEquals(Exp.count($col("c").castAsBool()), call("count", $col("c")));
+        assertEquals(Exp.ifExp($col("c").castAsBool(), $intVal(1), $intVal(2)),
+                call("if", $col("c"), $intVal(1), $intVal(2)));
+        assertEquals($str("c").min($col("f").castAsBool()), call("min", $str("c"), $col("f")));
+
+        // an expression that carries a value type but implements no typed interface is untyped too
+        assertEquals(Exp.count($date("d").first().castAsBool()), call("count", $date("d").first()));
+
+        // while a function declared over "Exp<?>" takes anything as is
+        assertEquals($col("c").castAsStr().len(), call("len", $col("c")));
+        assertEquals($col("c").shift(1, "x"), call("shift", $col("c"), $intVal(1), $strVal("x")));
+    }
+
+    @Test
+    void untypedReceiverOfAMultiReceiverFunction_IsAmbiguous() {
+        assertEquals("Ambiguous call to year(OBJECT): argument 1 is untyped and year is defined for"
+                        + " [DATE, DATETIME, OFFSETDATETIME] in that position. Cast it explicitly, e.g. year(castAsDate(..))",
                 assertThrows(IllegalArgumentException.class, () -> resolve("year", $col("c"))).getMessage());
 
+        // NUMERIC is not among the candidates, as it has no cast yet
+        assertEquals("Ambiguous call to min(OBJECT): argument 1 is untyped and min is defined for"
+                        + " [STRING, DATE, TIME, DATETIME] in that position. Cast it explicitly, e.g. min(castAsStr(..))",
+                assertThrows(IllegalArgumentException.class, () -> resolve("min", $col("c"))).getMessage());
+
+        assertThrows(IllegalArgumentException.class, () -> resolve("plusDays", $col("c"), $intVal(1)));
+    }
+
+    @Test
+    void untypedReceiverOfANumericFunction_IsRejected() {
+
+        // until "castAsNumber" is available
         assertEquals("No overload of sum matches sum(OBJECT). Available: sum(NUMERIC), sum(NUMERIC, BOOLEAN)."
                         + " Argument 1 is untyped; cast it to one of [NUMERIC], e.g. castAsInt(..)",
                 assertThrows(IllegalArgumentException.class, () -> resolve("sum", $col("c"))).getMessage());
-
-        // an expression that carries a value type but implements no typed interface is untyped too
-        assertThrows(IllegalArgumentException.class, () -> resolve("year", $date("d").first()));
-
-        // while a function declared over "Exp<?>" takes anything
-        assertEquals($col("c").castAsStr().len(), call("len", $col("c")));
     }
 
     @Test

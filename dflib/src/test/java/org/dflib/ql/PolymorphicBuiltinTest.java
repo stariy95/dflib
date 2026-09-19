@@ -11,6 +11,8 @@ import java.util.stream.Stream;
 import static org.dflib.Exp.$bool;
 import static org.dflib.Exp.$col;
 import static org.dflib.Exp.$date;
+import static org.dflib.Exp.$intVal;
+import static org.dflib.Exp.$str;
 import static org.dflib.Exp.$time;
 import static org.dflib.Exp.parseExp;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -64,29 +66,47 @@ public class PolymorphicBuiltinTest {
     }
 
     /**
-     * An untyped receiver is reported with the overloads and a cast hint, at the position of the call.
+     * An untyped receiver is cast to the type of the only matching overload.
      */
     @ParameterizedTest
     @MethodSource
-    public void untypedReceiver(String text, String message) {
+    public void untypedReceiver_Cast(String text, Exp<?> expected) {
+        assertEquals(expected, parseExp(text));
+    }
+
+    static Stream<Arguments> untypedReceiver_Cast() {
+        return Stream.of(
+                arguments("count(a)", Exp.count($col("a").castAsBool())),
+                arguments("if(a, 1, 2)", Exp.ifExp($col("a").castAsBool(), $intVal(1), $intVal(2))),
+                arguments("min(str(s), a)", $str("s").min($col("a").castAsBool())),
+                arguments("count(first(a))", Exp.count($col("a").first().castAsBool())),
+                arguments("if(a, 1, 2) = 1", Exp.ifExp($col("a").castAsBool(), $intVal(1), $intVal(2)).eq($intVal(1)))
+        );
+    }
+
+    /**
+     * An untyped receiver of a function overloaded by receiver type is reported as ambiguous, at the position of the
+     * call.
+     */
+    @ParameterizedTest
+    @MethodSource
+    public void untypedReceiver_Ambiguous(String text, String message) {
         QLParserException e = assertThrows(QLParserException.class, () -> parseExp(text));
         assertEquals(message, e.getMessage());
     }
 
-    static Stream<Arguments> untypedReceiver() {
+    static Stream<Arguments> untypedReceiver_Ambiguous() {
+        String year = "Ambiguous call to year(OBJECT): argument 1 is untyped and year is defined for"
+                + " [DATE, DATETIME, OFFSETDATETIME] in that position. Cast it explicitly, e.g. year(castAsDate(..))";
+
         return Stream.of(
-                arguments("year(a)", "1:0 No overload of year matches year(OBJECT)."
-                        + " Available: year(DATE), year(DATETIME), year(OFFSETDATETIME)."
-                        + " Argument 1 is untyped; cast it to one of [DATE, DATETIME, OFFSETDATETIME], e.g. castAsDate(..)"),
-                arguments("1 + count(a)", "1:4 No overload of count matches count(OBJECT)."
-                        + " Available: count(), count(BOOLEAN)."
-                        + " Argument 1 is untyped; cast it to one of [BOOLEAN], e.g. castAsBool(..)"),
-                arguments("if(a, 1, 2)", "1:0 No overload of if matches if(OBJECT, const NUMERIC, const NUMERIC)."
-                        + " Available: if(BOOLEAN, OBJECT, OBJECT)."
-                        + " Argument 1 is untyped; cast it to one of [BOOLEAN], e.g. castAsBool(..)"),
-                arguments("1 +\n  year(a)", "2:2 No overload of year matches year(OBJECT)."
-                        + " Available: year(DATE), year(DATETIME), year(OFFSETDATETIME)."
-                        + " Argument 1 is untyped; cast it to one of [DATE, DATETIME, OFFSETDATETIME], e.g. castAsDate(..)")
+                arguments("year(a)", "1:0 " + year),
+                arguments("1 +\n  year(a)", "2:2 " + year),
+                arguments("plusDays(a, 1)", "1:0 Ambiguous call to plusDays(OBJECT, const NUMERIC): argument 1 is"
+                        + " untyped and plusDays is defined for [DATE, DATETIME, OFFSETDATETIME] in that position."
+                        + " Cast it explicitly, e.g. plusDays(castAsDate(..))"),
+                arguments("max(a)", "1:0 Ambiguous call to max(OBJECT): argument 1 is untyped and max is defined for"
+                        + " [STRING, DATE, TIME, DATETIME] in that position. Cast it explicitly, e.g. max(castAsStr(..))")
         );
     }
 
@@ -108,6 +128,7 @@ public class PolymorphicBuiltinTest {
             "shift(a, 2)",
             "ifNull(a, b)",
             "if(castAsBool(a), 1, 2)",
+            "if(a, 1, 2)",
             "first(a)",
             "last(a)",
             "vConcat(a, ',')",

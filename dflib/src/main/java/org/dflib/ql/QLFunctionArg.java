@@ -14,13 +14,25 @@ record QLFunctionArg(TypeClassifier type, boolean constant) {
 
     /**
      * Returns the cost of passing the argument to a declared parameter or {@link TypeClassifier#NO_MATCH}
-     * if it can not be passed at all.
+     * if it can not be passed at all. A constant parameter takes the value of a constant argument as is, so it
+     * neither accepts a non-constant argument nor casts an untyped one.
      */
     static int matchCost(QLFunctionArg declared, QLFunctionArg actual) {
-        if (declared.constant() && !actual.constant()) {
+
+        int cost = TypeClassifier.matchCost(declared.type(), actual.type());
+
+        if (declared.constant() && (!actual.constant() || cost == TypeClassifier.COERCION)) {
             return TypeClassifier.NO_MATCH;
         }
-        return TypeClassifier.matchCost(declared.type(), actual.type());
+
+        return cost;
+    }
+
+    /**
+     * Returns true if passing the argument to the declared parameter requires a cast.
+     */
+    static boolean isCoerced(QLFunctionArg declared, QLFunctionArg actual) {
+        return matchCost(declared, actual) == TypeClassifier.COERCION;
     }
 
     @Override

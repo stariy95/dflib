@@ -181,14 +181,14 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void typedParameter_RejectsAnUntypedArg() {
+    public void typedParameter_CastsAnUntypedArg() {
 
         QLFunctions functions = registry("not", new NotFunction());
 
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> call(functions, "not", $col("a")));
-        assertEquals("No overload of not matches not(OBJECT). Available: not(BOOLEAN)."
-                + " Argument 1 is untyped; cast it to one of [BOOLEAN], e.g. castAsBool(..)", e.getMessage());
+        assertEquals(Exp.not($col("a").castAsBool()), call(functions, "not", $col("a")));
+        assertEquals(Exp.not($bool("a")), call(functions, "not", $bool("a")));
+
+        assertThrows(IllegalArgumentException.class, () -> call(functions, "not", $str("a")));
     }
 
     @Test

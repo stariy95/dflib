@@ -19,23 +19,27 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * The type of a QL expression as seen by the function resolver: one of the typed expression kinds, or
  * {@link #OBJECT} for an expression whose type is not known statically (an untyped column reference, a "first"
- * or an "if" result, a constant of an unlisted Java type).
+ * or an "if" result, a constant of an unlisted Java type). A typed classifier knows the QL cast producing an
+ * expression of its type, which the resolver applies to an untyped argument of a typed parameter.
  *
  * @since 2.0.0
  */
 public enum TypeClassifier {
-    NUMERIC("castAsInt"),
-    STRING("castAsStr"),
-    BOOLEAN("castAsBool"),
-    DATE("castAsDate"),
-    TIME("castAsTime"),
-    DATETIME("castAsDateTime"),
-    OFFSETDATETIME("castAsOffsetDateTime"),
-    OBJECT(null);
+
+    // TODO: cast via "castAsNumber" once it is available (#579), so that untyped args can be passed to numeric params
+    NUMERIC("castAsInt", null),
+    STRING("castAsStr", Exp::castAsStr),
+    BOOLEAN("castAsBool", Exp::castAsBool),
+    DATE("castAsDate", Exp::castAsDate),
+    TIME("castAsTime", Exp::castAsTime),
+    DATETIME("castAsDateTime", Exp::castAsDateTime),
+    OFFSETDATETIME("castAsOffsetDateTime", Exp::castAsOffsetDateTime),
+    OBJECT(null, null);
 
     /**
      * A result indicating that an argument can not be passed as a declared parameter.
@@ -48,6 +52,11 @@ public enum TypeClassifier {
      * The cost of an argument passed to an OBJECT parameter.
      */
     static final int WILDCARD = 1;
+
+    /**
+     * The cost of an untyped argument cast to the type of a typed parameter.
+     */
+    static final int COERCION = 2;
 
     private static final Map<Class<?>, TypeClassifier> EXP_INTERFACES = Map.of(
             NumExp.class, NUMERIC,
@@ -70,9 +79,11 @@ public enum TypeClassifier {
     );
 
     private final String castFunction;
+    private final Function<Exp<?>, Exp<?>> cast;
 
-    TypeClassifier(String castFunction) {
+    TypeClassifier(String castFunction, Function<Exp<?>, Exp<?>> cast) {
         this.castFunction = castFunction;
+        this.cast = cast;
     }
 
     /**
@@ -87,6 +98,23 @@ public enum TypeClassifier {
      */
     public String castFunction() {
         return castFunction;
+    }
+
+    /**
+     * Returns true if an untyped expression can be cast to this type by the resolver.
+     */
+    public boolean canCast() {
+        return cast != null;
+    }
+
+    /**
+     * Casts an untyped expression to this type.
+     */
+    public Exp<?> cast(Exp<?> exp) {
+        if (cast == null) {
+            throw new IllegalStateException("No cast to " + this);
+        }
+        return cast.apply(exp);
     }
 
     /**
@@ -190,7 +218,8 @@ public enum TypeClassifier {
 
     /**
      * Returns the cost of passing an argument of the {@code actual} type to a parameter declared as
-     * {@code declared}, or {@link #NO_MATCH} if it can not be passed.
+     * {@code declared}, or {@link #NO_MATCH} if it can not be passed. An untyped argument can be passed to a typed
+     * parameter with a cast, at the {@link #COERCION} cost.
      */
     static int matchCost(TypeClassifier declared, TypeClassifier actual) {
 
@@ -200,6 +229,10 @@ public enum TypeClassifier {
 
         if (declared == OBJECT) {
             return WILDCARD;
+        }
+
+        if (actual == OBJECT && declared.canCast()) {
+            return COERCION;
         }
 
         return NO_MATCH;

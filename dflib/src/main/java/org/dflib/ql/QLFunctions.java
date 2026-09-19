@@ -7,6 +7,7 @@ import org.dflib.Udf2;
 import org.dflib.Udf3;
 import org.dflib.UdfN;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -18,6 +19,7 @@ import java.util.SequencedSet;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.dflib.ql.TypeClassifier.COERCION;
 import static org.dflib.ql.TypeClassifier.NO_MATCH;
 import static org.dflib.ql.TypeClassifier.WILDCARD;
 
@@ -25,7 +27,9 @@ import static org.dflib.ql.TypeClassifier.WILDCARD;
  * A registry of functions recognized by the QL parser. A function call is resolved by name and by the types of its
  * arguments: an argument must be an expression of the declared type ({@code max(int(a))}), or of any type if the
  * parameter is declared as a plain {@code Exp} ({@code trim(a)}). An untyped expression, such as a bare column
- * reference, has to be cast explicitly to be passed to a typed parameter ({@code max(castAsInt(a))}).
+ * reference, is cast to the type of a typed parameter ({@code count(a)} is {@code count(castAsBool(a))}), unless
+ * the function has overloads for several types in that position, which is reported as an ambiguity to be resolved
+ * with an explicit cast ({@code max(castAsStr(a))}).
  *
  * @since 2.0.0
  */
@@ -52,12 +56,38 @@ public class QLFunctions {
      *                                  matching overload rejects them
      */
     public Exp<?> call(String name, List<Exp<?>> args) {
-        return function(name, args.stream().map(QLFunctionArg::of).toList()).expProducer().apply(args);
+
+        List<QLFunctionArg> argTypes = args.stream().map(QLFunctionArg::of).toList();
+        QLFunctionDescriptor descriptor = function(name, argTypes);
+
+        return descriptor.expProducer().apply(coerce(descriptor, args, argTypes));
+    }
+
+    /**
+     * Casts the untyped arguments passed to typed parameters to the parameter types.
+     */
+    private static List<Exp<?>> coerce(QLFunctionDescriptor descriptor, List<Exp<?>> args, List<QLFunctionArg> argTypes) {
+
+        List<QLFunctionArg> declared = descriptor.args();
+        List<Exp<?>> coerced = null;
+
+        for (int i = 0; i < declared.size(); i++) {
+            if (QLFunctionArg.isCoerced(declared.get(i), argTypes.get(i))) {
+                if (coerced == null) {
+                    coerced = new ArrayList<>(args);
+                }
+                coerced.set(i, declared.get(i).type().cast(args.get(i)));
+            }
+        }
+
+        return coerced != null ? coerced : args;
     }
 
     /**
      * Resolves a function by its name and argument types, preferring a fixed arity over varargs, then the fewest
-     * arguments passed to untyped parameters, then the registration order.
+     * untyped arguments cast to typed parameters, then the fewest arguments passed to untyped parameters, then the
+     * registration order. Equally good overloads that would cast the same untyped argument to different types are
+     * reported as ambiguous.
      */
     QLFunctionDescriptor function(String name, List<QLFunctionArg> args) {
 
@@ -66,22 +96,58 @@ public class QLFunctions {
             throw new IllegalArgumentException("Unknown function: " + name);
         }
 
-        QLFunctionDescriptor best = null;
+        List<QLFunctionDescriptor> best = new ArrayList<>(2);
         MatchCost bestCost = null;
 
         for (QLFunctionDescriptor d : descriptors) {
+
             MatchCost cost = MatchCost.of(d, args);
-            if (cost != null && (bestCost == null || cost.compareTo(bestCost) < 0)) {
-                best = d;
+            if (cost == null) {
+                continue;
+            }
+
+            int cmp = bestCost == null ? -1 : cost.compareTo(bestCost);
+            if (cmp < 0) {
+                best.clear();
+                best.add(d);
                 bestCost = cost;
+            } else if (cmp == 0) {
+                best.add(d);
             }
         }
 
-        if (best == null) {
+        if (best.isEmpty()) {
             throw notFound(name, args, descriptors);
         }
 
-        return best;
+        if (best.size() > 1) {
+            checkAmbiguity(name, args, best);
+        }
+
+        return best.getFirst();
+    }
+
+    /**
+     * Throws if equally good candidates would cast the same untyped argument to different types.
+     */
+    private static void checkAmbiguity(String name, List<QLFunctionArg> args, List<QLFunctionDescriptor> candidates) {
+
+        for (int i = 0; i < args.size(); i++) {
+
+            EnumSet<TypeClassifier> castTo = EnumSet.noneOf(TypeClassifier.class);
+            for (QLFunctionDescriptor d : candidates) {
+                if (i < d.args().size() && QLFunctionArg.isCoerced(d.args().get(i), args.get(i))) {
+                    castTo.add(d.args().get(i).type());
+                }
+            }
+
+            if (castTo.size() > 1) {
+                throw new IllegalArgumentException("Ambiguous call to " + QLFunctionDescriptor.shape(name, args, false)
+                        + ": argument " + (i + 1) + " is untyped and " + name + " is defined for " + castTo
+                        + " in that position. Cast it explicitly, e.g. " + name + "("
+                        + castTo.iterator().next().castFunction() + "(..))");
+            }
+        }
     }
 
     Stream<QLFunctionDescriptor> descriptors() {
@@ -89,13 +155,14 @@ public class QLFunctions {
     }
 
     /**
-     * How well the arguments fit a descriptor, lower being better: a fixed arity beats varargs, then fewer
-     * arguments passed to untyped parameters.
+     * How well the arguments fit a descriptor, lower being better: a fixed arity beats varargs, then fewer untyped
+     * arguments cast to typed parameters, then fewer arguments passed to untyped parameters.
      */
-    private record MatchCost(boolean varArgs, int wildcards) implements Comparable<MatchCost> {
+    private record MatchCost(boolean varArgs, int coercions, int wildcards) implements Comparable<MatchCost> {
 
         private static final Comparator<MatchCost> ORDER = Comparator
                 .comparing(MatchCost::varArgs)
+                .thenComparingInt(MatchCost::coercions)
                 .thenComparingInt(MatchCost::wildcards);
 
         static MatchCost of(QLFunctionDescriptor descriptor, List<QLFunctionArg> args) {
@@ -106,19 +173,21 @@ public class QLFunctions {
                 return null;
             }
 
+            int coercions = 0;
             int wildcards = 0;
             for (int i = 0; i < declared; i++) {
                 switch (QLFunctionArg.matchCost(descriptor.args().get(i), args.get(i))) {
                     case NO_MATCH -> {
                         return null;
                     }
+                    case COERCION -> coercions++;
                     case WILDCARD -> wildcards++;
                     default -> {
                     }
                 }
             }
 
-            return new MatchCost(descriptor.varArgs(), wildcards);
+            return new MatchCost(descriptor.varArgs(), coercions, wildcards);
         }
 
         @Override
@@ -129,7 +198,7 @@ public class QLFunctions {
 
     /**
      * Builds an error listing the registered overloads, and for an untyped argument in a position where the
-     * overloads expect typed ones, the casts that would make it match.
+     * overloads expect a type the resolver can not cast to, the casts that would make it match.
      */
     private static IllegalArgumentException notFound(
             String name,
@@ -151,8 +220,11 @@ public class QLFunctions {
 
             EnumSet<TypeClassifier> expected = EnumSet.noneOf(TypeClassifier.class);
             for (QLFunctionDescriptor d : descriptors) {
-                if (i < d.args().size() && d.args().get(i).type().isTyped()) {
-                    expected.add(d.args().get(i).type());
+                if (i < d.args().size()) {
+                    QLFunctionArg declared = d.args().get(i);
+                    if (declared.type().isTyped() && (declared.constant() || !declared.type().canCast())) {
+                        expected.add(declared.type());
+                    }
                 }
             }
 
