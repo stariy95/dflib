@@ -3,6 +3,7 @@ package org.dflib;
 import org.dflib.agg.CumSum;
 import org.dflib.exp.bool.AndCondition;
 import org.dflib.exp.bool.AsCondition;
+import org.dflib.exp.bool.BoolShiftExp;
 import org.dflib.exp.bool.NotCondition;
 import org.dflib.exp.bool.OrCondition;
 import org.dflib.exp.num.IntExp1;
@@ -58,6 +59,29 @@ public interface Condition extends Exp<Boolean> {
      */
     default NumExp<Integer> cumSum() {
         return IntExp1.map("cumSum", this, CumSum::ofBools);
+    }
+
+    /**
+     * A Condition shifted forward or backwards depending on the sign of the offset. Head or tail gaps produced by
+     * the shift are filled with "false", as a Condition can not produce nulls.
+     *
+     * @since 2.0.0
+     */
+    @Override
+    default Condition shift(int offset) {
+        return shift(offset, false);
+    }
+
+    /**
+     * A Condition shifted forward or backwards depending on the sign of the offset. Head or tail gaps produced by
+     * the shift are filled with the provided filler, or "false" if the filler is null, as a Condition can not
+     * produce nulls.
+     *
+     * @since 2.0.0
+     */
+    @Override
+    default Condition shift(int offset, Boolean filler) {
+        return new BoolShiftExp(this, offset, filler != null && filler);
     }
 
     @Override

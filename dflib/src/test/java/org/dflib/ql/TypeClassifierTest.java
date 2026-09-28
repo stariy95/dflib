@@ -225,6 +225,7 @@ class TypeClassifierTest {
 
     @Test
     void cast() {
+        assertEquals($col("a").castAsNumber(), TypeClassifier.NUMERIC.cast($col("a")));
         assertEquals($col("a").castAsStr(), TypeClassifier.STRING.cast($col("a")));
         assertEquals($col("a").castAsBool(), TypeClassifier.BOOLEAN.cast($col("a")));
         assertEquals($col("a").castAsDate(), TypeClassifier.DATE.cast($col("a")));
@@ -239,10 +240,9 @@ class TypeClassifierTest {
             }
         }
 
-        // no cast for OBJECT, and none for NUMERIC until "castAsNumber" is available
+        // no cast for OBJECT
         assertFalse(TypeClassifier.OBJECT.canCast());
-        assertFalse(TypeClassifier.NUMERIC.canCast());
-        assertThrows(IllegalStateException.class, () -> TypeClassifier.NUMERIC.cast($col("a")));
+        assertThrows(IllegalStateException.class, () -> TypeClassifier.OBJECT.cast($col("a")));
     }
 
     @SuppressWarnings({"rawtypes", "unused"})

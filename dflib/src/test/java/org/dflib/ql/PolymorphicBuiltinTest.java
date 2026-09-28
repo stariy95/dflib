@@ -11,6 +11,7 @@ import java.util.stream.Stream;
 import static org.dflib.Exp.$bool;
 import static org.dflib.Exp.$col;
 import static org.dflib.Exp.$date;
+import static org.dflib.Exp.$int;
 import static org.dflib.Exp.$intVal;
 import static org.dflib.Exp.$str;
 import static org.dflib.Exp.$time;
@@ -53,8 +54,10 @@ public class PolymorphicBuiltinTest {
                 arguments("shift(date(a), 1)", $date("a").shift(1)),
                 arguments("shift(time(a), -1)", $time("a").shift(-1)),
                 arguments("shift(plusDays(date(a), 1), 1)", $date("a").plusDays(1).shift(1)),
+                arguments("not shift(bool(a), 1)", $bool("a").shift(1).not()),
 
                 arguments("first(a, bool(b))", $col("a").first($bool("b"))),
+                arguments("first(a, int(b) > 0)", $col("a").first($int("b").gt(0))),
                 arguments("last(a)", $col("a").last()),
 
                 arguments("castAsDate(a, 'yyyy')", $col("a").castAsDate("yyyy")),
@@ -80,7 +83,10 @@ public class PolymorphicBuiltinTest {
                 arguments("if(a, 1, 2)", Exp.ifExp($col("a").castAsBool(), $intVal(1), $intVal(2))),
                 arguments("min(str(s), a)", $str("s").min($col("a").castAsBool())),
                 arguments("count(first(a))", Exp.count($col("a").first().castAsBool())),
-                arguments("if(a, 1, 2) = 1", Exp.ifExp($col("a").castAsBool(), $intVal(1), $intVal(2)).eq($intVal(1)))
+                arguments("if(a, 1, 2) = 1", Exp.ifExp($col("a").castAsBool(), $intVal(1), $intVal(2)).eq($intVal(1))),
+                arguments("abs(a)", $col("a").castAsNumber().abs()),
+                arguments("sum(a)", $col("a").castAsNumber().sum()),
+                arguments("round(first(a))", $col("a").first().castAsNumber().round())
         );
     }
 
@@ -106,15 +112,21 @@ public class PolymorphicBuiltinTest {
                         + " untyped and plusDays is defined for [DATE, DATETIME, OFFSETDATETIME] in that position."
                         + " Cast it explicitly, e.g. plusDays(castAsDate(..))"),
                 arguments("max(a)", "1:0 Ambiguous call to max(OBJECT): argument 1 is untyped and max is defined for"
-                        + " [STRING, DATE, TIME, DATETIME] in that position. Cast it explicitly, e.g. max(castAsStr(..))")
+                        + " [NUMERIC, STRING, DATE, TIME, DATETIME] in that position. Cast it explicitly,"
+                        + " e.g. max(castAsNumber(..))")
         );
     }
 
     @ParameterizedTest
     @ValueSource(strings = {
-            "not shift(bool(a), 1)",
             "min(offsetDateTime(a))",
             "min(x) = min(y)",
+            "FIRST(a)",
+            "LAST(a)",
+            "first()",
+            "first(a, )",
+            "last()",
+            "last(a, int(b) > 0)",
     })
     public void unsupportedReceiverOrOperand(String text) {
         assertThrows(QLParserException.class, () -> parseExp(text));

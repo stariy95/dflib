@@ -31,8 +31,7 @@ import java.util.function.Function;
  */
 public enum TypeClassifier {
 
-    // TODO: cast via "castAsNumber" once it is available (#579), so that untyped args can be passed to numeric params
-    NUMERIC("castAsInt", null),
+    NUMERIC("castAsNumber", Exp::castAsNumber),
     STRING("castAsStr", Exp::castAsStr),
     BOOLEAN("castAsBool", Exp::castAsBool),
     DATE("castAsDate", Exp::castAsDate),

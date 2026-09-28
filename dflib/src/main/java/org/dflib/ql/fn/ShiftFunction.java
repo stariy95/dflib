@@ -71,12 +71,11 @@ public class ShiftFunction implements QLFunction {
         return e.shift(offset, filler);
     }
 
-    // Condition does not override shift() covariantly, so the result is a plain Exp<Boolean>
-    public Exp<?> call(Condition e, int offset) {
+    public Condition call(Condition e, int offset) {
         return e.shift(offset);
     }
 
-    public Exp<?> call(Condition e, int offset, boolean filler) {
+    public Condition call(Condition e, int offset, boolean filler) {
         return e.shift(offset, filler);
     }
 

@@ -349,8 +349,8 @@ public class QLFunctionReflectionTest {
         assertEquals(Exp.concat($int("a"), $str("b")), call(functions, "f2", $int("a"), $str("b")));
         assertEquals($int("a").add($int("b")), call(functions, "fN", $int("a"), $int("b")));
 
+        assertEquals($col("a").castAsNumber().castAsInt(), call(functions, "f1", $col("a")));
         assertThrows(IllegalArgumentException.class, () -> call(functions, "f1", $str("a")));
-        assertThrows(IllegalArgumentException.class, () -> call(functions, "f1", $col("a")));
     }
 
     @Test
@@ -379,6 +379,47 @@ public class QLFunctionReflectionTest {
         assertEquals($int("a").castAsStr().trim(), call(functions, "f1", $int("a")));
         assertEquals(Exp.concat($int("a"), $str("b")), call(functions, "f2", $int("a"), $str("b")));
         assertEquals(Exp.concat($int("a"), $str("b"), $col("c")), call(functions, "fN", $int("a"), $str("b"), $col("c")));
+    }
+
+    @Test
+    public void udf_InheritedCall() {
+
+        QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
+                .function("format", new InheritedConcreteUdf())
+                .build();
+
+        assertEquals(List.of("format(STRING)"), shapes(functions));
+        assertEquals($str("a").castAsStr(), call(functions, "format", $str("a")));
+    }
+
+    @Test
+    public void udf_InheritedGenericCall_Rejected() {
+
+        QLFunctions.Builder b1 = QLFunctions.builder().noDefaultFunctions();
+        IllegalArgumentException e1 = assertThrows(IllegalArgumentException.class,
+                () -> b1.function("f1", new InheritedGenericUdf()));
+        assertTrue(e1.getMessage().contains(InheritedGenericUdf.class.getName()), e1.getMessage());
+        assertTrue(e1.getMessage().contains("type variable 'T'"), e1.getMessage());
+
+        QLFunctions.Builder bN = QLFunctions.builder().noDefaultFunctions();
+        assertThrows(IllegalArgumentException.class, () -> bN.function("fN", new InheritedGenericVarArgsUdf()));
+    }
+
+    @Test
+    public void qlFunction_InheritedCall() {
+
+        QLFunctions functions = registry("upper", new InheritedQLFunction());
+
+        assertEquals(List.of("upper(STRING)", "upper(STRING, NUMERIC)"), shapes(functions));
+        assertEquals($str("a").upper(), call(functions, "upper", $str("a")));
+        assertEquals($str("a").lower(), call(functions, "upper", $str("a"), $int("b")));
+    }
+
+    @Test
+    public void qlFunction_InheritedGenericCall_Rejected() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> registry("id", new InheritedGenericQLFunction()));
+        assertTrue(e.getMessage().contains("type variable 'T'"), e.getMessage());
     }
 
     public static class MinFunction implements QLFunction {
@@ -611,5 +652,63 @@ public class QLFunctionReflectionTest {
         public NumExp<Number> call(Exp<Number> exp, Exp<Integer> scale) {
             return (NumExp) exp.castAsDecimal();
         }
+    }
+
+    public static abstract class ConcreteBaseUdf implements Udf1<String, String> {
+        @Override
+        public Exp<String> call(Exp<String> exp) {
+            return exp.castAsStr();
+        }
+    }
+
+    public static class InheritedConcreteUdf extends ConcreteBaseUdf {
+    }
+
+    public static abstract class GenericBaseUdf<T, R> implements Udf1<T, R> {
+        @SuppressWarnings("unchecked")
+        @Override
+        public Exp<R> call(Exp<T> exp) {
+            return (Exp<R>) exp;
+        }
+    }
+
+    public static class InheritedGenericUdf extends GenericBaseUdf<String, String> {
+    }
+
+    public static abstract class GenericBaseVarArgsUdf<R> implements UdfN<R> {
+        @SuppressWarnings("unchecked")
+        @Override
+        public Exp<R> call(Exp<?>... exps) {
+            return (Exp<R>) exps[0];
+        }
+    }
+
+    public static class InheritedGenericVarArgsUdf extends GenericBaseVarArgsUdf<Number> {
+    }
+
+    public static class BaseQLFunction implements QLFunction {
+        public StrExp call(StrExp e) {
+            return e.lower();
+        }
+
+        public StrExp call(StrExp e, NumExp<?> n) {
+            return e.lower();
+        }
+    }
+
+    public static class InheritedQLFunction extends BaseQLFunction {
+        @Override
+        public StrExp call(StrExp e) {
+            return e.upper();
+        }
+    }
+
+    public static class GenericBaseQLFunction<T> implements QLFunction {
+        public Exp<T> call(Exp<T> e) {
+            return e;
+        }
+    }
+
+    public static class InheritedGenericQLFunction extends GenericBaseQLFunction<String> {
     }
 }

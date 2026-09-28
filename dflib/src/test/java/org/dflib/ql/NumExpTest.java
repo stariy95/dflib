@@ -371,8 +371,22 @@ public class NumExpTest {
                 arguments("castAsNumber('1')", $strVal("1").castAsNumber()),
                 arguments("castAsInt(null)", $val(null).castAsInt()),
                 arguments("castAsInt(true)", $boolVal(true).castAsInt()),
-                arguments("castAsInt('1')", $strVal("1").castAsInt())
+                arguments("castAsInt('1')", $strVal("1").castAsInt()),
+                arguments("castAsLong('1')", $strVal("1").castAsLong()),
+                arguments("castAsBigint('1')", $strVal("1").castAsBigint()),
+                arguments("castAsFloat('1.5')", $strVal("1.5").castAsFloat()),
+                arguments("castAsDouble('1.5')", $strVal("1.5").castAsDouble()),
+                arguments("castAsDecimal('1.5')", $strVal("1.5").castAsDecimal())
         );
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "castAsInt()",
+            "castAsLong(1, 2)",
+    })
+    void cast_throws(String text) {
+        assertThrows(QLParserException.class, () -> parseExp(text));
     }
 
     @ParameterizedTest
@@ -450,6 +464,14 @@ public class NumExpTest {
                 arguments("len(if(a = 1, b, c))",
                         ifExp($col("a").eq($val(1)), $col("b"), $col("c")).castAsStr().len())
         );
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "scale(decimal(1), date(1))",
+    })
+    void function_throws(String text) {
+        assertThrows(QLParserException.class, () -> parseExp(text));
     }
 
     @ParameterizedTest

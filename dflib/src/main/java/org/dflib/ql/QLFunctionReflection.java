@@ -7,15 +7,23 @@ import org.dflib.Udf2;
 import org.dflib.Udf3;
 import org.dflib.UdfN;
 
+import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
+import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
+import java.lang.reflect.WildcardType;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 /**
  * Builds function descriptors by reflecting on {@code Udf} objects and {@link QLFunction} classes.
@@ -79,17 +87,65 @@ class QLFunctionReflection {
     }
 
     /**
-     * Returns the {@code call} methods declared in a class, skipping bridge and synthetic ones, as they carry
-     * neither generic types nor parameter annotations.
+     * Returns the {@code call} methods declared in a class or inherited from its superclasses, skipping bridge and
+     * synthetic ones, as they carry neither generic types nor parameter annotations, and the ones overridden in a
+     * subclass. An inherited method whose signature refers to a type variable of its generic declaring class is
+     * rejected, as it would lose the types bound by the subclass.
      */
     private static List<Method> callMethods(Class<?> type) {
         List<Method> methods = new ArrayList<>();
-        for (Method m : type.getDeclaredMethods()) {
-            if ("call".equals(m.getName()) && !m.isBridge() && !m.isSynthetic()) {
-                methods.add(m);
+        Set<List<Class<?>>> seen = new HashSet<>();
+
+        for (Class<?> c = type; c != null && c != Object.class; c = c.getSuperclass()) {
+            for (Method m : c.getDeclaredMethods()) {
+                if ("call".equals(m.getName())
+                        && !m.isBridge()
+                        && !m.isSynthetic()
+                        && seen.add(List.of(m.getParameterTypes()))) {
+
+                    if (c != type) {
+                        checkNoClassTypeVariables(type, m);
+                    }
+
+                    methods.add(m);
+                }
             }
         }
         return methods;
+    }
+
+    private static void checkNoClassTypeVariables(Class<?> type, Method method) {
+
+        List<Type> types = new ArrayList<>(Arrays.asList(method.getGenericParameterTypes()));
+        types.add(method.getGenericReturnType());
+
+        for (Type t : types) {
+            TypeVariable<?> tv = findClassTypeVariable(t);
+            if (tv != null) {
+                throw new IllegalArgumentException("Function class " + type.getName()
+                        + " inherits a 'call' method from a generic superclass, and its type variable '" + tv
+                        + "' can not be resolved. Declare 'call' in " + type.getSimpleName()
+                        + " with concrete types: " + method);
+            }
+        }
+    }
+
+    private static TypeVariable<?> findClassTypeVariable(Type type) {
+        return switch (type) {
+            case TypeVariable<?> tv -> tv.getGenericDeclaration() instanceof Class ? tv : null;
+            case ParameterizedType pt -> Arrays.stream(pt.getActualTypeArguments())
+                    .map(QLFunctionReflection::findClassTypeVariable)
+                    .filter(Objects::nonNull)
+                    .findFirst()
+                    .orElse(null);
+            case GenericArrayType at -> findClassTypeVariable(at.getGenericComponentType());
+            case WildcardType wt -> Stream.concat(Arrays.stream(wt.getUpperBounds()), Arrays.stream(wt.getLowerBounds()))
+                    .map(QLFunctionReflection::findClassTypeVariable)
+                    .filter(Objects::nonNull)
+                    .findFirst()
+                    .orElse(null);
+            default -> null;
+        };
     }
 
     private static Method callMethod(Object function, Class<?>... parameterTypes) {
@@ -133,6 +189,10 @@ class QLFunctionReflection {
         List<QLFunctionDescriptor> descriptors = new ArrayList<>();
         for (Method m : callMethods(type)) {
             if (Modifier.isPublic(m.getModifiers())) {
+                if (!Modifier.isPublic(m.getDeclaringClass().getModifiers())) {
+                    throw new IllegalArgumentException("A QLFunction 'call' method must be declared in a public class"
+                            + " to be invoked reflectively: " + m);
+                }
                 descriptors.add(reflectCall(name, function, m));
             }
         }

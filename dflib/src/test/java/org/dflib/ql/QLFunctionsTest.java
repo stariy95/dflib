@@ -105,23 +105,24 @@ class QLFunctionsTest {
     }
 
     @Test
-    void function_UntypedArg_NotCastToATypeWithoutACast() {
-
-        // NUMERIC has no cast until "castAsNumber" is available
-        QLFunctions functions = registry()
-                .function(descriptor("f").arg(NUMERIC).as(args -> args.get(0)))
-                .function(descriptor("f").arg(DATE).as(args -> args.get(0)))
-                .build();
-
-        assertEquals(List.of(arg(DATE)), functions.function("f", List.of(arg(OBJECT))).args());
+    void function_UntypedArg_CastToNumeric() {
 
         QLFunctions numOnly = registry()
                 .function(descriptor("f").arg(NUMERIC).as(args -> args.get(0)))
                 .build();
 
-        assertEquals("No overload of f matches f(OBJECT). Available: f(NUMERIC)."
-                        + " Argument 1 is untyped; cast it to one of [NUMERIC], e.g. castAsInt(..)",
-                notFound(numOnly, "f", arg(OBJECT)));
+        assertEquals(List.of(arg(NUMERIC)), numOnly.function("f", List.of(arg(OBJECT))).args());
+        assertEquals($col("a").castAsNumber(), numOnly.call("f", List.of($col("a"))));
+
+        QLFunctions functions = registry()
+                .function(descriptor("f").arg(NUMERIC).as(args -> args.get(0)))
+                .function(descriptor("f").arg(DATE).as(args -> args.get(0)))
+                .build();
+
+        assertEquals("Ambiguous call to f(OBJECT): argument 1 is untyped and f is defined for [NUMERIC, DATE]"
+                        + " in that position. Cast it explicitly, e.g. f(castAsNumber(..))",
+                assertThrows(IllegalArgumentException.class, () -> functions.function("f", List.of(arg(OBJECT))))
+                        .getMessage());
     }
 
     @Test

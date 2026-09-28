@@ -74,7 +74,7 @@ class DefaultQLFunctionsTest {
         assertEquals(
                 List.of(
                         "abs", "avg", "castAsBigint", "castAsBool", "castAsDate", "castAsDateTime", "castAsDecimal",
-                        "castAsDouble", "castAsFloat", "castAsInt", "castAsLong", "castAsOffsetDateTime",
+                        "castAsDouble", "castAsFloat", "castAsInt", "castAsLong", "castAsNumber", "castAsOffsetDateTime",
                         "castAsStr", "castAsTime", "concat", "contains", "count", "cumSum", "day", "endsWith",
                         "first", "hour", "if", "ifNull", "last", "len", "list", "lower", "matches", "max", "median",
                         "millisecond", "min", "minute", "month", "plusDays", "plusHours", "plusMilliseconds",
@@ -131,21 +131,18 @@ class DefaultQLFunctionsTest {
                         + " [DATE, DATETIME, OFFSETDATETIME] in that position. Cast it explicitly, e.g. year(castAsDate(..))",
                 assertThrows(IllegalArgumentException.class, () -> resolve("year", $col("c"))).getMessage());
 
-        // NUMERIC is not among the candidates, as it has no cast yet
         assertEquals("Ambiguous call to min(OBJECT): argument 1 is untyped and min is defined for"
-                        + " [STRING, DATE, TIME, DATETIME] in that position. Cast it explicitly, e.g. min(castAsStr(..))",
+                        + " [NUMERIC, STRING, DATE, TIME, DATETIME] in that position. Cast it explicitly,"
+                        + " e.g. min(castAsNumber(..))",
                 assertThrows(IllegalArgumentException.class, () -> resolve("min", $col("c"))).getMessage());
 
         assertThrows(IllegalArgumentException.class, () -> resolve("plusDays", $col("c"), $intVal(1)));
     }
 
     @Test
-    void untypedReceiverOfANumericFunction_IsRejected() {
-
-        // until "castAsNumber" is available
-        assertEquals("No overload of sum matches sum(OBJECT). Available: sum(NUMERIC), sum(NUMERIC, BOOLEAN)."
-                        + " Argument 1 is untyped; cast it to one of [NUMERIC], e.g. castAsInt(..)",
-                assertThrows(IllegalArgumentException.class, () -> resolve("sum", $col("c"))).getMessage());
+    void untypedReceiverOfANumericFunction_IsCast() {
+        assertEquals($col("c").castAsNumber().sum(), call("sum", $col("c")));
+        assertEquals($col("c").castAsNumber().abs(), call("abs", $col("c")));
     }
 
     @Test

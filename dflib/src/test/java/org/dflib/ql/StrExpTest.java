@@ -242,7 +242,8 @@ public class StrExpTest {
                 arguments("split(str(1), '|')", $str(1).split("|")),
                 arguments("split(trim(' a|b|c '), '|', 2)", $strVal(" a|b|c ").trim().split("|", 2)),
                 arguments("split(a, ',')", $col("a").castAsStr().split(",")),
-                arguments("split(a, ',', 2)", $col("a").castAsStr().split(",", 2))
+                arguments("split(a, ',', 2)", $col("a").castAsStr().split(",", 2)),
+                arguments("split(time(1), ':')", $time(1).castAsStr().split(":"))
         );
     }
 

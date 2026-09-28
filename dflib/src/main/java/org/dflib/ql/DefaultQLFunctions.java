@@ -23,6 +23,7 @@ class DefaultQLFunctions {
                 .function("castAsFloat", new CastAsFloatFunction())
                 .function("castAsInt", new CastAsIntFunction())
                 .function("castAsLong", new CastAsLongFunction())
+                .function("castAsNumber", new CastAsNumberFunction())
                 .function("castAsOffsetDateTime", new CastAsOffsetDateTimeFunction())
                 .function("castAsStr", new CastAsStrFunction())
                 .function("castAsTime", new CastAsTimeFunction())

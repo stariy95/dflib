@@ -36,7 +36,9 @@ public class ShiftTest {
                 arguments("shift(date(a), 1)", $date("a").shift(1)),
                 arguments("shift(plusDays(date(1), 1), 1)", $date(1).plusDays(1).shift(1)),
                 arguments("shift(a, 1, 'x')", $col("a").shift(1, "x")),
-                arguments("shift(a, 2)", $col("a").shift(2))
+                arguments("shift(a, 2)", $col("a").shift(2)),
+                arguments("shift(true, 1)", $boolVal(true).shift(1)),
+                arguments("shift(int(1) > 0, 1, false)", $int(1).gt(0).shift(1, false))
         );
     }
 
@@ -61,6 +63,7 @@ public class ShiftTest {
             "shift(int(1))",
             "shift(int(1), )",
             "shift(, 2)",
+            "shift(true, 1, 0)",
     })
     public void shift_throws(String text) {
         assertThrows(QLParserException.class, () -> parseExp(text));
