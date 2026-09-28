@@ -445,8 +445,6 @@ public class NumExpTest {
                 arguments("scale(decimal(1), 3)", $decimal(1).scale(3)),
                 arguments("scale(double(1), 3)", $double(1).castAsDecimal().scale(3)),
                 arguments("len(str(a))", $str("a").len()),
-
-                // an argument whose type is only known at eval time still resolves against a typed parameter
                 arguments("len(a)", $col("a").castAsStr().len()),
                 arguments("len(ifNull(a, b))", ifNull($col("a"), $col("b")).castAsStr().len()),
                 arguments("len(if(a = 1, b, c))",
@@ -477,7 +475,8 @@ public class NumExpTest {
                 arguments("avg(int(1), int(1) > 0)", $int(1).avg($int(1).gt(1))),
                 arguments("median(int(1), int(1) > 0)", $int(1).median($int(1).gt(1))),
                 arguments("quantile(int(1), 0.5, int(1) > 0)", $int(1).quantile(0.5, $int(1).gt(1))),
-                arguments("sum(int(1), int(2) > 0)", $int(1).sum($int(2).gt(1)))
+                arguments("sum(int(1), int(2) > 0)", $int(1).sum($int(2).gt(1))),
+                arguments("min(len(a))", $col("a").castAsStr().len().min())
         );
     }
 }

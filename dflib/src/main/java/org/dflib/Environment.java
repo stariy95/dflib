@@ -42,7 +42,7 @@ public class Environment {
     // Note that HttpClient doesn't require an explicit shutdown.
     private final Supplier<HttpClient> lazyHttpClient;
 
-    private final QLFunctions glFunctions;
+    private final QLFunctions qlFunctions;
 
     public static Environment commonEnv() {
         return commonEnv.get();
@@ -57,9 +57,7 @@ public class Environment {
     }
 
     private static QLFunctions createDefaultQLFunctions() {
-        return QLFunctions.builder()
-                .defaultFunctions()
-                .build();
+        return QLFunctions.builder().build();
     }
 
     /**
@@ -73,7 +71,7 @@ public class Environment {
                 old.parallelExecThreshold,
                 old.printer,
                 old.lazyHttpClient,
-                old.glFunctions));
+                old.qlFunctions));
     }
 
     /**
@@ -85,7 +83,7 @@ public class Environment {
                 parallelExecThreshold,
                 old.printer,
                 old.lazyHttpClient,
-                old.glFunctions));
+                old.qlFunctions));
     }
 
     /**
@@ -97,7 +95,7 @@ public class Environment {
                 old.parallelExecThreshold,
                 printer,
                 old.lazyHttpClient,
-                old.glFunctions));
+                old.qlFunctions));
     }
 
     /**
@@ -111,7 +109,7 @@ public class Environment {
                 old.parallelExecThreshold,
                 old.printer,
                 supplier,
-                old.glFunctions));
+                old.qlFunctions));
     }
 
     /**
@@ -123,20 +121,22 @@ public class Environment {
                 old.parallelExecThreshold,
                 old.printer,
                 new CachingSupplier<>(clientSupplier),
-                old.glFunctions));
+                old.qlFunctions));
     }
 
     /**
-     * @param glFunctions new QL functions to set to the current environment
+     * Sets the registry of functions recognized by the QL parser, e.g.
+     * {@code setQLFunctions(QLFunctions.builder().function("myFn", Udf1.of(e -> e.castAsStr().trim())).build())}.
+     *
      * @since 2.0.0
      */
-    public static void setQLFunctions(QLFunctions glFunctions) {
+    public static void setQLFunctions(QLFunctions qlFunctions) {
         resetEnv(old -> new Environment(
                 old.threadPool,
                 old.parallelExecThreshold,
                 old.printer,
                 old.lazyHttpClient,
-                glFunctions));
+                qlFunctions));
     }
 
     static void resetEnv(UnaryOperator<Environment> envFactory) {
@@ -153,12 +153,12 @@ public class Environment {
             int parallelExecThreshold,
             Printer printer,
             Supplier<HttpClient> lazyHttpClient,
-            QLFunctions glFunctions) {
+            QLFunctions qlFunctions) {
         this.threadPool = threadPool;
         this.parallelExecThreshold = parallelExecThreshold;
         this.printer = printer;
         this.lazyHttpClient = lazyHttpClient;
-        this.glFunctions = glFunctions;
+        this.qlFunctions = qlFunctions;
     }
 
     public ExecutorService threadPool() {
@@ -185,8 +185,11 @@ public class Environment {
         return lazyHttpClient.get();
     }
 
-    public QLFunctions getQLFunctions() {
-        return glFunctions;
+    /**
+     * @since 2.0.0
+     */
+    public QLFunctions qlFunctions() {
+        return qlFunctions;
     }
 
     // only used by tests
