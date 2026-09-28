@@ -3,6 +3,7 @@ package org.dflib.ql;
 import org.dflib.Condition;
 import org.dflib.Exp;
 import org.dflib.StrExp;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -180,6 +181,12 @@ public class StrExpTest {
         assertEquals(expected, exp);
     }
 
+    @Test
+    public void test() {
+        Exp<?> exp = parseExp("substr('example', 2)");
+        assertInstanceOf(StrExp.class, exp);
+    }
+
     static Stream<Arguments> function_returnsStrExp() {
         return Stream.of(
                 arguments("concat(str(1), 'example')", concat($str(1), $strVal("example"))),
@@ -216,9 +223,16 @@ public class StrExpTest {
             "CONCAT()",
             "trim()",
             "substr('example')",
-            "substr('example', 1 + 2)",
+            "substr('example', 'a')",
             "substr('example', 2, null)",
             "substr('example', 2, -1)",
+
+            // "substr" reads its position arguments while building the expression, so they have to be constants.
+            // A column reference matches on type but has no value until eval
+            "substr('example', b)",
+            "substr(a, b)",
+            "substr('example', int(b))",
+            "substr('example', 2, c)",
     })
     public void function_returnsStrExp_throws(String text) {
         assertThrows(QLParserException.class, () -> parseExp(text));
@@ -236,7 +250,11 @@ public class StrExpTest {
                 arguments("split('a,b,c', ',')", $strVal("a,b,c").split(",")),
                 arguments("split('a,b,c', ',', 2)", $strVal("a,b,c").split(",", 2)),
                 arguments("split(str(1), '|')", $str(1).split("|")),
-                arguments("split(trim(' a|b|c '), '|', 2)", $strVal(" a|b|c ").trim().split("|", 2))
+                arguments("split(trim(' a|b|c '), '|', 2)", $strVal(" a|b|c ").trim().split("|", 2)),
+
+                // an untyped column no longer needs a "str(..)" wrapper
+                arguments("split(a, ',')", $col("a").castAsStr().split(",")),
+                arguments("split(a, ',', 2)", $col("a").castAsStr().split(",", 2))
         );
     }
 

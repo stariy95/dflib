@@ -10,6 +10,7 @@ import java.time.temporal.Temporal;
 import java.util.Arrays;
 import java.util.function.Function;
 import java.util.function.BiFunction;
+import java.util.stream.Collectors;
 
 import org.dflib.*;
 
@@ -714,19 +715,14 @@ numFn returns [NumExp<?> exp] locals [Function<NumExp<?>, NumExp<?>> fn]
     | castAsFloat { $exp = $castAsFloat.exp; }
     | castAsDouble { $exp = $castAsDouble.exp; }
     | castAsDecimal { $exp = $castAsDecimal.exp; }
-    | castAsNumber { $exp = $castAsNumber.exp; }
     | timeFieldFn { $exp = $timeFieldFn.exp; }
     | dateFieldFn { $exp = $dateFieldFn.exp; }
     | dateTimeFieldFn { $exp = $dateTimeFieldFn.exp; }
     | offsetDateTimeFieldFn { $exp = $offsetDateTimeFieldFn.exp; }
-    | LEN '(' strExp ')' { $exp = $strExp.exp.len(); }
+    | { isNumFn(_input.LT(1).getText()) }? IDENTIFIER '(' (args+=expression (',' args+=expression)*)? ')' {
+          $exp = envNumFn($IDENTIFIER.text, $args.stream().map(ctx -> ctx.exp).collect(Collectors.toList()));
+    }
     | COUNT ('(' b=boolExp? ')') { $exp = $ctx.b != null ? Exp.count($b.exp) : Exp.count(); }
-    | ROW_NUM ('(' ')') { $exp = Exp.rowNum(); }
-    | (
-        : ABS { $fn = e -> e.abs(); }
-        | ROUND { $fn = e -> e.round(); }
-        | SQRT { $fn = e -> e.sqrt(); }
-    ) '(' e=numExp ')' { $exp = $fn.apply($e.exp); }
     | SCALE '(' e=numExp ',' s=integerScalar ')' { $exp = $e.exp.castAsDecimal().scale( $s.value.intValue() ); }
     ;
 
@@ -806,21 +802,18 @@ offsetDateTimeFieldFn returns [NumExp<Integer> exp] locals [Function<OffsetDateT
     ;
 
 /**
- * Boolean functions, which can include casting, matches, starts with, ends with, and contains.
- * These functions produce boolean results.
+ * Boolean functions, resolved against the environment function registry.
  *
  * Parameters:
- *  - The input expression(s) for the boolean function. The types and number of parameters depend on the specific function.
- *    For example, `matches` takes a string expression and a string literal, while `castAsBool` takes a single expression of any type.
+ *  - The input expression(s) for the boolean function. The types and number of parameters depend on the specific
+ *    function. For example, `matches` takes an expression and a string literal, while `castAsBool` takes a single
+ *    expression of any type.
  */
-boolFn returns [Condition exp] locals [BiFunction<Exp, String, Condition> fn]
-    : castAsBool { $exp = $castAsBool.exp; }
-    | (
-        : MATCHES { $fn = (a, b) -> a.matches(b); }
-        | STARTS_WITH { $fn = (a, b) -> a.startsWith(b); }
-        | ENDS_WITH { $fn = (a, b) -> a.endsWith(b); }
-        | CONTAINS { $fn = (a, b) -> a.contains(b); }
-    ) '(' a=expression ',' b=strScalar ')' { $exp = $fn.apply($a.exp, $b.value); }
+boolFn returns [Condition exp]
+    // lookahead and check that the function name is a boolean function
+    : { isBoolFn(_input.LT(1).getText()) }? IDENTIFIER '(' (args+=expression (',' args+=expression)*)? ')' {
+        $exp = envBoolFn($IDENTIFIER.text, $args.stream().map(ctx -> ctx.exp).collect(Collectors.toList()));
+    }
     ;
 
 
@@ -834,6 +827,9 @@ boolFn returns [Condition exp] locals [BiFunction<Exp, String, Condition> fn]
  */
 timeFn returns [TimeExp exp] locals [BiFunction<TimeExp, Integer, TimeExp> fn]
     : castAsTime { $exp = $castAsTime.exp; }
+    | { isTimeFn(_input.LT(1).getText()) }? IDENTIFIER '(' (args+=expression (',' args+=expression)*)? ')' {
+        $exp = envTimeFn($IDENTIFIER.text, $args.stream().map(ctx -> ctx.exp).collect(Collectors.toList()));
+    }
     | (
         : PLUS_HOURS { $fn = (a, b) -> a.plusHours(b); }
         | PLUS_MINUTES { $fn = (a, b) -> a.plusMinutes(b); }
@@ -852,6 +848,9 @@ timeFn returns [TimeExp exp] locals [BiFunction<TimeExp, Integer, TimeExp> fn]
  */
 dateFn returns [DateExp exp] locals [BiFunction<DateExp, Integer, DateExp> fn]
     : castAsDate { $exp = $castAsDate.exp; }
+    | { isDateFn(_input.LT(1).getText()) }? IDENTIFIER '(' (args+=expression (',' args+=expression)*)? ')' {
+        $exp = envDateFn($IDENTIFIER.text, $args.stream().map(ctx -> ctx.exp).collect(Collectors.toList()));
+    }
     | (
         : PLUS_YEARS { $fn = (a, b) -> a.plusYears(b); }
         | PLUS_MONTHS { $fn = (a, b) -> a.plusMonths(b); }
@@ -869,6 +868,9 @@ dateFn returns [DateExp exp] locals [BiFunction<DateExp, Integer, DateExp> fn]
  */
 dateTimeFn returns [DateTimeExp exp] locals [BiFunction<DateTimeExp, Integer, DateTimeExp> fn]
     : castAsDateTime { $exp = $castAsDateTime.exp; }
+    | { isDateTimeFn(_input.LT(1).getText()) }? IDENTIFIER '(' (args+=expression (',' args+=expression)*)? ')' {
+        $exp = envDateTimeFn($IDENTIFIER.text, $args.stream().map(ctx -> ctx.exp).collect(Collectors.toList()));
+    }
     | (
         : PLUS_YEARS { $fn = (a, b) -> a.plusYears(b); }
         | PLUS_MONTHS { $fn = (a, b) -> a.plusMonths(b); }
@@ -892,6 +894,9 @@ dateTimeFn returns [DateTimeExp exp] locals [BiFunction<DateTimeExp, Integer, Da
  */
 offsetDateTimeFn returns [OffsetDateTimeExp exp] locals [BiFunction<OffsetDateTimeExp, Integer, OffsetDateTimeExp> fn]
     : castAsOffsetDateTime { $exp = $castAsOffsetDateTime.exp; }
+    | { isOffsetDateTimeFn(_input.LT(1).getText()) }? IDENTIFIER '(' (args+=expression (',' args+=expression)*)? ')' {
+        $exp = envOffsetDateTimeFn($IDENTIFIER.text, $args.stream().map(ctx -> ctx.exp).collect(Collectors.toList()));
+    }
     | (
         : PLUS_YEARS { $fn = (a, b) -> a.plusYears(b); }
         | PLUS_MONTHS { $fn = (a, b) -> a.plusMonths(b); }
@@ -916,11 +921,9 @@ offsetDateTimeFn returns [OffsetDateTimeExp exp] locals [BiFunction<OffsetDateTi
  */
 strFn returns [StrExp exp]
     : castAsStr { $exp = $castAsStr.exp; }
-    | TRIM '(' expression ')' { $exp = $expression.exp.trim(); }
-    | LOWER '(' expression ')' { $exp = $expression.exp.lower(); }
-    | UPPER '(' expression ')' { $exp = $expression.exp.upper(); }
-    | SUBSTR '(' s=expression ',' a=integerScalar (',' b=integerScalar)? ')' {
-        $exp = $ctx.b != null ? $s.exp.substr($a.value.intValue(), $b.value.intValue()) : $s.exp.substr($a.value.intValue());
+    // lookahead and check that the function name is a string function
+    | { isStrFn(_input.LT(1).getText()) }? IDENTIFIER '(' (args+=expression (',' args+=expression)*)? ')' {
+        $exp = envStrFn($IDENTIFIER.text, $args.stream().map(ctx -> ctx.exp).collect(Collectors.toList()));
     }
     | CONCAT ('(' (args+=expression (',' args+=expression)*)? ')') {
         $exp = !$args.isEmpty() ? Exp.concat($args.stream().map(a -> a.exp).toArray()) : Exp.concat();
@@ -928,16 +931,6 @@ strFn returns [StrExp exp]
     ;
 
 /// **Cast functions**
-
-/**
- * The cast-to-boolean function, converting an expression to a boolean value.
- *
- * Parameters:
- *  - The expression to be cast.
- */
-castAsBool returns [Condition exp]
-    : CAST_AS_BOOL '(' expression ')' { $exp = $expression.exp.castAsBool(); }
-    ;
 
 /**
  * The cast-to-integer function, converting an expression to an integer.
@@ -997,17 +990,6 @@ castAsDouble returns [NumExp<Double> exp]
  */
 castAsDecimal returns [DecimalExp exp]
     : CAST_AS_DECIMAL '(' expression ')' { $exp = $expression.exp.castAsDecimal(); }
-    ;
-
-
-/**
- * Casts an expression to a Numeric value.
- *
- * Parameters:
- *  - The expression to be cast.
- */
-castAsNumber returns [NumExp<?> exp]
-    : CAST_AS_NUMBER '(' expression ')' { $exp = $expression.exp.castAsNumber(); }
     ;
 
 /**
@@ -1080,8 +1062,11 @@ castAsOffsetDateTime returns [OffsetDateTimeExp exp]
 genericFn returns [Exp<?> exp]
     : ifExp { $exp = $ifExp.exp; }
     | ifNull { $exp = $ifNull.exp; }
-    | split { $exp = $split.exp; }
     | shift { $exp = $shift.exp; }
+    // lookahead and check that the function name is a function with a non-specific return type
+    | { isObjectFn(_input.LT(1).getText()) }? IDENTIFIER '(' (args+=expression (',' args+=expression)*)? ')' {
+        $exp = envObjectFn($IDENTIFIER.text, $args.stream().map(ctx -> ctx.exp).collect(Collectors.toList()));
+    }
     ;
 
 /**
@@ -1115,20 +1100,6 @@ ifNull returns [Exp<?> exp]
 //@ doc:name nullable expression
 nullableExp returns [Exp<?> exp]
     : expression { $exp = $expression.exp; }
-    ;
-
-/**
- * A SPLIT expression, which splits a string into an array of substrings based on a delimiter.
- *
- * Parameters:
- *  - The string expression to split.
- *  - The delimiter string to split the string by.
- *  - An integer that limits the maximum number of substrings (optional).
- */
-split returns [Exp<String[]> exp]
-    : SPLIT '(' a=strExp ',' b=strScalar (',' c=integerScalar)? ')' {
-        $exp = $ctx.c != null ? $a.exp.split($b.value, $c.value.intValue()) : $a.exp.split($b.value);
-    }
     ;
 
 /**
@@ -1186,8 +1157,6 @@ aggregateFn returns [Exp<?> exp]
 genericAgg returns [Exp<?> exp]
     : positionalAgg { $exp = $positionalAgg.exp; }
     | vConcat { $exp = $vConcat.exp; }
-    | list { $exp = $list.exp; }
-    | set { $exp = $set.exp; }
     | array { $exp = $array.exp; }
     ;
 
@@ -1224,20 +1193,6 @@ vConcat returns [Exp<?> exp]
             $ctx.s == null ? "" : $ctx.s.value
         );
     }
-    ;
-
-/**
- * Creates an aggregating expression whose "reduce" operation returns a List containing all Series values.
- */
-list returns [Exp<?> exp]
-    : LIST '(' e=expression ')' { $exp = $e.exp.list(); }
-    ;
-
-/**
- * Creates an aggregating expression whose "reduce" operation returns a Set containing all Series values.
- */
-set returns [Exp<?> exp]
-    : SET '(' e=expression ')' { $exp = $e.exp.set(); }
     ;
 
 /**
@@ -1366,14 +1321,12 @@ fnName returns [String id]
     | DECIMAL
     | STR
     | COL
-    | CAST_AS_BOOL
     | CAST_AS_INT
     | CAST_AS_LONG
     | CAST_AS_BIGINT
     | CAST_AS_FLOAT
     | CAST_AS_DOUBLE
     | CAST_AS_DECIMAL
-    | CAST_AS_NUMBER
     | CAST_AS_STR
     | CAST_AS_TIME
     | CAST_AS_DATE
@@ -1381,18 +1334,8 @@ fnName returns [String id]
     | CAST_AS_OFFSET_DATETIME
     | IF
     | IF_NULL
-    | SPLIT
     | SHIFT
     | CONCAT
-    | SUBSTR
-    | TRIM
-    | LEN
-    | LOWER
-    | UPPER
-    | MATCHES
-    | STARTS_WITH
-    | ENDS_WITH
-    | CONTAINS
     | DATE
     | TIME
     | DATETIME
@@ -1413,10 +1356,6 @@ fnName returns [String id]
     | PLUS_SECONDS
     | PLUS_MILLISECONDS
     | PLUS_NANOS
-    | ABS
-    | ROUND
-    | SQRT
-    | ROW_NUM
     | SCALE
     | COUNT
     | SUM
@@ -1429,8 +1368,6 @@ fnName returns [String id]
     | FIRST
     | LAST
     | VCONCAT
-    | LIST
-    | SET
     | ARRAY
     | ASC
     | DESC
@@ -1531,9 +1468,6 @@ COL: 'col';
 // *Cast functions*
 
 //@ doc:inline
-CAST_AS_BOOL: 'castAsBool';
-
-//@ doc:inline
 CAST_AS_INT: 'castAsInt';
 
 //@ doc:inline
@@ -1550,9 +1484,6 @@ CAST_AS_DOUBLE: 'castAsDouble';
 
 //@ doc:inline
 CAST_AS_DECIMAL: 'castAsDecimal';
-
-//@ doc:inline
-CAST_AS_NUMBER: 'castAsNumber';
 
 //@ doc:inline
 CAST_AS_STR: 'castAsStr';
@@ -1578,40 +1509,10 @@ IF: 'if';
 IF_NULL: 'ifNull';
 
 //@ doc:inline
-SPLIT: 'split';
-
-//@ doc:inline
 SHIFT: 'shift';
 
 //@ doc:inline
 CONCAT: 'concat';
-
-//@ doc:inline
-SUBSTR: 'substr';
-
-//@ doc:inline
-TRIM: 'trim';
-
-//@ doc:inline
-LEN: 'len';
-
-//@ doc:inline
-LOWER: 'lower';
-
-//@ doc:inline
-UPPER: 'upper';
-
-//@ doc:inline
-MATCHES: 'matches';
-
-//@ doc:inline
-STARTS_WITH: 'startsWith';
-
-//@ doc:inline
-ENDS_WITH: 'endsWith';
-
-//@ doc:inline
-CONTAINS: 'contains';
 
 //@ doc:inline
 DATE: 'date';
@@ -1674,18 +1575,6 @@ PLUS_MILLISECONDS: 'plusMilliseconds';
 PLUS_NANOS: 'plusNanos';
 
 //@ doc:inline
-ABS: 'abs';
-
-//@ doc:inline
-ROUND: 'round';
-
-//@ doc:inline
-SQRT: 'sqrt';
-
-//@ doc:inline
-ROW_NUM: 'rowNum';
-
-//@ doc:inline
 SCALE: 'scale';
 
 // *Aggregates*
@@ -1722,12 +1611,6 @@ LAST: 'last';
 
 //@ doc:inline
 VCONCAT: 'vConcat';
-
-//@ doc:inline
-LIST: 'list';
-
-//@ doc:inline
-SET: 'set';
 
 //@ doc:inline
 ARRAY: 'array';

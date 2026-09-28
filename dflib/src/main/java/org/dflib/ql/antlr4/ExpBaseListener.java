@@ -10,6 +10,7 @@ import java.time.temporal.Temporal;
 import java.util.Arrays;
 import java.util.function.Function;
 import java.util.function.BiFunction;
+import java.util.stream.Collectors;
 
 import org.dflib.*;
 
@@ -824,18 +825,6 @@ public class ExpBaseListener implements ExpListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void enterCastAsBool(ExpParser.CastAsBoolContext ctx) { }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation does nothing.</p>
-	 */
-	@Override public void exitCastAsBool(ExpParser.CastAsBoolContext ctx) { }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation does nothing.</p>
-	 */
 	@Override public void enterCastAsInt(ExpParser.CastAsIntContext ctx) { }
 	/**
 	 * {@inheritDoc}
@@ -903,18 +892,6 @@ public class ExpBaseListener implements ExpListener {
 	 * <p>The default implementation does nothing.</p>
 	 */
 	@Override public void exitCastAsDecimal(ExpParser.CastAsDecimalContext ctx) { }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation does nothing.</p>
-	 */
-	@Override public void enterCastAsNumber(ExpParser.CastAsNumberContext ctx) { }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation does nothing.</p>
-	 */
-	@Override public void exitCastAsNumber(ExpParser.CastAsNumberContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
@@ -1028,18 +1005,6 @@ public class ExpBaseListener implements ExpListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void enterSplit(ExpParser.SplitContext ctx) { }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation does nothing.</p>
-	 */
-	@Override public void exitSplit(ExpParser.SplitContext ctx) { }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation does nothing.</p>
-	 */
 	@Override public void enterShift(ExpParser.ShiftContext ctx) { }
 	/**
 	 * {@inheritDoc}
@@ -1107,30 +1072,6 @@ public class ExpBaseListener implements ExpListener {
 	 * <p>The default implementation does nothing.</p>
 	 */
 	@Override public void exitVConcat(ExpParser.VConcatContext ctx) { }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation does nothing.</p>
-	 */
-	@Override public void enterList(ExpParser.ListContext ctx) { }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation does nothing.</p>
-	 */
-	@Override public void exitList(ExpParser.ListContext ctx) { }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation does nothing.</p>
-	 */
-	@Override public void enterSet(ExpParser.SetContext ctx) { }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation does nothing.</p>
-	 */
-	@Override public void exitSet(ExpParser.SetContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *

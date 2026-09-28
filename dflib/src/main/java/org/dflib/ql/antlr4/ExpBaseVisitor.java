@@ -10,6 +10,7 @@ import java.time.temporal.Temporal;
 import java.util.Arrays;
 import java.util.function.Function;
 import java.util.function.BiFunction;
+import java.util.stream.Collectors;
 
 import org.dflib.*;
 
@@ -495,13 +496,6 @@ public class ExpBaseVisitor<T> extends AbstractParseTreeVisitor<T> implements Ex
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitCastAsBool(ExpParser.CastAsBoolContext ctx) { return visitChildren(ctx); }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation returns the result of calling
-	 * {@link #visitChildren} on {@code ctx}.</p>
-	 */
 	@Override public T visitCastAsInt(ExpParser.CastAsIntContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
@@ -538,13 +532,6 @@ public class ExpBaseVisitor<T> extends AbstractParseTreeVisitor<T> implements Ex
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
 	@Override public T visitCastAsDecimal(ExpParser.CastAsDecimalContext ctx) { return visitChildren(ctx); }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation returns the result of calling
-	 * {@link #visitChildren} on {@code ctx}.</p>
-	 */
-	@Override public T visitCastAsNumber(ExpParser.CastAsNumberContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
@@ -614,13 +601,6 @@ public class ExpBaseVisitor<T> extends AbstractParseTreeVisitor<T> implements Ex
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitSplit(ExpParser.SplitContext ctx) { return visitChildren(ctx); }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation returns the result of calling
-	 * {@link #visitChildren} on {@code ctx}.</p>
-	 */
 	@Override public T visitShift(ExpParser.ShiftContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
@@ -657,20 +637,6 @@ public class ExpBaseVisitor<T> extends AbstractParseTreeVisitor<T> implements Ex
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
 	@Override public T visitVConcat(ExpParser.VConcatContext ctx) { return visitChildren(ctx); }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation returns the result of calling
-	 * {@link #visitChildren} on {@code ctx}.</p>
-	 */
-	@Override public T visitList(ExpParser.ListContext ctx) { return visitChildren(ctx); }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation returns the result of calling
-	 * {@link #visitChildren} on {@code ctx}.</p>
-	 */
-	@Override public T visitSet(ExpParser.SetContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *

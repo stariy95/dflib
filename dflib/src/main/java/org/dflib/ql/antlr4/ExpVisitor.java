@@ -10,6 +10,7 @@ import java.time.temporal.Temporal;
 import java.util.Arrays;
 import java.util.function.Function;
 import java.util.function.BiFunction;
+import java.util.stream.Collectors;
 
 import org.dflib.*;
 
@@ -422,12 +423,6 @@ public interface ExpVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitStrFn(ExpParser.StrFnContext ctx);
 	/**
-	 * Visit a parse tree produced by {@link ExpParser#castAsBool}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitCastAsBool(ExpParser.CastAsBoolContext ctx);
-	/**
 	 * Visit a parse tree produced by {@link ExpParser#castAsInt}.
 	 * @param ctx the parse tree
 	 * @return the visitor result
@@ -463,12 +458,6 @@ public interface ExpVisitor<T> extends ParseTreeVisitor<T> {
 	 * @return the visitor result
 	 */
 	T visitCastAsDecimal(ExpParser.CastAsDecimalContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#castAsNumber}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitCastAsNumber(ExpParser.CastAsNumberContext ctx);
 	/**
 	 * Visit a parse tree produced by {@link ExpParser#castAsStr}.
 	 * @param ctx the parse tree
@@ -524,12 +513,6 @@ public interface ExpVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitNullableExp(ExpParser.NullableExpContext ctx);
 	/**
-	 * Visit a parse tree produced by {@link ExpParser#split}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitSplit(ExpParser.SplitContext ctx);
-	/**
 	 * Visit a parse tree produced by {@link ExpParser#shift}.
 	 * @param ctx the parse tree
 	 * @return the visitor result
@@ -565,18 +548,6 @@ public interface ExpVisitor<T> extends ParseTreeVisitor<T> {
 	 * @return the visitor result
 	 */
 	T visitVConcat(ExpParser.VConcatContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#list}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitList(ExpParser.ListContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link ExpParser#set}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitSet(ExpParser.SetContext ctx);
 	/**
 	 * Visit a parse tree produced by {@link ExpParser#array}.
 	 * @param ctx the parse tree
