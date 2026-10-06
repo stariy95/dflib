@@ -11,6 +11,7 @@ import org.dflib.OffsetDateTimeExp;
 import org.dflib.Series;
 import org.dflib.StrExp;
 import org.dflib.TimeExp;
+import org.dflib.exp.ScalarExp;
 import org.dflib.exp.str.StrScalarExp;
 import org.dflib.ql.QLFunctions;
 import org.dflib.ql.QLParserException;
@@ -26,7 +27,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.util.function.IntFunction;
 
 /**
  * Actions of the QL grammar that build expressions. The grammar is untyped, so the operators check the types of
@@ -34,43 +34,45 @@ import java.util.function.IntFunction;
  */
 class ExpParserUtils {
 
+    // Types supporting all the comparison operators. Temporal ones also take ISO-8601 string literals as operands.
+
+    private static final RelOpSupport<NumExp<?>> NUM = new RelOpSupport<>(NumExp.class, "numeric", null,
+            NumExp::gt, NumExp::ge, NumExp::lt, NumExp::le, NumExp::between, NumExp::notBetween, null, null);
+
+    private static final RelOpSupport<TimeExp> TIME = new RelOpSupport<>(TimeExp.class, "time", LocalTime::parse,
+            TimeExp::gt, TimeExp::ge, TimeExp::lt, TimeExp::le,
+            TimeExp::between, TimeExp::notBetween, TimeExp::between, TimeExp::notBetween);
+
+    private static final RelOpSupport<DateExp> DATE = new RelOpSupport<>(DateExp.class, "date", LocalDate::parse,
+            DateExp::gt, DateExp::ge, DateExp::lt, DateExp::le,
+            DateExp::between, DateExp::notBetween, DateExp::between, DateExp::notBetween);
+
+    private static final RelOpSupport<DateTimeExp> DATE_TIME = new RelOpSupport<>(DateTimeExp.class, "datetime", LocalDateTime::parse,
+            DateTimeExp::gt, DateTimeExp::ge, DateTimeExp::lt, DateTimeExp::le,
+            DateTimeExp::between, DateTimeExp::notBetween, DateTimeExp::between, DateTimeExp::notBetween);
+
+    private static final RelOpSupport<OffsetDateTimeExp> OFFSET_DATE_TIME = new RelOpSupport<>(OffsetDateTimeExp.class, "offset datetime", OffsetDateTime::parse,
+            OffsetDateTimeExp::gt, OffsetDateTimeExp::ge, OffsetDateTimeExp::lt, OffsetDateTimeExp::le,
+            OffsetDateTimeExp::between, OffsetDateTimeExp::notBetween, OffsetDateTimeExp::between, OffsetDateTimeExp::notBetween);
+
     // Scalars
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    public static <T> Exp<T> val(T value) {
-        Class type = value != null ? value.getClass() : Object.class;
-        return val(value, type);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static <T, V extends T> Exp<T> val(V value, Class<T> type) {
-        if (Integer.class.equals(type) || Integer.TYPE.equals(type)) {
-            return (Exp<T>) Exp.$intVal((Integer) value);
-        } else if (Long.class.equals(type) || Long.TYPE.equals(type)) {
-            return (Exp<T>) Exp.$longVal((Long) value);
-        } else if (Float.class.equals(type) || Float.TYPE.equals(type)) {
-            return (Exp<T>) Exp.$floatVal((Float) value);
-        } else if (Double.class.equals(type) || Double.TYPE.equals(type)) {
-            return (Exp<T>) Exp.$doubleVal((Double) value);
-        } else if (BigInteger.class.equals(type)) {
-            return (Exp<T>) Exp.$bigintVal((BigInteger) value);
-        } else if (BigDecimal.class.equals(type)) {
-            return (Exp<T>) Exp.$decimalVal((BigDecimal) value);
-        } else if (Boolean.class.equals(type) || Boolean.TYPE.equals(type)) {
-            return (Exp<T>) Exp.$boolVal((Boolean) value);
-        } else if (String.class.equals(type)) {
-            return (Exp<T>) Exp.$strVal((String) value);
-        } else if (LocalTime.class.equals(type)) {
-            return (Exp<T>) Exp.$timeVal((LocalTime) value);
-        } else if (LocalDate.class.equals(type)) {
-            return (Exp<T>) Exp.$dateVal((LocalDate) value);
-        } else if (LocalDateTime.class.equals(type)) {
-            return (Exp<T>) Exp.$dateTimeVal((LocalDateTime) value);
-        } else if (OffsetDateTime.class.equals(type)) {
-            return (Exp<T>) Exp.$offsetDateTimeVal((OffsetDateTime) value);
-        } else {
-            return Exp.$val(value);
-        }
+    public static Exp<?> val(Object value) {
+        return switch (value) {
+            case Integer i -> Exp.$intVal(i);
+            case Long l -> Exp.$longVal(l);
+            case Float f -> Exp.$floatVal(f);
+            case Double d -> Exp.$doubleVal(d);
+            case BigInteger bi -> Exp.$bigintVal(bi);
+            case BigDecimal bd -> Exp.$decimalVal(bd);
+            case Boolean b -> Exp.$boolVal(b);
+            case String s -> Exp.$strVal(s);
+            case LocalTime t -> Exp.$timeVal(t);
+            case LocalDate d -> Exp.$dateVal(d);
+            case LocalDateTime dt -> Exp.$dateTimeVal(dt);
+            case OffsetDateTime odt -> Exp.$offsetDateTimeVal(odt);
+            case null, default -> Exp.$val(value);
+        };
     }
 
     // Columns
@@ -109,13 +111,11 @@ class ExpParserUtils {
     }
 
     private static <T> T col(Object columnId, Function<Integer, T> byIndex, Function<String, T> byName) {
-        if (columnId instanceof Integer) {
-            return byIndex.apply((Integer) columnId);
-        } else if (columnId instanceof String) {
-            return byName.apply((String) columnId);
-        } else {
-            throw new IllegalArgumentException("An integer or a string expected");
-        }
+        return switch (columnId) {
+            case Integer i -> byIndex.apply(i);
+            case String s -> byName.apply(s);
+            case null, default -> throw new IllegalArgumentException("An integer or a string expected");
+        };
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -135,9 +135,9 @@ class ExpParserUtils {
      * Resolves a function call against the registry and builds its expression. Resolution and argument errors, and
      * anything thrown by the function body, are reported as a {@link QLParserException} positioned at the call.
      */
-    public static Exp<?> fn(Token name, List<Exp<?>> args) {
+    public static Exp<?> fn(Environment env, Token name, List<Exp<?>> args) {
         try {
-            return Environment.commonEnv().qlFunctions().call(name.getText(), args);
+            return env.qlFunctions().call(name.getText(), args);
         } catch (QLParserException e) {
             // a nested call already reported its own position
             throw e;
@@ -149,14 +149,34 @@ class ExpParserUtils {
 
     // Operators. Each one checks the operands against the type of expression it applies to.
 
+    /**
+     * Negates a numeric expression. A negated literal is folded into a literal, so that it is still a constant, e.g.
+     * for a constant function argument written as {@code - 1}.
+     */
     public static NumExp<?> negate(Exp<?> a, Token op) {
-        return numOperand(a, op).negate();
+        NumExp<?> num = NUM.operand(a, op);
+        return num instanceof ScalarExp<?> scalar && scalar.reduce((Series<?>) null) instanceof Number n
+                ? (NumExp<?>) val(negate(n))
+                : num.negate();
+    }
+
+    private static Number negate(Number n) {
+        return switch (n) {
+            // "-Integer.MIN_VALUE" and "-Long.MIN_VALUE" do not fit their types, so widen those
+            case Integer i -> i != Integer.MIN_VALUE ? (Number) (-i) : (Number) (-(long) i);
+            case Long l -> l != Long.MIN_VALUE ? (Number) (-l) : (Number) BigInteger.valueOf(l).negate();
+            case Float f -> -f;
+            case Double d -> -d;
+            case BigInteger bi -> bi.negate();
+            case BigDecimal bd -> bd.negate();
+            default -> throw new IllegalArgumentException("Unexpected numeric literal: " + n);
+        };
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     public static NumExp<?> arithmetic(Exp<?> a, Token op, Exp<?> b) {
-        NumExp na = numOperand(a, op);
-        NumExp nb = numOperand(b, op);
+        NumExp na = NUM.operand(a, op);
+        NumExp nb = NUM.operand(b, op);
         return switch (op.getType()) {
             case ExpParser.ADD -> na.add(nb);
             case ExpParser.SUB -> na.sub(nb);
@@ -187,15 +207,12 @@ class ExpParserUtils {
      * literal, and an untyped expression with anything.
      */
     public static Condition rel(Exp<?> a, Token op, Exp<?> b) {
+        RelOpSupport<?> relOpSupport = relByType(a);
+        if (relOpSupport != null) {
+            return relOpSupport.rel(a, op, b);
+        }
+
         return switch (a) {
-            case NumExp<?> n -> compare(n, op, numOperand(b, op), (x, y) -> x.gt(y), (x, y) -> x.ge(y),
-                    (x, y) -> x.lt(y), (x, y) -> x.le(y));
-            case TimeExp t -> compare(t, op, timeOperand(b, op), TimeExp::gt, TimeExp::ge, TimeExp::lt, TimeExp::le);
-            case DateExp d -> compare(d, op, dateOperand(b, op), DateExp::gt, DateExp::ge, DateExp::lt, DateExp::le);
-            case DateTimeExp dt -> compare(dt, op, dateTimeOperand(b, op),
-                    DateTimeExp::gt, DateTimeExp::ge, DateTimeExp::lt, DateTimeExp::le);
-            case OffsetDateTimeExp odt -> compare(odt, op, offsetDateTimeOperand(b, op),
-                    OffsetDateTimeExp::gt, OffsetDateTimeExp::ge, OffsetDateTimeExp::lt, OffsetDateTimeExp::le);
             case StrExp s -> eqOnly(s, op, b, x -> strOperand(x, op));
             case Condition cond -> eqOnly(cond, op, b, x -> boolOperand(x, op));
             case null, default -> eqOnly(a, op, b, x -> x);
@@ -207,30 +224,13 @@ class ExpParserUtils {
      * "between(String, String)", which builds a different expression than a pair of temporal scalars, while a single
      * one is converted to a scalar by the operand check.
      */
-    @SuppressWarnings({"rawtypes", "unchecked"})
     public static Condition between(Exp<?> a, Token op, Exp<?> b, Exp<?> c, boolean negate) {
-        String from = temporalStr(b);
-        String to = temporalStr(c);
-        boolean strBounds = from != null && to != null;
+        RelOpSupport<?> relOpSupport = relByType(a);
+        if (relOpSupport == null) {
+            throw unsupportedOperator(op, a);
+        }
 
-        return switch (a) {
-            case NumExp n -> negate
-                    ? n.notBetween(numOperand(b, op), numOperand(c, op))
-                    : n.between(numOperand(b, op), numOperand(c, op));
-            case TimeExp t -> strBounds
-                    ? (negate ? t.notBetween(from, to) : t.between(from, to))
-                    : (negate ? t.notBetween(timeOperand(b, op), timeOperand(c, op)) : t.between(timeOperand(b, op), timeOperand(c, op)));
-            case DateExp d -> strBounds
-                    ? (negate ? d.notBetween(from, to) : d.between(from, to))
-                    : (negate ? d.notBetween(dateOperand(b, op), dateOperand(c, op)) : d.between(dateOperand(b, op), dateOperand(c, op)));
-            case DateTimeExp dt -> strBounds
-                    ? (negate ? dt.notBetween(from, to) : dt.between(from, to))
-                    : (negate ? dt.notBetween(dateTimeOperand(b, op), dateTimeOperand(c, op)) : dt.between(dateTimeOperand(b, op), dateTimeOperand(c, op)));
-            case OffsetDateTimeExp odt -> strBounds
-                    ? (negate ? odt.notBetween(from, to) : odt.between(from, to))
-                    : (negate ? odt.notBetween(offsetDateTimeOperand(b, op), offsetDateTimeOperand(c, op)) : odt.between(offsetDateTimeOperand(b, op), offsetDateTimeOperand(c, op)));
-            case null, default -> throw unsupportedOperator(op, a);
-        };
+        return relOpSupport.between(a, op, b, c, negate);
     }
 
     /**
@@ -238,13 +238,9 @@ class ExpParserUtils {
      * expressions take ISO-8601 strings, an untyped expression takes anything, a boolean expression is not supported.
      */
     public static Condition in(Exp<?> a, Token op, Object[] values, boolean negate) {
-        Object[] converted = switch (a) {
-            case NumExp<?> ignored -> elements(values, Number.class, op, a);
-            case StrExp ignored -> elements(values, String.class, op, a);
-            case TimeExp ignored -> mapValues(elements(values, String.class, op, a), LocalTime::parse, LocalTime[]::new);
-            case DateExp ignored -> mapValues(elements(values, String.class, op, a), LocalDate::parse, LocalDate[]::new);
-            case DateTimeExp ignored -> mapValues(elements(values, String.class, op, a), LocalDateTime::parse, LocalDateTime[]::new);
-            case OffsetDateTimeExp ignored -> mapValues(elements(values, String.class, op, a), OffsetDateTime::parse, OffsetDateTime[]::new);
+        RelOpSupport<?> relOpSupport = relByType(a);
+        Object[] converted = relOpSupport != null ? relOpSupport.elements(values, op, a) : switch (a) {
+            case StrExp ignored -> checkElements(values, String.class, op, a);
             case Condition ignored -> throw unsupportedOperator(op, a);
             case null, default -> values;
         };
@@ -252,23 +248,14 @@ class ExpParserUtils {
         return negate ? a.notIn(converted) : a.in(converted);
     }
 
-    private static <E extends Exp<?>> Condition compare(
-            E a,
-            Token op,
-            E b,
-            BiFunction<E, E, Condition> gt,
-            BiFunction<E, E, Condition> ge,
-            BiFunction<E, E, Condition> lt,
-            BiFunction<E, E, Condition> le) {
-
-        return switch (op.getType()) {
-            case ExpParser.GT -> gt.apply(a, b);
-            case ExpParser.GE -> ge.apply(a, b);
-            case ExpParser.LT -> lt.apply(a, b);
-            case ExpParser.LE -> le.apply(a, b);
-            case ExpParser.EQ -> a.eq(b);
-            case ExpParser.NE -> a.ne(b);
-            default -> throw unknownOperator(op);
+    private static RelOpSupport<?> relByType(Exp<?> exp) {
+        return switch (exp) {
+            case NumExp<?> ignored -> NUM;
+            case TimeExp ignored -> TIME;
+            case DateExp ignored -> DATE;
+            case DateTimeExp ignored -> DATE_TIME;
+            case OffsetDateTimeExp ignored -> OFFSET_DATE_TIME;
+            case null, default -> null;
         };
     }
 
@@ -281,7 +268,7 @@ class ExpParserUtils {
         };
     }
 
-    private static <T> T[] elements(Object[] values, Class<T> type, Token op, Exp<?> a) {
+    private static Object[] checkElements(Object[] values, Class<?> type, Token op, Exp<?> a) {
         for (Object v : values) {
             if (!type.isInstance(v)) {
                 throw new QLParserException("Operator '" + op.getText() + "' at " + position(op) + " expects a list of "
@@ -289,74 +276,25 @@ class ExpParserUtils {
                         + " expression, got: " + v);
             }
         }
-
-        @SuppressWarnings("unchecked")
-        T[] result = (T[]) Array.newInstance(type, values.length);
-        System.arraycopy(values, 0, result, 0, values.length);
-        return result;
-    }
-
-    private static <T> T[] mapValues(String[] values, Function<String, T> parser, IntFunction<T[]> generator) {
-        return Arrays.stream(values).map(parser).toArray(generator);
+        return values;
     }
 
     private static String temporalStr(Exp<?> exp) {
         return exp instanceof StrScalarExp scalar ? scalar.reduce((Series<?>) null) : null;
     }
 
-    private static NumExp<?> numOperand(Exp<?> exp, Token op) {
-        if (exp instanceof NumExp) {
-            return (NumExp<?>) exp;
-        }
-        throw operandMismatch(op, exp, "numeric");
-    }
-
     private static StrExp strOperand(Exp<?> exp, Token op) {
-        if (exp instanceof StrExp) {
-            return (StrExp) exp;
+        if (exp instanceof StrExp s) {
+            return s;
         }
         throw operandMismatch(op, exp, "string");
     }
 
     private static Condition boolOperand(Exp<?> exp, Token op) {
-        if (exp instanceof Condition) {
-            return (Condition) exp;
+        if (exp instanceof Condition c) {
+            return c;
         }
         throw operandMismatch(op, exp, "boolean");
-    }
-
-    // a temporal operand is an expression of the type or an ISO-8601 string literal
-
-    private static TimeExp timeOperand(Exp<?> exp, Token op) {
-        return switch (exp) {
-            case TimeExp t -> t;
-            case StrScalarExp s -> Exp.$timeVal(LocalTime.parse(temporalStr(s)));
-            case null, default -> throw operandMismatch(op, exp, "time");
-        };
-    }
-
-    private static DateExp dateOperand(Exp<?> exp, Token op) {
-        return switch (exp) {
-            case DateExp d -> d;
-            case StrScalarExp s -> Exp.$dateVal(LocalDate.parse(temporalStr(s)));
-            case null, default -> throw operandMismatch(op, exp, "date");
-        };
-    }
-
-    private static DateTimeExp dateTimeOperand(Exp<?> exp, Token op) {
-        return switch (exp) {
-            case DateTimeExp dt -> dt;
-            case StrScalarExp s -> Exp.$dateTimeVal(LocalDateTime.parse(temporalStr(s)));
-            case null, default -> throw operandMismatch(op, exp, "datetime");
-        };
-    }
-
-    private static OffsetDateTimeExp offsetDateTimeOperand(Exp<?> exp, Token op) {
-        return switch (exp) {
-            case OffsetDateTimeExp odt -> odt;
-            case StrScalarExp s -> Exp.$offsetDateTimeVal(OffsetDateTime.parse(temporalStr(s)));
-            case null, default -> throw operandMismatch(op, exp, "offset datetime");
-        };
     }
 
     // Errors
@@ -380,16 +318,85 @@ class ExpParserUtils {
     }
 
     private static String expTypeLabel(Exp<?> exp) {
+        RelOpSupport<?> relOpSupport = relByType(exp);
+        if (relOpSupport != null) {
+            return relOpSupport.label();
+        }
+
         return switch (exp) {
-            case NumExp<?> ignored -> "numeric";
             case StrExp ignored -> "string";
             case Condition ignored -> "boolean";
-            case DateExp ignored -> "date";
-            case TimeExp ignored -> "time";
-            case DateTimeExp ignored -> "datetime";
-            case OffsetDateTimeExp ignored -> "offset datetime";
             case null -> "null";
             default -> "generic";
         };
+    }
+
+    @FunctionalInterface
+    private interface Range<E, B> {
+        Condition apply(E exp, B from, B to);
+    }
+
+    /**
+     * Operations of an expression type supporting all the comparison operators.
+     */
+    private record RelOpSupport<E extends Exp<?>>(
+            Class<?> type,
+            String label,
+            Function<String, ?> parse,
+            BiFunction<E, E, Condition> gt,
+            BiFunction<E, E, Condition> ge,
+            BiFunction<E, E, Condition> lt,
+            BiFunction<E, E, Condition> le,
+            Range<E, E> between,
+            Range<E, E> notBetween,
+            Range<E, String> strBetween,
+            Range<E, String> strNotBetween) {
+
+        @SuppressWarnings("unchecked")
+        E operand(Exp<?> exp, Token op) {
+            if (type.isInstance(exp)) {
+                return (E) exp;
+            }
+
+            String str = parse != null ? temporalStr(exp) : null;
+            if (str != null) {
+                return (E) val(parse.apply(str));
+            }
+
+            throw operandMismatch(op, exp, label);
+        }
+
+        Condition rel(Exp<?> a, Token op, Exp<?> b) {
+            E ea = operand(a, op);
+            E eb = operand(b, op);
+            return switch (op.getType()) {
+                case ExpParser.GT -> gt.apply(ea, eb);
+                case ExpParser.GE -> ge.apply(ea, eb);
+                case ExpParser.LT -> lt.apply(ea, eb);
+                case ExpParser.LE -> le.apply(ea, eb);
+                case ExpParser.EQ -> ea.eq(eb);
+                case ExpParser.NE -> ea.ne(eb);
+                default -> throw unknownOperator(op);
+            };
+        }
+
+        Condition between(Exp<?> a, Token op, Exp<?> b, Exp<?> c, boolean negate) {
+            E ea = operand(a, op);
+
+            String from = temporalStr(b);
+            String to = temporalStr(c);
+            if (parse != null && from != null && to != null) {
+                return (negate ? strNotBetween : strBetween).apply(ea, from, to);
+            }
+
+            return (negate ? notBetween : between).apply(ea, operand(b, op), operand(c, op));
+        }
+
+        Object[] elements(Object[] values, Token op, Exp<?> a) {
+            return parse != null
+                    ? Arrays.stream(checkElements(values, String.class, op, a))
+                        .map(v -> parse.apply((String) v)).toArray()
+                    : checkElements(values, Number.class, op, a);
+        }
     }
 }

@@ -16,10 +16,7 @@ import java.util.List;
 import java.util.function.Function;
 
 /**
- * Produces an expression by invoking one {@code call} overload of a {@link QLFunction}, unwrapping the constant
- * arguments to the declared parameter types. The resolver has already matched the argument types against the
- * declared ones, so the only checks left here are the ones it can not express: an integer parameter given a
- * fractional constant, and an expression parameter narrower than its classifier (e.g. {@code DecimalExp}).
+ * Produces an expression by invoking one {@code call} overload of a {@link QLFunction} implementation.
  */
 class CallProducer implements Function<List<Exp<?>>, Exp<?>> {
 
@@ -34,7 +31,8 @@ class CallProducer implements Function<List<Exp<?>>, Exp<?>> {
             String.class,
             Number.class,
             LocalDate.class, LocalTime.class, LocalDateTime.class, OffsetDateTime.class,
-            Object.class);
+            Object.class
+    );
 
     private final String name;
     private final QLFunction function;
@@ -104,25 +102,42 @@ class CallProducer implements Function<List<Exp<?>>, Exp<?>> {
         Object value = ((ScalarExp<?>) arg).reduce((Series<?>) null);
 
         if (declared == int.class || declared == Integer.class) {
-            return integerConstant((Number) value, arg).intValue();
+            return integerConstant((Number) value, arg, Integer.MIN_VALUE, Integer.MAX_VALUE).intValue();
         }
 
         if (declared == long.class || declared == Long.class) {
-            return integerConstant((Number) value, arg).longValue();
+            return integerConstant((Number) value, arg, Long.MIN_VALUE, Long.MAX_VALUE).longValue();
         }
 
         if (declared == double.class || declared == Double.class) {
-            return ((Number) value).doubleValue();
+            return doubleConstant((Number) value);
         }
 
         return value;
     }
 
-    private static Number integerConstant(Number n, Exp<?> exp) {
-        if (n instanceof Integer || n instanceof Long || n instanceof Short || n instanceof Byte || n instanceof BigInteger) {
-            return n;
+    private static Number integerConstant(Number n, Exp<?> exp, long min, long max) {
+        if (!(n instanceof Integer
+                || n instanceof Long
+                || n instanceof Short
+                || n instanceof Byte
+                || n instanceof BigInteger)) {
+            throw new IllegalArgumentException("Not an integer constant: " + exp.toQL());
         }
 
-        throw new IllegalArgumentException("Not an integer constant: " + exp.toQL());
+        // compare as BigInteger, as "longValue()" of a BigInteger silently drops the high bits
+        BigInteger big = n instanceof BigInteger bi ? bi : BigInteger.valueOf(n.longValue());
+        if (big.compareTo(BigInteger.valueOf(min)) < 0 || big.compareTo(BigInteger.valueOf(max)) > 0) {
+            throw new IllegalArgumentException("Integer constant out of range [" + min + ".." + max + "]: "
+                    + exp.toQL());
+        }
+
+        return n;
+    }
+
+    private static double doubleConstant(Number n) {
+        // a literal like "0.1" is parsed as a Float, and its "doubleValue()" is 0.10000000149011612. Go through the
+        // decimal representation instead, which is what the literal said
+        return n instanceof Float f && Float.isFinite(f) ? Double.parseDouble(f.toString()) : n.doubleValue();
     }
 }

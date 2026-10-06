@@ -449,8 +449,8 @@ public class NumExpTest {
         return Stream.of(
                 arguments("count()", count()),
                 arguments("count( )", count()),
-                arguments("count(int(1) > 0)", count($int(1).lt(0))),
-                arguments("count(int(a) > 0)", count($int("a").lt(0))),
+                arguments("count(int(1) > 0)", count($int(1).gt(0))),
+                arguments("count(int(a) > 0)", count($int("a").gt(0))),
                 arguments("rowNum()", rowNum()),
                 arguments("rowNum( )", rowNum()),
                 arguments("abs(-5)", $intVal(-5).abs()),

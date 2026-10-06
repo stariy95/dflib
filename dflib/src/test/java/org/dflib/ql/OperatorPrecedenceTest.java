@@ -1,19 +1,24 @@
 package org.dflib.ql;
 
 import org.dflib.Exp;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.math.BigInteger;
 import java.time.LocalDate;
 import java.util.stream.Stream;
 
+import static org.dflib.Exp.$bigintVal;
 import static org.dflib.Exp.$bool;
 import static org.dflib.Exp.$boolVal;
 import static org.dflib.Exp.$date;
 import static org.dflib.Exp.$dateVal;
 import static org.dflib.Exp.$int;
+import static org.dflib.Exp.$doubleVal;
 import static org.dflib.Exp.$intVal;
+import static org.dflib.Exp.$longVal;
 import static org.dflib.Exp.$str;
 import static org.dflib.Exp.$strVal;
 import static org.dflib.Exp.parseExp;
@@ -24,6 +29,20 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
  * Operator precedence of the untyped expression grammar.
  */
 public class OperatorPrecedenceTest {
+
+    @Test
+    public void negatedLiteral_FoldedIntoALiteral() {
+        assertEquals($intVal(-1), parseExp("- 1"));
+        assertEquals($intVal(1), parseExp("-(-1)"));
+        assertEquals($doubleVal(-1.5), parseExp("- 1.5d"));
+
+        // the negation of the min value does not fit the type, so it is widened
+        assertEquals($longVal(2147483648L), parseExp("-(-2147483648)"));
+        assertEquals($bigintVal(BigInteger.valueOf(Long.MIN_VALUE).negate()), parseExp("-(-9223372036854775808)"));
+
+        // a column is still negated as an expression
+        assertEquals($int("a").negate(), parseExp("- int(a)"));
+    }
 
     @ParameterizedTest
     @MethodSource

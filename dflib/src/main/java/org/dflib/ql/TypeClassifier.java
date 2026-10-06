@@ -14,11 +14,15 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -31,14 +35,14 @@ import java.util.function.Function;
  */
 public enum TypeClassifier {
 
-    NUMERIC("castAsNumber", Exp::castAsNumber),
-    STRING("castAsStr", Exp::castAsStr),
-    BOOLEAN("castAsBool", Exp::castAsBool),
-    DATE("castAsDate", Exp::castAsDate),
-    TIME("castAsTime", Exp::castAsTime),
-    DATETIME("castAsDateTime", Exp::castAsDateTime),
-    OFFSETDATETIME("castAsOffsetDateTime", Exp::castAsOffsetDateTime),
-    OBJECT(null, null);
+    NUMERIC(Exp::castAsNumber),
+    STRING(Exp::castAsStr),
+    BOOLEAN(Exp::castAsBool),
+    DATE(Exp::castAsDate),
+    TIME(Exp::castAsTime),
+    DATETIME(Exp::castAsDateTime),
+    OFFSETDATETIME(Exp::castAsOffsetDateTime),
+    OBJECT(null);
 
     /**
      * A result indicating that an argument can not be passed as a declared parameter.
@@ -57,31 +61,29 @@ public enum TypeClassifier {
      */
     static final int COERCION = 2;
 
-    private static final Map<Class<?>, TypeClassifier> EXP_INTERFACES = Map.of(
-            NumExp.class, NUMERIC,
-            StrExp.class, STRING,
-            Condition.class, BOOLEAN,
-            DateExp.class, DATE,
-            TimeExp.class, TIME,
-            DateTimeExp.class, DATETIME,
-            OffsetDateTimeExp.class, OFFSETDATETIME);
+    // ordered, so that a class implementing more than one of the interfaces is classified the same on every run
+    private static final Map<Class<?>, TypeClassifier> EXP_INTERFACES;
+    static {
+        EXP_INTERFACES = new LinkedHashMap<>();
+        EXP_INTERFACES.put(NumExp.class, NUMERIC);
+        EXP_INTERFACES.put(StrExp.class, STRING);
+        EXP_INTERFACES.put(Condition.class, BOOLEAN);
+        EXP_INTERFACES.put(DateExp.class, DATE);
+        EXP_INTERFACES.put(TimeExp.class, TIME);
+        EXP_INTERFACES.put(DateTimeExp.class, DATETIME);
+        EXP_INTERFACES.put(OffsetDateTimeExp.class, OFFSETDATETIME);
+    }
 
-    private static final Map<Class<?>, Class<?>> BOXED_PRIMITIVES = Map.of(
-            boolean.class, Boolean.class,
-            byte.class, Byte.class,
-            char.class, Character.class,
-            short.class, Short.class,
-            int.class, Integer.class,
-            long.class, Long.class,
-            float.class, Float.class,
-            double.class, Double.class
-    );
+    /**
+     * Numeric value types that have a dedicated cast, so that a parameter declared with one of them (e.g.
+     * {@code Exp<Integer>}) can be told apart from an argument of another one (e.g. {@code double(a)}).
+     */
+    private static final Set<Class<?>> NUMERIC_VALUE_TYPES = Set.of(
+            Integer.class, Long.class, Float.class, Double.class, BigInteger.class, BigDecimal.class);
 
-    private final String castFunction;
     private final Function<Exp<?>, Exp<?>> cast;
 
-    TypeClassifier(String castFunction, Function<Exp<?>, Exp<?>> cast) {
-        this.castFunction = castFunction;
+    TypeClassifier(Function<Exp<?>, Exp<?>> cast) {
         this.cast = cast;
     }
 
@@ -89,14 +91,7 @@ public enum TypeClassifier {
      * Returns true for a classifier that names a concrete type, i.e. anything but OBJECT.
      */
     public boolean isTyped() {
-        return castFunction != null;
-    }
-
-    /**
-     * Returns the name of the QL cast function producing an expression of this type, or null for OBJECT.
-     */
-    public String castFunction() {
-        return castFunction;
+        return this != TypeClassifier.OBJECT;
     }
 
     /**
@@ -174,21 +169,27 @@ public enum TypeClassifier {
             return OBJECT;
         }
 
-        Class<?> boxed = BOXED_PRIMITIVES.getOrDefault(type, type);
+        if (type.isPrimitive()) {
+            return type == boolean.class
+                    ? BOOLEAN
+                    : type == char.class || type == void.class
+                        ? OBJECT
+                        : NUMERIC;
+        }
 
-        if (Number.class.isAssignableFrom(boxed)) {
+        if (Number.class.isAssignableFrom(type)) {
             return NUMERIC;
-        } else if (CharSequence.class.isAssignableFrom(boxed)) {
+        } else if (CharSequence.class.isAssignableFrom(type)) {
             return STRING;
-        } else if (boxed == Boolean.class) {
+        } else if (type == Boolean.class) {
             return BOOLEAN;
-        } else if (boxed == LocalDate.class) {
+        } else if (type == LocalDate.class) {
             return DATE;
-        } else if (boxed == LocalTime.class) {
+        } else if (type == LocalTime.class) {
             return TIME;
-        } else if (boxed == LocalDateTime.class) {
+        } else if (type == LocalDateTime.class) {
             return DATETIME;
-        } else if (boxed == OffsetDateTime.class) {
+        } else if (type == OffsetDateTime.class) {
             return OFFSETDATETIME;
         } else {
             return OBJECT;
@@ -213,6 +214,33 @@ public enum TypeClassifier {
         }
 
         return Object.class;
+    }
+
+    /**
+     * Returns the numeric value type a declared expression type binds.
+     * Returns null for anything else, including {@code NumExp<?>} or a type variable, that
+     * accept a numeric expression of any value type.
+     */
+    static Class<?> numericValueType(Type type) {
+        if (classify(type) != NUMERIC) {
+            return null;
+        }
+
+        Type valueType = switch (type) {
+            case ParameterizedType pt when Exp.class.isAssignableFrom((Class<?>) pt.getRawType()) ->
+                    pt.getActualTypeArguments()[0];
+            case Class<?> c when Exp.class.isAssignableFrom(c) -> declaredValueType(c);
+            default -> null;
+        };
+
+        return valueType instanceof Class<?> c ? numericValueType(c) : null;
+    }
+
+    /**
+     * Returns the class if it is one of the numeric value types with a dedicated cast, or null otherwise.
+     */
+    static Class<?> numericValueType(Class<?> valueType) {
+        return valueType != null && NUMERIC_VALUE_TYPES.contains(valueType) ? valueType : null;
     }
 
     /**

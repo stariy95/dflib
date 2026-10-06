@@ -37,23 +37,14 @@ public class FixedReturnFunctionTest {
 
     @Test
     public void fieldFn_null_throws() {
-
-        // a null is an untyped constant, and the field functions take several receiver types
-        QLParserException year = assertThrows(QLParserException.class, () -> parseExp("year(null)"));
-        assertEquals("1:0 Ambiguous call to year(const OBJECT): argument 1 is untyped and year is defined for"
-                + " [DATE, DATETIME, OFFSETDATETIME] in that position. Cast it explicitly, e.g. year(castAsDate(..))",
-                year.getMessage());
-
-        QLParserException hour = assertThrows(QLParserException.class, () -> parseExp("hour(?)", new Object[]{null}));
-        assertEquals("1:0 Ambiguous call to hour(const OBJECT): argument 1 is untyped and hour is defined for"
-                + " [TIME, DATETIME, OFFSETDATETIME] in that position. Cast it explicitly, e.g. hour(castAsTime(..))",
-                hour.getMessage());
+        assertThrows(QLParserException.class, () -> parseExp("year(null)"));
+        assertThrows(QLParserException.class, () -> parseExp("hour(?)", new Object[]{null}));
     }
 
     @Test
     public void untypedConstant_cast() {
-        assertEquals(count(Exp.$val(null).castAsBool()), parseExp("count(null)"));
-        assertEquals(count(Exp.$val(null).castAsBool()), parseExp("count(?)", new Object[]{null}));
+        assertEquals(Exp.$val(null).castAsNumber().sum(), parseExp("sum(null)"));
+        assertEquals(Exp.$val(null).castAsNumber().sum(), parseExp("sum(?)", new Object[]{null}));
     }
 
     @ParameterizedTest

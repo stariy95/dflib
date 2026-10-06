@@ -3,7 +3,7 @@ package org.dflib.ql;
 import org.dflib.ql.fn.*;
 
 /**
- * Registrations of the built-in QL functions, one {@link QLFunction} class per name in {@code org.dflib.ql.fn}.
+ * Registrations of the built-in QL functions.
  */
 class DefaultQLFunctions {
 

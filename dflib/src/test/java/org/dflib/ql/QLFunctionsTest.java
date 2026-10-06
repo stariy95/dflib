@@ -72,8 +72,9 @@ class QLFunctionsTest {
                 .function("sum", new Int3SumFunction())
                 .build();
 
-        assertEquals("No overload of sum matches sum(NUMERIC, STRING). Available: sum(NUMERIC, NUMERIC),"
-                        + " sum(NUMERIC, NUMERIC, NUMERIC)",
+        assertEquals("No overload of sum matches sum(NUMERIC, STRING). Available:"
+                        + " sum(NUMERIC<Integer>, NUMERIC<Integer>),"
+                        + " sum(NUMERIC<Integer>, NUMERIC<Integer>, NUMERIC<Integer>)",
                 notFound(functions, "sum", arg(NUMERIC), arg(STRING)));
     }
 
@@ -99,8 +100,7 @@ class QLFunctionsTest {
                 .function(descriptor("f").arg(OBJECT).constArg(STRING).as(args -> args.get(0)))
                 .build();
 
-        assertEquals("No overload of f matches f(OBJECT, const OBJECT). Available: f(OBJECT, const STRING)."
-                        + " Argument 2 is untyped; cast it to one of [STRING], e.g. castAsStr(..)",
+        assertEquals("No overload of f matches f(OBJECT, const OBJECT). Available: f(OBJECT, const STRING)",
                 notFound(functions, "f", arg(OBJECT), constant(OBJECT)));
     }
 
@@ -119,10 +119,7 @@ class QLFunctionsTest {
                 .function(descriptor("f").arg(DATE).as(args -> args.get(0)))
                 .build();
 
-        assertEquals("Ambiguous call to f(OBJECT): argument 1 is untyped and f is defined for [NUMERIC, DATE]"
-                        + " in that position. Cast it explicitly, e.g. f(castAsNumber(..))",
-                assertThrows(IllegalArgumentException.class, () -> functions.function("f", List.of(arg(OBJECT))))
-                        .getMessage());
+        assertThrows(IllegalArgumentException.class, () -> functions.function("f", List.of(arg(OBJECT))));
     }
 
     @Test
@@ -144,8 +141,7 @@ class QLFunctionsTest {
                 .function(descriptor("f").arg(DATE).as(args -> args.get(0)))
                 .build();
 
-        assertEquals("Ambiguous call to f(OBJECT): argument 1 is untyped and f is defined for [STRING, DATE]"
-                        + " in that position. Cast it explicitly, e.g. f(castAsStr(..))",
+        assertEquals("Ambiguous call to f(OBJECT): argument 1 is untyped, cast it explicitly.",
                 notFound(functions, "f", arg(OBJECT)));
 
         // an untyped overload takes the untyped argument without a cast, and resolves the ambiguity
@@ -165,12 +161,30 @@ class QLFunctionsTest {
                 .function(descriptor("f").arg(BOOLEAN).arg(STRING).as(args -> args.get(0)))
                 .build();
 
-        assertEquals("Ambiguous call to f(OBJECT, OBJECT): argument 2 is untyped and f is defined for [STRING, DATE]"
-                        + " in that position. Cast it explicitly, e.g. f(castAsStr(..))",
+        assertEquals("Ambiguous call to f(OBJECT, OBJECT): argument 2 is untyped, cast it explicitly.",
                 notFound(functions, "f", arg(OBJECT), arg(OBJECT)));
 
         assertEquals(List.of(arg(BOOLEAN), arg(DATE)),
                 functions.function("f", List.of(arg(OBJECT), arg(DATE))).args());
+    }
+
+    @Test
+    void function_UntypedArg_AnyAndSpecificNumType_Ambiguous() {
+        QLFunctionArg intArg = new QLFunctionArg(NUMERIC, false, Integer.class);
+
+        QLFunctions functions = registry()
+                .function(descriptor("f").arg(NUMERIC).as(args -> args.get(0)))
+                .function(descriptor("f").arg(intArg).as(args -> args.get(0)))
+                .build();
+
+        // "castAsNumber" and "castAsInt" are different casts
+        assertEquals("Ambiguous call to f(OBJECT): argument 1 is untyped, cast it explicitly.",
+                notFound(functions, "f", arg(OBJECT)));
+
+        // a typed argument is not ambiguous: the matching value type wins, any other one goes to NumExp<?>
+        assertEquals(List.of(intArg), functions.function("f", List.of(intArg)).args());
+        assertEquals(List.of(arg(NUMERIC)),
+                functions.function("f", List.of(new QLFunctionArg(NUMERIC, false, Double.class))).args());
     }
 
     @Test
@@ -182,6 +196,30 @@ class QLFunctionsTest {
 
         assertEquals(List.of(arg(DATE), arg(STRING), arg(OBJECT)),
                 functions.function("f", List.of(arg(OBJECT), arg(STRING), arg(STRING))).args());
+    }
+
+    @Test
+    void builder_InvalidName() {
+        assertEquals("Function name must be a QL identifier (a letter, '$' or '_' followed by letters, digits,"
+                        + " '$' or '_'), got: 'my fn'",
+                assertThrows(IllegalArgumentException.class,
+                        () -> registry().function("my fn", new ObjectArgFunction())).getMessage());
+
+        assertThrows(IllegalArgumentException.class, () -> registry().function("1fn", new ObjectArgFunction()));
+        assertThrows(IllegalArgumentException.class, () -> registry().function("", new ObjectArgFunction()));
+    }
+
+    @Test
+    void builder_KeywordName() {
+        for (String keyword : List.of("date", "int", "col", "array", "and", "not", "in", "asc", "as", "null")) {
+            assertEquals("Function name '" + keyword + "' is a QL keyword.",
+                    assertThrows(IllegalArgumentException.class,
+                            () -> registry().function(keyword, new ObjectArgFunction())).getMessage());
+        }
+
+        // a keyword in a different case or a longer name starting with a keyword is a valid identifier
+        assertNotNull(registry().function("Date", new ObjectArgFunction()).build());
+        assertNotNull(registry().function("dateOf", new ObjectArgFunction()).build());
     }
 
     @Test
@@ -296,7 +334,7 @@ class QLFunctionsTest {
         assertEquals(List.of(arg(OBJECT), constant(NUMERIC)),
                 functions.function("substr", List.of(arg(STRING), constant(NUMERIC))).args());
 
-        assertEquals(List.of(arg(OBJECT), arg(NUMERIC)),
+        assertEquals(List.of(arg(OBJECT), new QLFunctionArg(NUMERIC, false, Integer.class)),
                 functions.function("substr", List.of(arg(STRING), arg(NUMERIC))).args());
     }
 

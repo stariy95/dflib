@@ -122,9 +122,14 @@ public class ExpParser extends Parser {
 
 	// global state of the parser
 	PositionalParamSource paramSource;
+	Environment env;
 
 	public void setParameters(Object... params) {
 	    this.paramSource = new PositionalParamSource(params);
+	}
+
+	public void setEnv(Environment env) {
+	    this.env = env;
 	}
 
 	public ExpParser(TokenStream input) {
@@ -1529,7 +1534,7 @@ public class ExpParser extends Parser {
 			setState(242);
 			match(RP);
 
-			        ((FnCallContext)_localctx).exp =  fn(((FnCallContext)_localctx).IDENTIFIER, ((FnCallContext)_localctx).args.stream().map(ctx -> ctx.exp).collect(Collectors.toList()));
+			        ((FnCallContext)_localctx).exp =  fn(env, ((FnCallContext)_localctx).IDENTIFIER, ((FnCallContext)_localctx).args.stream().map(ctx -> ctx.exp).collect(Collectors.toList()));
 			    
 			}
 		}

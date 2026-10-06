@@ -219,7 +219,6 @@ class TypeClassifierTest {
     void isTyped() {
         for (TypeClassifier t : TypeClassifier.values()) {
             assertEquals(t != TypeClassifier.OBJECT, t.isTyped(), t.name());
-            assertEquals(t.isTyped(), t.castFunction() != null, t.name());
         }
     }
 

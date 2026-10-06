@@ -88,7 +88,7 @@ public class ParseErrorReportingTest {
         assertEquals("1:4 No overload of substr matches substr(const STRING). " + substrOverloads, nested.getMessage());
 
         QLParserException nonConst = assertThrows(QLParserException.class, () -> Exp.parseExp("substr(a, int(b))"));
-        assertEquals("1:0 No overload of substr matches substr(OBJECT, NUMERIC). " + substrOverloads,
+        assertEquals("1:0 No overload of substr matches substr(OBJECT, NUMERIC<Integer>). " + substrOverloads,
                 nonConst.getMessage());
     }
 

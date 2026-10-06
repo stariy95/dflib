@@ -23,9 +23,11 @@ import static org.dflib.Exp.$bool;
 import static org.dflib.Exp.$col;
 import static org.dflib.Exp.$date;
 import static org.dflib.Exp.$decimal;
+import static org.dflib.Exp.$double;
 import static org.dflib.Exp.$doubleVal;
 import static org.dflib.Exp.$int;
 import static org.dflib.Exp.$intVal;
+import static org.dflib.Exp.$long;
 import static org.dflib.Exp.$str;
 import static org.dflib.Exp.$strVal;
 import static org.dflib.Exp.parseExp;
@@ -101,7 +103,7 @@ public class QLFunctionReflectionTest {
 
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> call(functions, "plusDays", $date("a"), $int("b")));
-        assertEquals("No overload of plusDays matches plusDays(DATE, NUMERIC). Available: plusDays(DATE, const NUMERIC)",
+        assertEquals("No overload of plusDays matches plusDays(DATE, NUMERIC<Integer>). Available: plusDays(DATE, const NUMERIC)",
                 e.getMessage());
     }
 
@@ -183,25 +185,71 @@ public class QLFunctionReflectionTest {
     @Test
     public void typedParameter_CastsAnUntypedArg() {
 
-        QLFunctions functions = registry("not", new NotFunction());
+        QLFunctions functions = registry("negation", new NotFunction());
 
-        assertEquals(Exp.not($col("a").castAsBool()), call(functions, "not", $col("a")));
-        assertEquals(Exp.not($bool("a")), call(functions, "not", $bool("a")));
+        assertEquals(Exp.not($col("a").castAsBool()), call(functions, "negation", $col("a")));
+        assertEquals(Exp.not($bool("a")), call(functions, "negation", $bool("a")));
 
-        assertThrows(IllegalArgumentException.class, () -> call(functions, "not", $str("a")));
+        assertThrows(IllegalArgumentException.class, () -> call(functions, "negation", $str("a")));
     }
 
     @Test
-    public void narrowExpParameter_RejectsAWiderArgAtProduceTime() {
+    public void narrowExpParameter_WidensANarrowerArg() {
 
-        // "DecimalExp" classifies as NUMERIC, so the resolver accepts any NumExp, and the producer has to check
+        // "DecimalExp" binds the BigDecimal value type, so a narrower numeric arg is cast to it
         QLFunctions functions = registry("dec", new DecimalFunction());
 
         assertEquals($decimal("a").abs(), call(functions, "dec", $decimal("a")));
+        assertEquals($int("a").castAsDecimal().abs(), call(functions, "dec", $int("a")));
+        assertEquals($double("a").castAsDecimal().abs(), call(functions, "dec", $double("a")));
+        assertEquals($col("a").castAsDecimal().abs(), call(functions, "dec", $col("a")));
+    }
+
+    @Test
+    public void narrowExpParameter_RejectsAnArgOfUnknownValueTypeAtProduceTime() {
+
+        // the value type of "castAsNumber" is only known at eval time, so the resolver lets it through, and the
+        // producer has to check
+        QLFunctions functions = registry("dec", new DecimalFunction());
 
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> call(functions, "dec", $int("a")));
-        assertEquals("dec() expects argument 1 to be a DecimalExp, got: a", e.getMessage());
+                () -> call(functions, "dec", $col("a").castAsNumber()));
+        assertTrue(e.getMessage().startsWith("dec() expects argument 1 to be a DecimalExp, got: "), e.getMessage());
+    }
+
+    @Test
+    public void numericParameter_ValueTypeMismatchRejected() {
+
+        QLFunctions functions = registry("f", new IntExpFunction());
+
+        assertEquals($int("a"), call(functions, "f", $int("a")));
+        assertEquals($col("a").castAsInt(), call(functions, "f", $col("a")));
+
+        // a wider value type is not narrowed implicitly
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> call(functions, "f", $double("a")));
+        assertEquals("No overload of f matches f(NUMERIC<Double>). Available: f(NUMERIC<Integer>)", e.getMessage());
+    }
+
+    @Test
+    public void numericParameter_ExactValueTypeOverloadPreferred() {
+
+        QLFunctions functions = registry("f", new AnyOrDecimalFunction());
+
+        assertEquals($decimal("a"), call(functions, "f", $decimal("a")));
+        assertEquals($int("a").abs(), call(functions, "f", $int("a")));
+    }
+
+    @Test
+    public void numericParameter_AmbiguousWidening() {
+
+        QLFunctions functions = registry("f", new LongOrDoubleFunction());
+
+        assertEquals($long("a"), call(functions, "f", $long("a")));
+        assertEquals($double("a"), call(functions, "f", $double("a")));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> call(functions, "f", $int("a")));
     }
 
     @Test
@@ -342,14 +390,14 @@ public class QLFunctionReflectionTest {
                 .function("fN", new VarArgsUdf())
                 .build();
 
-        assertEquals(List.of("f0()", "f1(NUMERIC)", "f2(NUMERIC, STRING)", "fN(...)"), shapes(functions));
+        assertEquals(List.of("f0()", "f1(NUMERIC<Integer>)", "f2(NUMERIC<Integer>, STRING)", "fN(...)"), shapes(functions));
 
         assertEquals(Exp.count(), call(functions, "f0"));
         assertEquals($int("a").castAsInt(), call(functions, "f1", $int("a")));
         assertEquals(Exp.concat($int("a"), $str("b")), call(functions, "f2", $int("a"), $str("b")));
         assertEquals($int("a").add($int("b")), call(functions, "fN", $int("a"), $int("b")));
 
-        assertEquals($col("a").castAsNumber().castAsInt(), call(functions, "f1", $col("a")));
+        assertEquals($col("a").castAsInt().castAsInt(), call(functions, "f1", $col("a")));
         assertThrows(IllegalArgumentException.class, () -> call(functions, "f1", $str("a")));
     }
 
@@ -359,7 +407,7 @@ public class QLFunctionReflectionTest {
         // the bridge "call" emitted for a covariant return carries no generic types and must be skipped
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions().function("scale", new CovariantUdf()).build();
 
-        assertEquals(List.of("scale(NUMERIC, NUMERIC)"), shapes(functions));
+        assertEquals(List.of("scale(NUMERIC, NUMERIC<Integer>)"), shapes(functions));
     }
 
     @Test
@@ -608,7 +656,37 @@ public class QLFunctionReflectionTest {
             return e.abs();
         }
 
+        public Exp<Number> call(Exp<Number> e) {
+            return e;
+        }
+    }
+
+    public static class IntExpFunction implements QLFunction {
+
+        public Exp<Integer> call(Exp<Integer> e) {
+            return e;
+        }
+    }
+
+    public static class AnyOrDecimalFunction implements QLFunction {
+
+        public NumExp<?> call(NumExp<?> e) {
+            return e.abs();
+        }
+
         public DecimalExp call(DecimalExp e) {
+            return e;
+        }
+    }
+
+    public static class LongOrDoubleFunction implements QLFunction {
+
+        public NumExp<Long> call(NumExp<Long> e) {
+            return e;
+        }
+
+        // a different erasure than the NumExp<Long> one, but the same kind of a parameter for the resolver
+        public Exp<Double> call(Exp<Double> e) {
             return e;
         }
     }

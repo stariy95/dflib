@@ -1,11 +1,13 @@
 package org.dflib.ql;
 
+import org.dflib.DataFrame;
 import org.dflib.Exp;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -15,6 +17,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Stream;
 
+import static org.dflib.Exp.$bigintVal;
 import static org.dflib.Exp.$bool;
 import static org.dflib.Exp.$boolVal;
 import static org.dflib.Exp.$col;
@@ -24,8 +27,10 @@ import static org.dflib.Exp.$dateTimeVal;
 import static org.dflib.Exp.$dateVal;
 import static org.dflib.Exp.$decimal;
 import static org.dflib.Exp.$doubleVal;
+import static org.dflib.Exp.$floatVal;
 import static org.dflib.Exp.$int;
 import static org.dflib.Exp.$intVal;
+import static org.dflib.Exp.$longVal;
 import static org.dflib.Exp.$offsetDateTime;
 import static org.dflib.Exp.$offsetDateTimeVal;
 import static org.dflib.Exp.$str;
@@ -111,14 +116,56 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
+    void integerConstant_OutOfRange() {
+        assertEquals("Integer constant out of range [-2147483648..2147483647]: 3000000000",
+                assertThrows(IllegalArgumentException.class,
+                        () -> call("substr", $str("a"), $longVal(3_000_000_000L))).getMessage());
+
+        assertEquals("Integer constant out of range [-2147483648..2147483647]: 18446744073709551616",
+                assertThrows(IllegalArgumentException.class,
+                        () -> call("plusDays", $date("a"), $bigintVal(BigInteger.TWO.pow(64)))).getMessage());
+
+        // within range is fine, whatever the width of the constant
+        assertEquals($str("a").substr(2), call("substr", $str("a"), $longVal(2L)));
+        assertEquals($str("a").substr(2), call("substr", $str("a"), $bigintVal(BigInteger.TWO)));
+    }
+
+    @Test
+    void doubleConstant_FromAFloatLiteral_KeepsItsDecimalValue() {
+        assertEquals($int("a").quantile(0.1), Exp.parseExp("quantile(int(a), 0.1)"));
+        assertEquals($int("a").quantile(0.1), call("quantile", $int("a"), $floatVal(0.1f)));
+    }
+
+    @Test
+    void count_Eval() {
+        DataFrame df = DataFrame.foldByRow("a", "b").of(
+                1, true,
+                null, false,
+                3, true);
+
+        assertEquals(2, Exp.parseExp("count(a)").reduce(df));
+        assertEquals(2, Exp.parseExp("count(int(a))").reduce(df));
+        assertEquals(2, Exp.parseExp("count(bool(b))").reduce(df));
+        assertEquals(3, Exp.parseExp("count()").reduce(df));
+    }
+
+    @Test
+    void count_BooleanArgFilters_OtherArgCountsNonNulls() {
+        assertEquals(Exp.count($bool("b")), call("count", $bool("b")));
+        assertEquals(Exp.count($col("c").isNotNull()), call("count", $col("c")));
+        assertEquals(Exp.count($int("i").isNotNull()), call("count", $int("i")));
+        assertEquals(Exp.count($date("d").first().isNotNull()), call("count", $date("d").first()));
+    }
+
+    @Test
     void untypedReceiverOfATypedFunction_IsCast() {
-        assertEquals(Exp.count($col("c").castAsBool()), call("count", $col("c")));
+        assertEquals($col("c").castAsNumber().sum(), call("sum", $col("c")));
         assertEquals(Exp.ifExp($col("c").castAsBool(), $intVal(1), $intVal(2)),
                 call("if", $col("c"), $intVal(1), $intVal(2)));
         assertEquals($str("c").min($col("f").castAsBool()), call("min", $str("c"), $col("f")));
 
         // an expression that carries a value type but implements no typed interface is untyped too
-        assertEquals(Exp.count($date("d").first().castAsBool()), call("count", $date("d").first()));
+        assertEquals($date("d").first().castAsNumber().abs(), call("abs", $date("d").first()));
 
         // while a function declared over "Exp<?>" takes anything as is
         assertEquals($col("c").castAsStr().len(), call("len", $col("c")));
@@ -127,13 +174,10 @@ class DefaultQLFunctionsTest {
 
     @Test
     void untypedReceiverOfAMultiReceiverFunction_IsAmbiguous() {
-        assertEquals("Ambiguous call to year(OBJECT): argument 1 is untyped and year is defined for"
-                        + " [DATE, DATETIME, OFFSETDATETIME] in that position. Cast it explicitly, e.g. year(castAsDate(..))",
+        assertEquals("Ambiguous call to year(OBJECT): argument 1 is untyped, cast it explicitly.",
                 assertThrows(IllegalArgumentException.class, () -> resolve("year", $col("c"))).getMessage());
 
-        assertEquals("Ambiguous call to min(OBJECT): argument 1 is untyped and min is defined for"
-                        + " [NUMERIC, STRING, DATE, TIME, DATETIME] in that position. Cast it explicitly,"
-                        + " e.g. min(castAsNumber(..))",
+        assertEquals("Ambiguous call to min(OBJECT): argument 1 is untyped, cast it explicitly.",
                 assertThrows(IllegalArgumentException.class, () -> resolve("min", $col("c"))).getMessage());
 
         assertThrows(IllegalArgumentException.class, () -> resolve("plusDays", $col("c"), $intVal(1)));

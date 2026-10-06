@@ -112,9 +112,14 @@ public class ExpLexer extends Lexer {
 
 	// global state of the parser
 	PositionalParamSource paramSource;
+	Environment env;
 
 	public void setParameters(Object... params) {
 	    this.paramSource = new PositionalParamSource(params);
+	}
+
+	public void setEnv(Environment env) {
+	    this.env = env;
 	}
 
 

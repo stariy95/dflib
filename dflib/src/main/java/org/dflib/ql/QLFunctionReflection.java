@@ -79,7 +79,7 @@ class QLFunctionReflection {
         List<QLFunctionArg> args = new ArrayList<>();
         if (!varArgs) {
             for (Type p : method.getGenericParameterTypes()) {
-                args.add(new QLFunctionArg(TypeClassifier.classify(p), false));
+                args.add(expArg(p));
             }
         }
 
@@ -87,10 +87,7 @@ class QLFunctionReflection {
     }
 
     /**
-     * Returns the {@code call} methods declared in a class or inherited from its superclasses, skipping bridge and
-     * synthetic ones, as they carry neither generic types nor parameter annotations, and the ones overridden in a
-     * subclass. An inherited method whose signature refers to a type variable of its generic declaring class is
-     * rejected, as it would lose the types bound by the subclass.
+     * Returns the public {@code call} methods declared in a class or inherited from its superclasses.
      */
     private static List<Method> callMethods(Class<?> type) {
         List<Method> methods = new ArrayList<>();
@@ -99,6 +96,7 @@ class QLFunctionReflection {
         for (Class<?> c = type; c != null && c != Object.class; c = c.getSuperclass()) {
             for (Method m : c.getDeclaredMethods()) {
                 if ("call".equals(m.getName())
+                        && Modifier.isPublic(m.getModifiers())
                         && !m.isBridge()
                         && !m.isSynthetic()
                         && seen.add(List.of(m.getParameterTypes()))) {
@@ -169,6 +167,7 @@ class QLFunctionReflection {
             .<QLFunctionDescriptor>comparingInt(d -> d.args().size())
             .thenComparing(QLFunctionReflection::argTypeOrdinals, Arrays::compare)
             .thenComparing(QLFunctionReflection::argConstancy, Arrays::compare)
+            .thenComparing(QLFunctionReflection::argNumTypes, Arrays::compare)
             .thenComparing(QLFunctionDescriptor::varArgs);
 
     static List<QLFunctionDescriptor> qlFunction(String name, QLFunction function) {
@@ -188,13 +187,11 @@ class QLFunctionReflection {
 
         List<QLFunctionDescriptor> descriptors = new ArrayList<>();
         for (Method m : callMethods(type)) {
-            if (Modifier.isPublic(m.getModifiers())) {
-                if (!Modifier.isPublic(m.getDeclaringClass().getModifiers())) {
-                    throw new IllegalArgumentException("A QLFunction 'call' method must be declared in a public class"
-                            + " to be invoked reflectively: " + m);
-                }
-                descriptors.add(reflectCall(name, function, m));
+            if (!Modifier.isPublic(m.getDeclaringClass().getModifiers())) {
+                throw new IllegalArgumentException("A QLFunction 'call' method must be declared in a public class"
+                        + " to be invoked reflectively: " + m);
             }
+            descriptors.add(reflectCall(name, function, m));
         }
 
         if (descriptors.isEmpty()) {
@@ -238,7 +235,7 @@ class QLFunctionReflection {
         Class<?> raw = parameter.getType();
 
         if (Exp.class.isAssignableFrom(raw)) {
-            return new QLFunctionArg(TypeClassifier.classify(parameter.getParameterizedType()), false);
+            return expArg(parameter.getParameterizedType());
         }
 
         if (!CallProducer.CONSTANT_TYPES.contains(raw)) {
@@ -250,8 +247,16 @@ class QLFunctionReflection {
         return new QLFunctionArg(TypeClassifier.classify(raw), true);
     }
 
+    private static QLFunctionArg expArg(Type type) {
+        return new QLFunctionArg(TypeClassifier.classify(type), false, TypeClassifier.numericValueType(type));
+    }
+
     private static int[] argTypeOrdinals(QLFunctionDescriptor d) {
         return d.args().stream().mapToInt(a -> a.type().ordinal()).toArray();
+    }
+
+    private static String[] argNumTypes(QLFunctionDescriptor d) {
+        return d.args().stream().map(a -> a.numType() != null ? a.numType().getName() : "").toArray(String[]::new);
     }
 
     private static int[] argConstancy(QLFunctionDescriptor d) {

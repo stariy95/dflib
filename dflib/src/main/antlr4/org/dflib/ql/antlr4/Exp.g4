@@ -1,11 +1,5 @@
 grammar Exp;
 
-// The grammar is untyped: every rule produces an "Exp<?>", and the operators check and dispatch on the types of the
-// parsed operands in "ExpParserUtils"; literal text is converted to values in "Literals". Functions are not grammar
-// rules either: a call is resolved by name and argument types against the "QLFunctions" registry. Only the
-// constructs that are not expression-to-expression calls (column references, "array", parameters, operators,
-// literals) are rules.
-
 @header {
 import java.util.stream.Collectors;
 
@@ -18,9 +12,14 @@ import static org.dflib.ql.antlr4.Literals.*;
 @members {
 // global state of the parser
 PositionalParamSource paramSource;
+Environment env;
 
 public void setParameters(Object... params) {
     this.paramSource = new PositionalParamSource(params);
+}
+
+public void setEnv(Environment env) {
+    this.env = env;
 }
 }
 
@@ -141,7 +140,7 @@ primary returns [Exp<?> exp]
  */
 fnCall returns [Exp<?> exp]
     : IDENTIFIER '(' (args+=expression (',' args+=expression)*)? ')' {
-        $exp = fn($IDENTIFIER, $args.stream().map(ctx -> ctx.exp).collect(Collectors.toList()));
+        $exp = fn(env, $IDENTIFIER, $args.stream().map(ctx -> ctx.exp).collect(Collectors.toList()));
     }
     ;
 
