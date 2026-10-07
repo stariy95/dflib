@@ -14,9 +14,6 @@ import java.util.function.Function;
  */
 record QLFunctionArg(TypeClassifier type, boolean constant, Class<?> numType) {
 
-    private record NumCast(Function<Exp<?>, Exp<?>> cast, Set<Class<?>> widenedFrom) {
-    }
-
     // widening only goes to the types that can represent every value of the narrower one exactly
     private static final Map<Class<?>, NumCast> NUM_CASTS = Map.of(
             Integer.class, new NumCast(Exp::castAsInt, Set.of()),
@@ -85,5 +82,8 @@ record QLFunctionArg(TypeClassifier type, boolean constant, Class<?> numType) {
     @Override
     public String toString() {
         return constant ? "const " + typeLabel() : typeLabel();
+    }
+
+    private record NumCast(Function<Exp<?>, Exp<?>> cast, Set<Class<?>> widenedFrom) {
     }
 }

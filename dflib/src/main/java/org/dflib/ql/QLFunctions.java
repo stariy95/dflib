@@ -129,14 +129,17 @@ public class QLFunctions {
 
         for (int i = 0; i < args.size(); i++) {
             // keyed by the full cast target, as e.g. NUMERIC<Long> and NUMERIC<Double> are different casts
-            Set<String> casts = new LinkedHashSet<>();
+            Set<String> casts = null;
             for (QLFunctionDescriptor d : candidates) {
                 if (i < d.args().size() && QLFunctionArg.isCoerced(d.args().get(i), args.get(i))) {
+                    if(casts == null) {
+                        casts = new HashSet<>();
+                    }
                     casts.add(d.args().get(i).typeLabel());
                 }
             }
 
-            if (casts.size() > 1) {
+            if (casts != null && casts.size() > 1) {
                 throw new IllegalArgumentException("Ambiguous call to " + QLFunctionDescriptor.shape(name, args, false)
                         + ": argument " + (i + 1) + " is "
                         + (args.get(i).type().isTyped() ? args.get(i).typeLabel() : "untyped")
