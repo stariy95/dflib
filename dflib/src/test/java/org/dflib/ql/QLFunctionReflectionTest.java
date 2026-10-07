@@ -12,8 +12,6 @@ import org.dflib.Udf1;
 import org.dflib.Udf2;
 import org.dflib.UdfN;
 import org.dflib.ql.fn.OtherPackageFunction;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -35,22 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Reflective registration of {@link QLFunction} classes and {@code Udf} objects.
- */
-public class QLFunctionReflectionTest {
-
-    private QLFunctions originalFunctions;
-
-    @BeforeEach
-    public void saveFunctions() {
-        this.originalFunctions = Environment.commonEnv().qlFunctions();
-    }
-
-    @AfterEach
-    public void restoreFunctions() {
-        Environment.setQLFunctions(originalFunctions);
-    }
+public class QLFunctionReflectionTest extends BaseQLFunctionsTest {
 
     private static QLFunctions registry(String name, QLFunction function) {
         return QLFunctions.builder().noDefaultFunctions().function(name, function).build();
@@ -65,7 +48,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void overloads_ResolveByArgumentType() {
+    public void overloads() {
 
         QLFunctions functions = registry("min", new MinFunction());
 
@@ -77,7 +60,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void intParameter_IsAConstantArg() {
+    public void intParam() {
 
         QLFunctions functions = registry("plusDays", new PlusDaysFunction());
 
@@ -87,7 +70,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void intParameter_RejectsAFraction() {
+    public void intParam_Fraction_throws() {
 
         QLFunctions functions = registry("plusDays", new PlusDaysFunction());
 
@@ -97,7 +80,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void constantParameter_RejectsANonConstantArg() {
+    public void constParam_NonConst_throws() {
 
         QLFunctions functions = registry("plusDays", new PlusDaysFunction());
 
@@ -108,7 +91,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void doubleParameter_IsAConstantArg() {
+    public void doubleParam() {
 
         QLFunctions functions = registry("quantile", new QuantileFunction());
 
@@ -117,7 +100,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void stringParameter_IsAConstantArg() {
+    public void stringParam() {
 
         QLFunctions functions = registry("castAsDate", new CastAsDateFunction());
 
@@ -126,7 +109,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void objectParameter_IsAConstantArgOfAnyType() {
+    public void objectParam() {
 
         QLFunctions functions = registry("shift", new ObjectFillerFunction());
 
@@ -141,7 +124,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void numberBoundedTypeVariable_IsANumericConstantArg() {
+    public void numberTypeVariable() {
 
         QLFunctions functions = registry("shift", new ShiftFunction());
 
@@ -150,7 +133,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void expOfATypeVariable_AcceptsAnything() {
+    public void expOfTypeVariable() {
 
         QLFunctions functions = registry("first", new FirstFunction());
 
@@ -173,7 +156,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void varArgs_TypedComponent_Rejected() {
+    public void varArgs_TypedComponent_throws() {
 
         QLFunctions.Builder builder = QLFunctions.builder().noDefaultFunctions();
 
@@ -183,7 +166,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void typedParameter_CastsAnUntypedArg() {
+    public void typedParam_UntypedArg() {
 
         QLFunctions functions = registry("negation", new NotFunction());
 
@@ -194,7 +177,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void narrowExpParameter_WidensANarrowerArg() {
+    public void narrowExpParam_Widening() {
 
         // "DecimalExp" binds the BigDecimal value type, so a narrower numeric arg is cast to it
         QLFunctions functions = registry("dec", new DecimalFunction());
@@ -206,7 +189,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void narrowExpParameter_RejectsAnArgOfUnknownValueTypeAtProduceTime() {
+    public void narrowExpParam_UnknownValueType_throws() {
 
         // the value type of "castAsNumber" is only known at eval time, so the resolver lets it through, and the
         // producer has to check
@@ -218,7 +201,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void numericParameter_ValueTypeMismatchRejected() {
+    public void numericParam_ValueTypeMismatch_throws() {
 
         QLFunctions functions = registry("f", new IntExpFunction());
 
@@ -232,7 +215,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void numericParameter_ExactValueTypeOverloadPreferred() {
+    public void numericParam_ExactValueType() {
 
         QLFunctions functions = registry("f", new AnyOrDecimalFunction());
 
@@ -241,7 +224,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void numericParameter_AmbiguousWidening() {
+    public void numericParam_AmbiguousWidening() {
 
         QLFunctions functions = registry("f", new LongOrDoubleFunction());
 
@@ -253,7 +236,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void nonExpReturn_Rejected() {
+    public void nonExpReturn_throws() {
 
         QLFunctions.Builder builder = QLFunctions.builder().noDefaultFunctions();
 
@@ -263,7 +246,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void unsupportedConstantType_Rejected() {
+    public void unsupportedConstantType_throws() {
 
         QLFunctions.Builder builder = QLFunctions.builder().noDefaultFunctions();
 
@@ -273,7 +256,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void alsoAUdf_Rejected() {
+    public void alsoUdf_throws() {
 
         QLFunctions.Builder builder = QLFunctions.builder().noDefaultFunctions();
 
@@ -283,7 +266,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void nonPublicClass_Rejected() {
+    public void nonPublicClass_throws() {
 
         QLFunctions.Builder builder = QLFunctions.builder().noDefaultFunctions();
 
@@ -293,7 +276,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void noCallMethod_Rejected() {
+    public void noCallMethod_throws() {
 
         QLFunctions.Builder builder = QLFunctions.builder().noDefaultFunctions();
 
@@ -303,7 +286,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void sameArgShapeOverloads_Rejected() {
+    public void sameArgShapeOverloads_throws() {
 
         QLFunctions.Builder builder = QLFunctions.builder().noDefaultFunctions();
 
@@ -313,7 +296,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void overloadOrder_IsDeterministic() {
+    public void overloadOrder() {
         assertEquals(
                 List.of("min(NUMERIC)", "min(STRING)", "min(DATE)"),
                 shapes(registry("min", new MinFunction())));
@@ -327,7 +310,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void bodyException_IsUnwrappedAndPositioned() {
+    public void bodyException_Unwrapped() {
 
         Environment.setQLFunctions(QLFunctions.builder().function("boom", new BoomFunction()).build());
 
@@ -336,7 +319,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void bodyException_AnyRuntimeExceptionIsPositioned() {
+    public void bodyException_RuntimeException() {
 
         Environment.setQLFunctions(QLFunctions.builder()
                 .function("state", new StateFunction())
@@ -357,7 +340,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void bodyException_CheckedExceptionIsWrappedAndPositioned() {
+    public void bodyException_Checked() {
 
         Environment.setQLFunctions(QLFunctions.builder().function("io", new CheckedFunction()).build());
 
@@ -366,7 +349,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void publicClassInAnotherPackage_IsInvokable() {
+    public void publicClass_OtherPackage() {
 
         QLFunctions functions = registry("other", new OtherPackageFunction());
 
@@ -381,7 +364,7 @@ public class QLFunctionReflectionTest {
     // Udf objects
 
     @Test
-    public void udf_TypedByItsGenericSignature() {
+    public void udf_GenericSignature() {
 
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
                 .function("f0", new CountUdf())
@@ -411,7 +394,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void udf_Lambda_IsUntyped() {
+    public void udf_Lambda() {
 
         // a lambda's "call" is erased to "Exp call(Exp)", so it accepts arguments of any type
         QLFunctions functions = QLFunctions.builder().noDefaultFunctions()
@@ -441,7 +424,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void udf_InheritedGenericCall_Rejected() {
+    public void udf_InheritedGenericCall_throws() {
 
         QLFunctions.Builder b1 = QLFunctions.builder().noDefaultFunctions();
         IllegalArgumentException e1 = assertThrows(IllegalArgumentException.class,
@@ -464,7 +447,7 @@ public class QLFunctionReflectionTest {
     }
 
     @Test
-    public void qlFunction_InheritedGenericCall_Rejected() {
+    public void qlFunction_InheritedGenericCall_throws() {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> registry("id", new InheritedGenericQLFunction()));
         assertTrue(e.getMessage().contains("type variable 'T'"), e.getMessage());

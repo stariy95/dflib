@@ -26,10 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Resolution of a function by name and argument types.
- */
-class QLFunctionsTest {
+public class QLFunctionsTest {
 
     private static QLFunctionArg arg(TypeClassifier type) {
         return new QLFunctionArg(type, false);
@@ -48,7 +45,7 @@ class QLFunctionsTest {
     }
 
     @Test
-    void function_ByArity() {
+    public void function_ByArity() {
         QLFunctions functions = registry()
                 .function("sum", new Int2SumFunction())
                 .function("sum", new Int3SumFunction())
@@ -59,14 +56,14 @@ class QLFunctionsTest {
     }
 
     @Test
-    void function_UnknownName() {
+    public void function_UnknownName() {
         QLFunctions functions = registry().function("sum", new Int2SumFunction()).build();
 
         assertEquals("Unknown function: multiply", notFound(functions, "multiply", arg(NUMERIC), arg(NUMERIC)));
     }
 
     @Test
-    void function_WrongArgTypes_ListsTheOverloads() {
+    public void function_WrongArgTypes_throws() {
         QLFunctions functions = registry()
                 .function("sum", new Int2SumFunction())
                 .function("sum", new Int3SumFunction())
@@ -79,7 +76,7 @@ class QLFunctionsTest {
     }
 
     @Test
-    void function_UntypedArg_IsCastToTheParamType() {
+    public void function_UntypedArg_Cast() {
         QLFunctions functions = registry()
                 .function(descriptor("f").arg(STRING).as(args -> args.get(0)))
                 .function(descriptor("g").arg(BOOLEAN).constArg(NUMERIC).as(args -> args.get(0)))
@@ -95,7 +92,7 @@ class QLFunctionsTest {
     }
 
     @Test
-    void function_UntypedArg_NotCastToAConstantParam() {
+    public void function_UntypedArg_ConstParam_throws() {
         QLFunctions functions = registry()
                 .function(descriptor("f").arg(OBJECT).constArg(STRING).as(args -> args.get(0)))
                 .build();
@@ -105,7 +102,7 @@ class QLFunctionsTest {
     }
 
     @Test
-    void function_UntypedArg_CastToNumeric() {
+    public void function_UntypedArg_CastNumeric() {
 
         QLFunctions numOnly = registry()
                 .function(descriptor("f").arg(NUMERIC).as(args -> args.get(0)))
@@ -123,7 +120,7 @@ class QLFunctionsTest {
     }
 
     @Test
-    void function_UntypedArg_WildcardOverloadPreferredOverACast() {
+    public void function_UntypedArg_WildcardPreferred() {
         QLFunctions functions = registry()
                 .function(descriptor("f").arg(STRING).arg(STRING).as(args -> args.get(0)))
                 .function(descriptor("f").arg(OBJECT).arg(OBJECT).as(args -> args.get(1)))
@@ -135,7 +132,7 @@ class QLFunctionsTest {
     }
 
     @Test
-    void function_UntypedArg_Ambiguous() {
+    public void function_UntypedArg_Ambiguous() {
         QLFunctions functions = registry()
                 .function(descriptor("f").arg(STRING).as(args -> args.get(0)))
                 .function(descriptor("f").arg(DATE).as(args -> args.get(0)))
@@ -155,7 +152,7 @@ class QLFunctionsTest {
     }
 
     @Test
-    void function_UntypedArg_AmbiguityReportedAtItsOwnPosition() {
+    public void function_UntypedArg_AmbiguousPosition() {
         QLFunctions functions = registry()
                 .function(descriptor("f").arg(BOOLEAN).arg(DATE).as(args -> args.get(0)))
                 .function(descriptor("f").arg(BOOLEAN).arg(STRING).as(args -> args.get(0)))
@@ -169,7 +166,7 @@ class QLFunctionsTest {
     }
 
     @Test
-    void function_UntypedArg_AnyAndSpecificNumType_Ambiguous() {
+    public void function_UntypedArg_NumType() {
         QLFunctionArg intArg = new QLFunctionArg(NUMERIC, false, Integer.class);
 
         QLFunctions functions = registry()
@@ -188,7 +185,7 @@ class QLFunctionsTest {
     }
 
     @Test
-    void function_UntypedArg_TieAwayFromTheCastIsNotAmbiguous() {
+    public void function_UntypedArg_TieElsewhere() {
         QLFunctions functions = registry()
                 .function(descriptor("f").arg(DATE).arg(STRING).arg(OBJECT).as(args -> args.get(0)))
                 .function(descriptor("f").arg(DATE).arg(OBJECT).arg(STRING).as(args -> args.get(0)))
@@ -199,7 +196,7 @@ class QLFunctionsTest {
     }
 
     @Test
-    void builder_InvalidName() {
+    public void builder_InvalidName() {
         assertEquals("Function name must be a QL identifier (a letter, '$' or '_' followed by letters, digits,"
                         + " '$' or '_'), got: 'my fn'",
                 assertThrows(IllegalArgumentException.class,
@@ -210,7 +207,7 @@ class QLFunctionsTest {
     }
 
     @Test
-    void builder_KeywordName() {
+    public void builder_KeywordName() {
         for (String keyword : List.of("date", "int", "col", "array", "and", "not", "in", "asc", "as", "null")) {
             assertEquals("Function name '" + keyword + "' is a QL keyword.",
                     assertThrows(IllegalArgumentException.class,
@@ -223,7 +220,7 @@ class QLFunctionsTest {
     }
 
     @Test
-    void function_ExactMatchPreferredOverWildcard() {
+    public void function_ExactMatchPreferred() {
         QLFunctions functions = registry()
                 .function("f", new ObjectArgFunction())
                 .function("f", new StrArgFunction())
@@ -235,7 +232,7 @@ class QLFunctionsTest {
     }
 
     @Test
-    void function_FewerWildcardsPreferred() {
+    public void function_FewerWildcardsPreferred() {
         QLFunctions functions = registry()
                 .function(descriptor("f").arg(OBJECT).arg(OBJECT).as(args -> args.get(0)))
                 .function(descriptor("f").arg(STRING).arg(OBJECT).as(args -> args.get(0)))
@@ -246,7 +243,7 @@ class QLFunctionsTest {
     }
 
     @Test
-    void function_EquallySpecific_FirstRegisteredWins() {
+    public void function_EquallySpecific() {
         List<QLFunctionArg> argTypes = List.of(arg(STRING), arg(STRING));
 
         QLFunctions strFirst = registry()
@@ -265,7 +262,7 @@ class QLFunctionsTest {
     }
 
     @Test
-    void function_VarArgs_MatchesAnyArity() {
+    public void function_VarArgs() {
         QLFunctions functions = registry().function("sum", new IntNSumFunction()).build();
 
         assertTrue(functions.function("sum", List.of()).varArgs());
@@ -274,7 +271,7 @@ class QLFunctionsTest {
     }
 
     @Test
-    void function_VarArgs_FixedArityPreferred() {
+    public void function_VarArgs_FixedArityPreferred() {
         QLFunctions functions = registry()
                 .function("sum", new IntNSumFunction())
                 .function("sum", new Int2SumFunction())
@@ -288,7 +285,7 @@ class QLFunctionsTest {
     }
 
     @Test
-    void function_VarArgs_LeadingParamsAreChecked() {
+    public void function_VarArgs_LeadingParams() {
         QLFunctions functions = registry()
                 .function(descriptor("vConcat").constArg(STRING).varArgs().as(args -> args.get(1)))
                 .build();
@@ -304,7 +301,7 @@ class QLFunctionsTest {
     }
 
     @Test
-    void function_ConstantParam() {
+    public void function_ConstantParam() {
         QLFunctions functions = registry().function("substr", new StrConstIntFunction()).build();
 
         assertEquals(List.of(arg(OBJECT), constant(NUMERIC)),
@@ -318,14 +315,14 @@ class QLFunctionsTest {
     }
 
     @Test
-    void function_PlainParam_AcceptsConstantArg() {
+    public void function_PlainParam_ConstArg() {
         QLFunctions functions = registry().function("sum", new Int2SumFunction()).build();
 
         assertNotNull(functions.function("sum", List.of(constant(NUMERIC), constant(NUMERIC))));
     }
 
     @Test
-    void function_ConstancyDistinguishesOverloads() {
+    public void function_Constancy() {
         QLFunctions functions = registry()
                 .function("substr", new StrConstIntFunction())
                 .function("substr", new StrIntFunction())
@@ -339,7 +336,7 @@ class QLFunctionsTest {
     }
 
     @Test
-    void builder_DuplicateShapeRejected() {
+    public void builder_DuplicateShape_throws() {
         QLFunctions.Builder builder = registry().function("substr", new StrConstIntFunction());
 
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
@@ -353,7 +350,7 @@ class QLFunctionsTest {
     }
 
     @Test
-    void call() {
+    public void call() {
         QLFunctions functions = registry()
                 .function("sum", new Int2SumFunction())
                 .function("sum", new Int3SumFunction())

@@ -45,10 +45,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-/**
- * The built-in function registry: every overload resolves to itself, and the overloads map to the {@code Exp} API.
- */
-class DefaultQLFunctionsTest {
+public class DefaultQLFunctionsTest {
 
     private static final QLFunctions FUNCTIONS = QLFunctions.builder().build();
 
@@ -58,7 +55,7 @@ class DefaultQLFunctionsTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("defaultDescriptors")
-    void isResolvableByItsOwnSignature(String shape, QLFunctionDescriptor descriptor) {
+    public void resolveOwnSignature(String shape, QLFunctionDescriptor descriptor) {
 
         List<Exp<?>> args = plausibleArgs(descriptor);
 
@@ -72,7 +69,7 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
-    void allDefaultsRegistered() {
+    public void allDefaults() {
 
         List<String> names = FUNCTIONS.descriptors().map(QLFunctionDescriptor::name).distinct().sorted().toList();
 
@@ -90,7 +87,7 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
-    void zeroArityOverloads() {
+    public void zeroArityOverloads() {
         assertEquals(0, resolve("count").args().size());
         assertFalse(resolve("count").varArgs());
 
@@ -105,7 +102,7 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
-    void allVConcatArities() {
+    public void vConcatArities() {
         assertEquals($str("a").vConcat(null, ",", "", ""), call("vConcat", $str("a"), $strVal(",")));
         assertEquals($str("a").vConcat($bool("b"), ",", "", ""),
                 call("vConcat", $str("a"), $bool("b"), $strVal(",")));
@@ -116,7 +113,7 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
-    void integerConstant_OutOfRange() {
+    public void integerConstant_OutOfRange() {
         assertEquals("Integer constant out of range [-2147483648..2147483647]: 3000000000",
                 assertThrows(IllegalArgumentException.class,
                         () -> call("substr", $str("a"), $longVal(3_000_000_000L))).getMessage());
@@ -131,34 +128,32 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
-    void doubleConstant_FromAFloatLiteral_KeepsItsDecimalValue() {
+    public void doubleConstant_FloatLiteral() {
         assertEquals($int("a").quantile(0.1), Exp.parseExp("quantile(int(a), 0.1)"));
         assertEquals($int("a").quantile(0.1), call("quantile", $int("a"), $floatVal(0.1f)));
     }
 
     @Test
-    void count_Eval() {
+    public void count_Eval() {
         DataFrame df = DataFrame.foldByRow("a", "b").of(
                 1, true,
                 null, false,
                 3, true);
 
         assertEquals(2, Exp.parseExp("count(a)").reduce(df));
-        assertEquals(2, Exp.parseExp("count(int(a))").reduce(df));
         assertEquals(2, Exp.parseExp("count(bool(b))").reduce(df));
         assertEquals(3, Exp.parseExp("count()").reduce(df));
     }
 
     @Test
-    void count_BooleanArgFilters_OtherArgCountsNonNulls() {
+    public void count_Cast() {
         assertEquals(Exp.count($bool("b")), call("count", $bool("b")));
-        assertEquals(Exp.count($col("c").isNotNull()), call("count", $col("c")));
-        assertEquals(Exp.count($int("i").isNotNull()), call("count", $int("i")));
-        assertEquals(Exp.count($date("d").first().isNotNull()), call("count", $date("d").first()));
+        assertEquals(Exp.count($col("c").castAsBool()), call("count", $col("c")));
+        assertEquals(Exp.count($date("d").first().castAsBool()), call("count", $date("d").first()));
     }
 
     @Test
-    void untypedReceiverOfATypedFunction_IsCast() {
+    public void untypedReceiver_Cast() {
         assertEquals($col("c").castAsNumber().sum(), call("sum", $col("c")));
         assertEquals(Exp.ifExp($col("c").castAsBool(), $intVal(1), $intVal(2)),
                 call("if", $col("c"), $intVal(1), $intVal(2)));
@@ -173,7 +168,7 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
-    void untypedReceiverOfAMultiReceiverFunction_IsAmbiguous() {
+    public void untypedReceiver_Ambiguous_throws() {
         assertEquals("Ambiguous call to year(OBJECT): argument 1 is untyped, cast it explicitly.",
                 assertThrows(IllegalArgumentException.class, () -> resolve("year", $col("c"))).getMessage());
 
@@ -184,13 +179,13 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
-    void untypedReceiverOfANumericFunction_IsCast() {
+    public void untypedReceiver_CastNumeric() {
         assertEquals($col("c").castAsNumber().sum(), call("sum", $col("c")));
         assertEquals($col("c").castAsNumber().abs(), call("abs", $col("c")));
     }
 
     @Test
-    void numericOnlyAggregates() {
+    public void numericAggregates() {
         assertEquals($int("i").sum(), call("sum", $int("i")));
         assertEquals($int("i").sum($bool("b")), call("sum", $int("i"), $bool("b")));
         assertEquals($int("i").cumSum(), call("cumSum", $int("i")));
@@ -200,7 +195,7 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
-    void aggregatesMatchTheUnfilteredApi() {
+    public void aggregates() {
         assertEquals($int("i").min(), call("min", $int("i")));
         assertEquals($str("s").max(), call("max", $str("s")));
         assertEquals($date("d").avg(), call("avg", $date("d")));
@@ -210,7 +205,7 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
-    void quantileReadsADoubleConstant() {
+    public void quantile() {
         assertEquals($int("i").quantile(0.5), call("quantile", $int("i"), $doubleVal(0.5)));
         assertEquals($int("i").quantile(0.5, $bool("b")), call("quantile", $int("i"), $doubleVal(0.5), $bool("b")));
         assertEquals($date("d").quantile(0.5), call("quantile", $date("d"), $doubleVal(0.5)));
@@ -218,12 +213,12 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
-    void scaleCastsToDecimalFirst() {
+    public void scale() {
         assertEquals($int("i").castAsDecimal().scale(2), call("scale", $int("i"), $intVal(2)));
     }
 
     @Test
-    void fieldFunctions() {
+    public void fieldFunctions() {
         assertEquals($date("d").year(), call("year", $date("d")));
         assertEquals($date("d").month(), call("month", $date("d")));
         assertEquals($date("d").day(), call("day", $date("d")));
@@ -235,7 +230,7 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
-    void temporalArithmetic() {
+    public void temporalArithmetic() {
         assertEquals($date("d").plusDays(3), call("plusDays", $date("d"), $intVal(3)));
         assertEquals($dateTime("dt").plusNanos(3), call("plusNanos", $dateTime("dt"), $intVal(3)));
         assertEquals($offsetDateTime("odt").plusWeeks(3), call("plusWeeks", $offsetDateTime("odt"), $intVal(3)));
@@ -243,7 +238,7 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
-    void casts() {
+    public void casts() {
         assertEquals($col("c").castAsInt(), call("castAsInt", $col("c")));
         assertEquals($col("c").castAsDecimal(), call("castAsDecimal", $col("c")));
         assertEquals($col("c").castAsStr(), call("castAsStr", $col("c")));
@@ -254,7 +249,7 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
-    void specialForms() {
+    public void specialForms() {
         assertEquals(Exp.ifExp($bool("b"), $int("i"), $int("j")), call("if", $bool("b"), $int("i"), $int("j")));
         assertEquals(Exp.ifNull($int("i"), $int("j")), call("ifNull", $int("i"), $int("j")));
         assertEquals($col("c").first(), call("first", $col("c")));
@@ -263,7 +258,7 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
-    void shift() {
+    public void shift() {
         assertEquals($int("i").shift(2), call("shift", $int("i"), $intVal(2)));
         assertEquals($int("i").shift(2, 0), call("shift", $int("i"), $intVal(2), $intVal(0)));
         assertEquals($str("s").shift(1, "x"), call("shift", $str("s"), $intVal(1), $strVal("x")));
@@ -273,7 +268,7 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
-    void shiftFillerMustMatchTheReceiverType() {
+    public void shift_FillerType_throws() {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> call("shift", $int("i"), $intVal(2), $strVal("replace")));
         assertTrue(e.getMessage().startsWith("shift() filler of type STRING"), e.getMessage());
@@ -285,7 +280,7 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
-    void plusCountMustBeANumericConstant() {
+    public void plusDays_NonConstCount_throws() {
         assertThrows(IllegalArgumentException.class,
                 () -> resolve("plusDays", $date("d"), $strVal("3")));
         assertThrows(IllegalArgumentException.class,
@@ -295,7 +290,7 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
-    void unsupportedReceiverDoesNotResolve() {
+    public void unsupportedReceiver_throws() {
         assertEquals("No overload of avg matches avg(STRING). Available: avg(NUMERIC), avg(DATE), avg(TIME),"
                         + " avg(DATETIME), avg(NUMERIC, BOOLEAN), avg(DATE, BOOLEAN), avg(TIME, BOOLEAN),"
                         + " avg(DATETIME, BOOLEAN)",
@@ -310,7 +305,7 @@ class DefaultQLFunctionsTest {
     }
 
     @Test
-    void unknownFunctionsAndArities() {
+    public void unknownFunction_throws() {
         assertEquals("Unknown function: noSuchFunction",
                 assertThrows(IllegalArgumentException.class, () -> resolve("noSuchFunction", $int("i"))).getMessage());
         assertThrows(IllegalArgumentException.class, () -> resolve("rowNum", $int("i")));

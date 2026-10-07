@@ -10,10 +10,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-class QLFunctionDescriptorTest {
+public class QLFunctionDescriptorTest {
 
     @Test
-    void shape() {
+    public void shape() {
         assertEquals("f()", descriptor("f").as(args -> null).shape());
         assertEquals("f(...)", descriptor("f").varArgs().as(args -> null).shape());
         assertEquals("f(OBJECT, const NUMERIC)",
@@ -22,7 +22,7 @@ class QLFunctionDescriptorTest {
     }
 
     @Test
-    void equals_ByNameAndShape() {
+    public void testEquals() {
         QLFunctionDescriptor d = descriptor("f").arg(NUMERIC).as(args -> args.get(0));
 
         assertEquals(d, descriptor("f").arg(NUMERIC).as(args -> args.get(0).castAsStr()));
@@ -35,7 +35,7 @@ class QLFunctionDescriptorTest {
     }
 
     @Test
-    void producerRequired() {
+    public void producer_throws() {
         assertThrows(NullPointerException.class, () -> descriptor("f").arg(NUMERIC).as(null));
     }
 }

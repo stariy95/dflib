@@ -22,13 +22,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-/**
- * Built-in functions whose return type is fixed by their name.
- */
 public class FixedReturnFunctionTest {
 
     @Test
-    public void fieldFn_boundParameter() {
+    public void fieldFn_Param() {
         LocalDateTime ldt = LocalDateTime.of(2020, 1, 2, 3, 4, 5);
 
         assertEquals($dateTimeVal(ldt).year(), parseExp("year(?)", ldt));
@@ -36,13 +33,13 @@ public class FixedReturnFunctionTest {
     }
 
     @Test
-    public void fieldFn_null_throws() {
+    public void fieldFn_Null_throws() {
         assertThrows(QLParserException.class, () -> parseExp("year(null)"));
         assertThrows(QLParserException.class, () -> parseExp("hour(?)", new Object[]{null}));
     }
 
     @Test
-    public void untypedConstant_cast() {
+    public void untypedConstant_Cast() {
         assertEquals(Exp.$val(null).castAsNumber().sum(), parseExp("sum(null)"));
         assertEquals(Exp.$val(null).castAsNumber().sum(), parseExp("sum(?)", new Object[]{null}));
     }

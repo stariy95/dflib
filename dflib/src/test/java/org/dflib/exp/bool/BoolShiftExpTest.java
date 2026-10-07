@@ -35,7 +35,7 @@ public class BoolShiftExpTest extends BaseExpTest {
     }
 
     @Test
-    public void shift_IsACondition() {
+    public void shift_Condition() {
         Condition c = $int("a").gt(0).shift(1).not();
         BooleanSeries result = c.eval(Series.of(1, -1, 1));
         new BoolSeriesAsserts(result).expectData(true, false, true);

@@ -2,7 +2,6 @@ package org.dflib.ql;
 
 import org.dflib.Environment;
 import org.dflib.Exp;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -25,19 +24,10 @@ import static org.dflib.ql.TypeClassifier.NUMERIC;
 import static org.dflib.ql.TypeClassifier.OBJECT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/**
- * Calls of polymorphic functions in various syntactic positions: the function is resolved by its argument types, and
- * the surrounding operator is then checked against the type of the result. "pmin" and "plusLike" are identity
- * functions with one overload per receiver type, standing in for the built-ins like "min" and "plusDays".
- */
-public class PolymorphicDispatchTest {
-
-    private QLFunctions originalFunctions;
+public class PolymorphicDispatchTest extends BaseQLFunctionsTest {
 
     @BeforeEach
     public void setUpFunctions() {
-        this.originalFunctions = Environment.commonEnv().qlFunctions();
-
         QLFunctions.Builder builder = QLFunctions.builder();
         identity(builder, "pmin");
         identity(builder, "plusLike", new QLFunctionArg(NUMERIC, true));
@@ -46,11 +36,6 @@ public class PolymorphicDispatchTest {
                 .function(descriptor("foo").arg(OBJECT).as(args -> args.get(0).castAsInt()))
                 .function(descriptor("anyLike").arg(OBJECT).as(args -> args.get(0).first()))
                 .build());
-    }
-
-    @AfterEach
-    public void restoreFunctions() {
-        Environment.setQLFunctions(originalFunctions);
     }
 
     @Test
@@ -94,7 +79,7 @@ public class PolymorphicDispatchTest {
     }
 
     @Test
-    public void polymorphic_ComparisonWithAParameter() {
+    public void polymorphic_ComparisonParam() {
         LocalDateTime dt = LocalDateTime.of(2024, 1, 2, 3, 4, 5);
         assertEquals($dateTime("a").gt($dateTimeVal(dt)), parseExp("plusLike(dateTime(a), 1) > ?", dt));
     }
@@ -121,18 +106,18 @@ public class PolymorphicDispatchTest {
     }
 
     @Test
-    public void polymorphic_RightHandSideOfComparison() {
+    public void polymorphic_ComparisonRight() {
         assertEquals($intVal(5).gt($int("a")), parseExp("5 > pmin(int(a))"));
         assertEquals($int("b").le($int("a")), parseExp("int(b) <= pmin(int(a))"));
     }
 
     @Test
-    public void polymorphic_TypedArgumentOfACall() {
+    public void polymorphic_TypedCallArg() {
         assertEquals($date("a").year(), parseExp("year(pmin(date(a)))"));
     }
 
     @Test
-    public void polymorphic_AsAnArgument() {
+    public void polymorphic_Argument() {
         assertEquals($col("x").castAsInt().add($intVal(1)), parseExp("foo(pmin(x)) + 1"));
         assertEquals($int("a"), parseExp("pmin(plusLike(int(a), 1))"));
         assertEquals($date("a"), parseExp("pmin(plusLike(date(a), 1))"));

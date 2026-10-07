@@ -49,7 +49,7 @@ public class ShiftTest {
     }
 
     @Test
-    public void shift_incompatibleFiller() {
+    public void shift_IncompatibleFiller_throws() {
         assertEquals("1:0 shift() filler of type STRING is not compatible with a NUMERIC expression: `int(1)`",
                 assertThrows(QLParserException.class, () -> parseExp("shift(int(1), 2, 'replace')")).getMessage());
 
@@ -58,7 +58,7 @@ public class ShiftTest {
     }
 
     @Test
-    public void shift_numericFillerConvertedToTheExpType() {
+    public void shift_NumFillerConverted() {
         assertEquals($long("a").shift(1, 99L), parseExp("shift(long(a), 1, 99L)"));
         assertEquals($long("a").shift(1, 99L), parseExp("shift(long(a), 1, 99)"));
         assertEquals($int("a").shift(1, 99), parseExp("shift(int(a), 1, 99L)"));
@@ -68,13 +68,13 @@ public class ShiftTest {
     }
 
     @Test
-    public void shift_negatedOffsetIsStillAConstant() {
+    public void shift_NegatedOffset() {
         assertEquals($int("a").shift(-1), parseExp("shift(int(a), - 1)"));
         assertEquals($int("a").shift(-1, 0), parseExp("shift(int(a), -(1), -(-0))"));
     }
 
     @Test
-    public void shift_numericFillerNotFittingTheExpType() {
+    public void shift_NumFiller_throws() {
         assertEquals("1:0 shift() filler 1.5 can not be converted to the Integer type of the expression: a",
                 assertThrows(QLParserException.class, () -> parseExp("shift(int(a), 1, 1.5)")).getMessage());
 
@@ -83,7 +83,7 @@ public class ShiftTest {
     }
 
     @Test
-    public void shift_numericFillerUsableAfterShift() {
+    public void shift_NumFillerChain() {
         DataFrame df = DataFrame.foldByRow("a").ofStream(LongStream.of(1L, 2L, 3L).boxed());
         Series<?> shifted = df.cols().select(parseExp("shift(long(a), 1, 0)")).getColumn(0);
         new SeriesAsserts(shifted).expectData(0L, 1L, 2L);

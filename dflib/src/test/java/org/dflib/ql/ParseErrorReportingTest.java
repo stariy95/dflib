@@ -37,9 +37,7 @@ public class ParseErrorReportingTest {
         );
     }
 
-    /**
-     * The grammar is untyped, so a type mismatch is not a syntax error, but an error reported by the operator.
-     */
+    // the grammar is untyped, so a type mismatch is not a syntax error, but an error reported by the operator
     @ParameterizedTest
     @MethodSource
     public void semanticError_OperandType(String text, String expectedMessage) {
@@ -93,7 +91,7 @@ public class ParseErrorReportingTest {
     }
 
     @Test
-    public void semanticError_ProducerRejectsArgument() {
+    public void semanticError_Producer() {
         QLParserException e = assertThrows(QLParserException.class, () -> Exp.parseExp("year(str(a))"));
         assertEquals("1:0 No overload of year matches year(STRING)."
                 + " Available: year(DATE), year(DATETIME), year(OFFSETDATETIME)", e.getMessage());
@@ -119,7 +117,7 @@ public class ParseErrorReportingTest {
     }
 
     @Test
-    public void parameters_ReadInOrder() {
+    public void parameters_Order() {
         assertEquals(Exp.$int("a").gt(Exp.$intVal(1)).and(Exp.$str("b").eq(Exp.$strVal("x"))),
                 Exp.parseExp("int(a) > ? and str(b) = ?", 1, "x"));
     }

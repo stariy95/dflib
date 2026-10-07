@@ -5,8 +5,6 @@ import org.dflib.Exp;
 import org.dflib.StrExp;
 import org.dflib.Udf1;
 import org.dflib.Udf2;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -18,27 +16,11 @@ import static org.dflib.Exp.$str;
 import static org.dflib.Exp.parseExp;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Registration of custom functions next to the built-ins.
- */
-public class CustomFunctionTest {
-
-    private QLFunctions originalFunctions;
-
-    @BeforeEach
-    public void saveFunctions() {
-        this.originalFunctions = Environment.commonEnv().qlFunctions();
-    }
-
-    @AfterEach
-    public void restoreFunctions() {
-        Environment.setQLFunctions(originalFunctions);
-    }
+public class CustomFunctionTest extends BaseQLFunctionsTest {
 
     @Test
-    public void customFunction_KeepsBuiltIns() {
+    public void customFunction() {
 
         Environment.setQLFunctions(QLFunctions.builder()
                 .function("twice", new TwiceFunction())
@@ -63,7 +45,7 @@ public class CustomFunctionTest {
     }
 
     @Test
-    public void noDefaultFunctions_DropsBuiltIns() {
+    public void noDefaultFunctions() {
         QLFunctions functions = QLFunctions.builder()
                 .noDefaultFunctions()
                 .function("twice", new TwiceFunction())
@@ -77,7 +59,7 @@ public class CustomFunctionTest {
     }
 
     @Test
-    public void customFunction_CollidingWithABuiltIn() {
+    public void customFunction_BuiltInCollision() {
 
         // reported at build time, as that is when the built-ins are added
         QLFunctions.Builder builder = QLFunctions.builder().function("trim", new TrimFunction());
@@ -93,7 +75,7 @@ public class CustomFunctionTest {
     }
 
     @Test
-    public void customOverload_MoreSpecificThanABuiltIn_Wins() {
+    public void customOverload_MoreSpecific() {
 
         // the built-in "trim" is declared over "Exp<?>", so a "StrExp" overload is a better match for a string
         Environment.setQLFunctions(QLFunctions.builder()
@@ -105,7 +87,7 @@ public class CustomFunctionTest {
     }
 
     @Test
-    public void customOverload_TiedWithABuiltIn_Loses() {
+    public void customOverload_Tied() {
 
         // "vConcat(str(a), ',')" matches the built-in "vConcat(Exp<?>, const String)" and the custom
         // "vConcat(StrExp, const Object)" with one wildcard each, and the built-in is registered first

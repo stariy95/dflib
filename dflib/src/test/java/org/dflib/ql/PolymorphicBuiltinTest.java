@@ -20,9 +20,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-/**
- * Built-in functions whose return type depends on the receiver type.
- */
 public class PolymorphicBuiltinTest {
 
     @ParameterizedTest
@@ -68,9 +65,6 @@ public class PolymorphicBuiltinTest {
         );
     }
 
-    /**
-     * An untyped receiver is cast to the type of the only matching overload.
-     */
     @ParameterizedTest
     @MethodSource
     public void untypedReceiver_Cast(String text, Exp<?> expected) {
@@ -96,7 +90,7 @@ public class PolymorphicBuiltinTest {
             "plusDays(a, 1)",
             "max(a)",
     })
-    public void untypedReceiver_Ambiguous(String text) {
+    public void untypedReceiver_Ambiguous_throws(String text) {
         assertThrows(QLParserException.class, () -> parseExp(text));
     }
 
@@ -111,7 +105,7 @@ public class PolymorphicBuiltinTest {
             "last()",
             "last(a, int(b) > 0)",
     })
-    public void unsupportedReceiverOrOperand(String text) {
+    public void unsupportedReceiver_throws(String text) {
         assertThrows(QLParserException.class, () -> parseExp(text));
     }
 

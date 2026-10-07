@@ -25,13 +25,10 @@ import static org.dflib.Exp.parseExp;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-/**
- * Operator precedence of the untyped expression grammar.
- */
 public class OperatorPrecedenceTest {
 
     @Test
-    public void negatedLiteral_FoldedIntoALiteral() {
+    public void negate_Literal() {
         assertEquals($intVal(-1), parseExp("- 1"));
         assertEquals($intVal(1), parseExp("-(-1)"));
         assertEquals($doubleVal(-1.5), parseExp("- 1.5d"));

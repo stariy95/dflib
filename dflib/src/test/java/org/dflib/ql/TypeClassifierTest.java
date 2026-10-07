@@ -14,7 +14,6 @@ import org.dflib.exp.flow.IfNullExp;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
-import java.lang.reflect.Type;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -35,10 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Tests of {@link TypeClassifier#classify(Type)} and {@link TypeClassifier#classify(Exp)}.
- */
-class TypeClassifierTest {
+public class TypeClassifierTest {
 
     private static Method method(String name) {
         for (Method m : Fixtures.class.getDeclaredMethods()) {
@@ -58,37 +54,37 @@ class TypeClassifierTest {
     }
 
     @Test
-    void numExp_Wildcard() {
+    public void numExp_Wildcard() {
         assertEquals(TypeClassifier.NUMERIC, paramOf("numWildcard", 0));
         assertEquals(TypeClassifier.NUMERIC, returnOf("numWildcard"));
     }
 
     @Test
-    void numExp_Raw() {
+    public void numExp_Raw() {
         assertEquals(TypeClassifier.NUMERIC, paramOf("rawNum", 0));
         assertEquals(TypeClassifier.NUMERIC, returnOf("rawNum"));
     }
 
     @Test
-    void numExp_TypeVariable() {
+    public void numExp_TypeVariable() {
         assertEquals(TypeClassifier.NUMERIC, paramOf("numVar", 0));
         assertEquals(TypeClassifier.NUMERIC, returnOf("numVar"));
     }
 
     @Test
-    void numExp_Parameterized() {
+    public void numExp_Parameterized() {
         assertEquals(TypeClassifier.NUMERIC, paramOf("numParameterized", 0));
         assertEquals(TypeClassifier.NUMERIC, returnOf("numParameterized"));
     }
 
     @Test
-    void decimalExp() {
+    public void decimalExp() {
         assertEquals(TypeClassifier.NUMERIC, paramOf("decimal", 0));
         assertEquals(TypeClassifier.NUMERIC, returnOf("decimal"));
     }
 
     @Test
-    void typedExpInterfaces() {
+    public void typedExpInterfaces() {
         assertEquals(TypeClassifier.STRING, paramOf("str", 0));
         assertEquals(TypeClassifier.STRING, returnOf("str"));
 
@@ -109,7 +105,7 @@ class TypeClassifierTest {
     }
 
     @Test
-    void bareTypeVariable() {
+    public void bareTypeVariable() {
         assertEquals(TypeClassifier.NUMERIC, paramOf("bareNumVar", 0));
         assertEquals(TypeClassifier.NUMERIC, returnOf("bareNumVar"));
 
@@ -118,13 +114,13 @@ class TypeClassifierTest {
     }
 
     @Test
-    void expOfATypeVariable() {
+    public void expOfTypeVariable() {
         assertEquals(TypeClassifier.OBJECT, paramOf("expVar", 0));
         assertEquals(TypeClassifier.OBJECT, returnOf("expVar"));
     }
 
     @Test
-    void primitives() {
+    public void primitives() {
         assertEquals(TypeClassifier.NUMERIC, paramOf("primitives", 0)); // int
         assertEquals(TypeClassifier.NUMERIC, paramOf("primitives", 1)); // double
         assertEquals(TypeClassifier.NUMERIC, paramOf("primitives", 2)); // long
@@ -138,7 +134,7 @@ class TypeClassifierTest {
     }
 
     @Test
-    void valueTypes() {
+    public void valueTypes() {
         assertEquals(TypeClassifier.STRING, paramOf("values", 0));
         assertEquals(TypeClassifier.DATE, paramOf("values", 1));
         assertEquals(TypeClassifier.TIME, paramOf("values", 2));
@@ -150,7 +146,7 @@ class TypeClassifierTest {
     }
 
     @Test
-    void rawExp() {
+    public void rawExp() {
         assertEquals(TypeClassifier.OBJECT, paramOf("wildcardExp", 0));
         assertEquals(TypeClassifier.OBJECT, returnOf("wildcardExp"));
 
@@ -160,19 +156,19 @@ class TypeClassifierTest {
     }
 
     @Test
-    void expOfAnArray() {
+    public void expOfArray() {
         assertEquals(TypeClassifier.OBJECT, paramOf("arrayExp", 0));
         assertEquals(TypeClassifier.OBJECT, returnOf("arrayExp"));
     }
 
     @Test
-    void expOfANestedGeneric() {
+    public void expOfNestedGeneric() {
         assertEquals(TypeClassifier.OBJECT, paramOf("listExp", 0));
         assertEquals(TypeClassifier.OBJECT, returnOf("listExp"));
     }
 
     @Test
-    void varArgs() {
+    public void varArgs() {
         Method m = method("varargs");
         assertTrue(m.isVarArgs());
         assertEquals(TypeClassifier.OBJECT, paramOf("varargs", 0));
@@ -180,14 +176,14 @@ class TypeClassifierTest {
     }
 
     @Test
-    void rawExp_IsObject() {
+    public void rawExp_Object() {
         // what a lambda's erased "call" method looks like
         assertEquals(TypeClassifier.OBJECT, paramOf("rawExp", 0));
         assertEquals(TypeClassifier.OBJECT, returnOf("rawExp"));
     }
 
     @Test
-    void classifyExp_TypedInterfaces() {
+    public void classifyExp_TypedInterfaces() {
         assertEquals(TypeClassifier.NUMERIC, TypeClassifier.classify($int("a")));
         assertEquals(TypeClassifier.NUMERIC, TypeClassifier.classify($intVal(1)));
         assertEquals(TypeClassifier.STRING, TypeClassifier.classify($str("a")));
@@ -199,7 +195,7 @@ class TypeClassifierTest {
     }
 
     @Test
-    void classifyExp_NoTypedInterface_IsObject() {
+    public void classifyExp_Object() {
 
         // whatever the value type of the expression
         assertEquals(TypeClassifier.OBJECT, TypeClassifier.classify($date("a").first()));
@@ -216,14 +212,14 @@ class TypeClassifierTest {
     }
 
     @Test
-    void isTyped() {
+    public void isTyped() {
         for (TypeClassifier t : TypeClassifier.values()) {
             assertEquals(t != TypeClassifier.OBJECT, t.isTyped(), t.name());
         }
     }
 
     @Test
-    void cast() {
+    public void cast() {
         assertEquals($col("a").castAsNumber(), TypeClassifier.NUMERIC.cast($col("a")));
         assertEquals($col("a").castAsStr(), TypeClassifier.STRING.cast($col("a")));
         assertEquals($col("a").castAsBool(), TypeClassifier.BOOLEAN.cast($col("a")));
