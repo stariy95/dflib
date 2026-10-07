@@ -28,7 +28,7 @@ public class Environment {
                 5000,
                 new InlineClassExposingPrinter(),
                 createDefaultHttpClientSupplier(),
-                createDefaultQLFunctions()
+                createDefaultQLFunctionsSupplier()
         );
 
         commonEnv = new AtomicReference<>(defaultEnv);
@@ -42,7 +42,8 @@ public class Environment {
     // Note that HttpClient doesn't require an explicit shutdown.
     private final Supplier<HttpClient> lazyHttpClient;
 
-    private final QLFunctions qlFunctions;
+    // Building the default QL function registry is expensive and is not needed unless QL is used. So create it lazily.
+    private final Supplier<QLFunctions> lazyQLFunctions;
 
     public static Environment commonEnv() {
         return commonEnv.get();
@@ -56,8 +57,8 @@ public class Environment {
         return new CachingSupplier<>(s);
     }
 
-    private static QLFunctions createDefaultQLFunctions() {
-        return QLFunctions.builder().build();
+    private static Supplier<QLFunctions> createDefaultQLFunctionsSupplier() {
+        return new CachingSupplier<>(() -> QLFunctions.builder().build());
     }
 
     /**
@@ -71,7 +72,7 @@ public class Environment {
                 old.parallelExecThreshold,
                 old.printer,
                 old.lazyHttpClient,
-                old.qlFunctions));
+                old.lazyQLFunctions));
     }
 
     /**
@@ -83,7 +84,7 @@ public class Environment {
                 parallelExecThreshold,
                 old.printer,
                 old.lazyHttpClient,
-                old.qlFunctions));
+                old.lazyQLFunctions));
     }
 
     /**
@@ -95,7 +96,7 @@ public class Environment {
                 old.parallelExecThreshold,
                 printer,
                 old.lazyHttpClient,
-                old.qlFunctions));
+                old.lazyQLFunctions));
     }
 
     /**
@@ -109,7 +110,7 @@ public class Environment {
                 old.parallelExecThreshold,
                 old.printer,
                 supplier,
-                old.qlFunctions));
+                old.lazyQLFunctions));
     }
 
     /**
@@ -121,7 +122,7 @@ public class Environment {
                 old.parallelExecThreshold,
                 old.printer,
                 new CachingSupplier<>(clientSupplier),
-                old.qlFunctions));
+                old.lazyQLFunctions));
     }
 
     /**
@@ -131,12 +132,16 @@ public class Environment {
      * @since 2.0.0
      */
     public static void setQLFunctions(QLFunctions qlFunctions) {
+        Supplier<QLFunctions> supplier = qlFunctions != null
+                ? () -> qlFunctions
+                : createDefaultQLFunctionsSupplier();
+
         resetEnv(old -> new Environment(
                 old.threadPool,
                 old.parallelExecThreshold,
                 old.printer,
                 old.lazyHttpClient,
-                qlFunctions));
+                supplier));
     }
 
     static void resetEnv(UnaryOperator<Environment> envFactory) {
@@ -153,12 +158,12 @@ public class Environment {
             int parallelExecThreshold,
             Printer printer,
             Supplier<HttpClient> lazyHttpClient,
-            QLFunctions qlFunctions) {
+            Supplier<QLFunctions> lazyQLFunctions) {
         this.threadPool = threadPool;
         this.parallelExecThreshold = parallelExecThreshold;
         this.printer = printer;
         this.lazyHttpClient = lazyHttpClient;
-        this.qlFunctions = qlFunctions;
+        this.lazyQLFunctions = lazyQLFunctions;
     }
 
     public ExecutorService threadPool() {
@@ -186,10 +191,12 @@ public class Environment {
     }
 
     /**
+     * Returns a lazily-created registry of functions recognized by the QL parser
+     *
      * @since 2.0.0
      */
     public QLFunctions qlFunctions() {
-        return qlFunctions;
+        return lazyQLFunctions.get();
     }
 
     // only used by tests
