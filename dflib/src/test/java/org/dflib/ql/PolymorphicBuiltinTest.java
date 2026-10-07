@@ -51,7 +51,6 @@ public class PolymorphicBuiltinTest {
                 arguments("shift(date(a), 1)", $date("a").shift(1)),
                 arguments("shift(time(a), -1)", $time("a").shift(-1)),
                 arguments("shift(plusDays(date(a), 1), 1)", $date("a").plusDays(1).shift(1)),
-                arguments("not shift(bool(a), 1)", $bool("a").shift(1).not()),
 
                 arguments("first(a, bool(b))", $col("a").first($bool("b"))),
                 arguments("first(a, int(b) > 0)", $col("a").first($int("b").gt(0))),

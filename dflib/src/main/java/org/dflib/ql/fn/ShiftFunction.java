@@ -1,6 +1,5 @@
 package org.dflib.ql.fn;
 
-import org.dflib.Condition;
 import org.dflib.DateExp;
 import org.dflib.DateTimeExp;
 import org.dflib.Exp;
@@ -70,14 +69,6 @@ public class ShiftFunction implements QLFunction {
     }
 
     public OffsetDateTimeExp call(OffsetDateTimeExp e, int offset, OffsetDateTime filler) {
-        return e.shift(offset, filler);
-    }
-
-    public Condition call(Condition e, int offset) {
-        return e.shift(offset);
-    }
-
-    public Condition call(Condition e, int offset, boolean filler) {
         return e.shift(offset, filler);
     }
 
